@@ -29,6 +29,9 @@ impl Capture {
     pub fn record_gap(&mut self, length: u64) -> Result<()>;
     /// Ends the capture; further appends and gaps fail with `storage.closed`.
     pub fn close(&mut self) -> Result<CaptureStatus>;
+    /// Ends the capture because something outside it failed (added by feature 004): the
+    /// capture is closed and flagged `interrupted`, never `complete`; data stays readable.
+    pub fn close_interrupted(&mut self) -> Result<CaptureStatus>;
     pub fn length(&self) -> u64;
     pub fn memory_used(&self) -> u64;
 }
@@ -62,7 +65,8 @@ pub struct Gap { pub start: u64, pub length: u64 }
 impl Gap { pub fn end(&self) -> Option<u64>; }   // start + length, None on overflow
 pub const MAX_REPORTED_TRANSITIONS: u32 = u32::MAX;   // Activity::Many saturates here
 pub struct CaptureStatus { pub closed: bool, pub complete: bool,
-                           pub lost_positions: u64, pub stopped_by_limit: bool }
+                           pub lost_positions: u64, pub stopped_by_limit: bool,
+                           pub interrupted: bool }
 ```
 
 ## Test support (feature `test-support`, not part of the stable API)

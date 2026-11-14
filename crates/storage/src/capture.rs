@@ -92,6 +92,7 @@ pub struct Capture {
     gaps: Arc<Vec<Gap>>,
     lost_positions: u64,
     stopped_by_limit: bool,
+    interrupted: bool,
     closed: bool,
     shared: Shared,
 }
@@ -115,6 +116,7 @@ impl Capture {
             gaps: Arc::new(Vec::new()),
             lost_positions: 0,
             stopped_by_limit: false,
+            interrupted: false,
             closed: false,
             shared: Arc::new(RwLock::new(Arc::new(Published {
                 length: 0,
@@ -159,9 +161,13 @@ impl Capture {
     fn status(&self) -> CaptureStatus {
         CaptureStatus {
             closed: self.closed,
-            complete: self.closed && self.lost_positions == 0 && !self.stopped_by_limit,
+            complete: self.closed
+                && self.lost_positions == 0
+                && !self.stopped_by_limit
+                && !self.interrupted,
             lost_positions: self.lost_positions,
             stopped_by_limit: self.stopped_by_limit,
+            interrupted: self.interrupted,
         }
     }
 
@@ -415,6 +421,35 @@ impl Capture {
                 lost_positions = status.lost_positions,
                 stopped_by_limit = status.stopped_by_limit,
                 "capture closed"
+            );
+        }
+        Ok(self.status())
+    }
+
+    /// Ends the capture because something outside it failed (for example a device was
+    /// unplugged or stopped responding).
+    ///
+    /// Everything appended so far stays readable and exact. The capture is closed and
+    /// flagged [`CaptureStatus::interrupted`], so it can never be reported as complete,
+    /// even if no position was recorded as lost: the data that should have followed is
+    /// missing. A capture that is already closed is left unchanged and its status is
+    /// returned.
+    ///
+    /// # Errors
+    ///
+    /// Currently never fails; the `Result` leaves room for future checks.
+    pub fn close_interrupted(&mut self) -> Result<CaptureStatus> {
+        if !self.closed {
+            self.interrupted = true;
+            self.closed = true;
+            self.publish();
+            let status = self.status();
+            tracing::warn!(
+                target: "la_storage",
+                length = self.length,
+                lost_positions = status.lost_positions,
+                stopped_by_limit = status.stopped_by_limit,
+                "capture interrupted"
             );
         }
         Ok(self.status())

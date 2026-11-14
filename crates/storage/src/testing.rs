@@ -98,6 +98,7 @@ pub fn synthetic_capture(channels: u8, transitions_per_channel: u64) -> Result<S
                 complete: true,
                 lost_positions: 0,
                 stopped_by_limit: false,
+                interrupted: false,
             },
             limits: Limits::default(),
         }),
