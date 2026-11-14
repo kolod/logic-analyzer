@@ -18,6 +18,10 @@ macro_rules! language_files {
                 "errors.ftl",
                 include_str!(concat!("../../../resources/i18n/", $lang, "/errors.ftl")),
             ),
+            (
+                "ui.ftl",
+                include_str!(concat!("../../../resources/i18n/", $lang, "/ui.ftl")),
+            ),
         ]
     };
 }

@@ -1,0 +1,23 @@
+[package]
+name = "la-app"
+version = "0.1.0"
+description = "The logic analyzer application: a thin iced shell over the host API"
+edition.workspace = true
+# The user-interface dependency tree needs a newer compiler than the core crates (see
+# specs/006-ui-shell-signal-view/research.md R12/R13). The MSRV job builds everything else.
+rust-version = "1.92"
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "logic-analyzer"
+path = "src/main.rs"
+
+[dependencies]
+iced = { version = "0.14.0", features = ["canvas"] }
+la-diagnostics = { path = "../diagnostics" }
+la-i18n = { path = "../i18n" }
+tracing = "0.1.44"
+
+[lints]
+workspace = true

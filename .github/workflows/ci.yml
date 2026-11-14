@@ -116,8 +116,10 @@ jobs:
           toolchain: ${{ steps.msrv.outputs.version }}
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo +${{ steps.msrv.outputs.version }} build --workspace
-      - run: cargo +${{ steps.msrv.outputs.version }} test --workspace
+      # la-app has its own, higher rust-version (its UI dependencies need it); the core crates
+      # keep the workspace MSRV (specs/006-ui-shell-signal-view/research.md R12).
+      - run: cargo +${{ steps.msrv.outputs.version }} build --workspace --exclude la-app
+      - run: cargo +${{ steps.msrv.outputs.version }} test --workspace --exclude la-app
 
   deny:
     name: deny (${{ matrix.name }})
