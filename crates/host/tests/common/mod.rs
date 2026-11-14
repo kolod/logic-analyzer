@@ -143,3 +143,46 @@ pub fn finished_shell(dir: &TempDir, mask: u32, length: u64, seed: u64) -> Shell
     }));
     shell
 }
+
+/// Every stable error code of the product: constants of the form
+/// `pub const NAME: &str = "domain.code";` in the `error.rs` files under `crates/*/src`.
+pub fn all_error_codes() -> Vec<String> {
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut codes = Vec::new();
+    for entry in std::fs::read_dir(crates).unwrap().flatten() {
+        let file = entry.path().join("src").join("error.rs");
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        for line in text.lines() {
+            let Some(rest) = line.trim().strip_prefix("pub const ") else {
+                continue;
+            };
+            let Some((_, value)) = rest.split_once(": &str = \"") else {
+                continue;
+            };
+            let Some(code) = value.strip_suffix("\";") else {
+                continue;
+            };
+            if code.split_once('.').is_some_and(|(d, n)| {
+                !d.is_empty() && d.chars().all(|c| c.is_ascii_lowercase()) && !n.is_empty()
+            }) {
+                codes.push(code.to_owned());
+            }
+        }
+    }
+    codes.sort();
+    codes.dedup();
+    codes
+}
+
+/// The text of every file in `dir` (the log files of one run).
+pub fn read_logs(dir: &std::path::Path) -> String {
+    let mut text = String::new();
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        if entry.path().is_file() {
+            text.push_str(&std::fs::read_to_string(entry.path()).unwrap_or_default());
+        }
+    }
+    text
+}

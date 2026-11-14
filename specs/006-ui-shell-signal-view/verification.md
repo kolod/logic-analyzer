@@ -21,3 +21,13 @@ recorded here with the platform, the date and the result. Anything not met is st
 | 2026-11-14 | Windows 11 | Probes of the plan for the whole capture from 1 M to 100 M samples (100 times longer) grow by a factor of 1.41 (the benchmark fails above 2.0); `frame_scaling.rs` checks 4 M against 40 M in `cargo test` | passed (Principle VIII: the cost does not depend on the capture length) |
 | 2026-11-14 | Windows 11 | Headless render of a zoomed view (`app::tests::the_view_renders_a_zoomed_capture_with_single_edges`): levels and single edges at their exact positions, a renamed channel ("SDA") in its lane with its colour, the channel panel with show checkboxes, colour swatches and order buttons | passed |
 | 2026-11-14 | Windows 11 | The draw stage (tessellation of the cached layer) of a 100 M-sample capture measured in the running window with `LA_FRAME_STATS=1`, and mouse wheel, drag and keyboard zoom and pan | **pending**: needs a person at the window; the logging is in place (`frame_log.rs`), the fallbacks of research R4 are not needed unless the numbers say so |
+
+## US6: failures are explained and never stop the application
+
+| Date | Platform | Check | Result |
+|------|----------|-------|--------|
+| 2026-11-14 | Windows 11 | `error_sweep.rs`: every stable error code of the product (the scan found at least 51) injected one at a time gives exactly one notice, whose text exists in all six languages and contains neither the code, a key nor the technical detail; the log holds every code and the technical detail | passed |
+| 2026-11-14 | Windows 11 | `containment.rs`: a scripted driver panic ends the capture with `device.driver_panic`, keeps the 2,000 samples captured before it, shows them and leaves the shell usable; ten identical failures group into one notice with count 10; a code without a message gives the generic text and records a defect | passed |
+| 2026-11-14 | Windows 11 | `logging.rs`: the log has command names, codes and technical detail, and a recognisable channel name never appears in it | passed |
+| 2026-11-14 | Windows 11 | Headless render with a damaged settings file (`a_damaged_settings_file_shows_a_localized_message_with_its_buttons`): the localized message, "Show log location" and "Dismiss" are on screen | passed |
+| 2026-11-14 | Windows 11 | The failure classes in the running window (unplug, corrupt file, read-only folder) | **pending**: needs a person; the session-file failures arrive with US4; no `LA_TEST_FAILURE` switch was built because the scripted-device tests above exercise the same paths |

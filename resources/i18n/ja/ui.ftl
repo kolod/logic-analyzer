@@ -77,3 +77,12 @@ channel-move-up = 上へ
 channel-move-down = 下へ
 channel-colour = 色
 channel-reset = チャンネルをリセット
+
+### メッセージ
+
+notice-dismiss = 閉じる
+notice-dismiss-all = すべて閉じる
+notice-log = ログの場所を表示
+notice-list = メッセージ
+menu-help = ヘルプ
+menu-help-log = ログの場所を表示

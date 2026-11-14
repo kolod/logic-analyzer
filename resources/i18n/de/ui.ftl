@@ -77,3 +77,12 @@ channel-move-up = Nach oben
 channel-move-down = Nach unten
 channel-colour = Farbe
 channel-reset = Kanäle zurücksetzen
+
+### Meldungen
+
+notice-dismiss = Schließen
+notice-dismiss-all = Alle schließen
+notice-log = Protokollordner anzeigen
+notice-list = Meldungen
+menu-help = Hilfe
+menu-help-log = Protokollordner anzeigen

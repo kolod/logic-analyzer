@@ -141,3 +141,18 @@ channel-move-down = Move down
 channel-colour = Colour
 # Button: restore the default names, colours, order and visibility.
 channel-reset = Reset channels
+
+### Messages
+
+# Button: remove the message.
+notice-dismiss = Dismiss
+# Button: remove every message.
+notice-dismiss-all = Dismiss all
+# Button: open the folder with the log files, for a bug report.
+notice-log = Show log location
+# Button: show the recent messages.
+notice-list = Messages
+# The Help menu.
+menu-help = Help
+# Open the folder with the log files.
+menu-help-log = Show log location

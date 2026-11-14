@@ -67,6 +67,10 @@ pub enum Message {
     ChannelMove(usize, i8),
     /// Follow the newest data on or off.
     ToggleFollow,
+    /// Open the folder with the log files.
+    ShowLog,
+    /// Show or hide the list of recent messages.
+    ToggleMessages,
     /// Nothing to do.
     Noop,
 }
@@ -191,6 +195,7 @@ pub struct App {
     length_text: String,
     seed_text: String,
     names: std::collections::BTreeMap<u8, String>,
+    messages_open: bool,
 }
 
 impl App {
@@ -219,6 +224,7 @@ impl App {
             length_text: String::new(),
             seed_text: String::new(),
             names: std::collections::BTreeMap::new(),
+            messages_open: false,
         };
         app.sync_texts();
         app.sync_names();
@@ -345,10 +351,22 @@ impl App {
                 match action {
                     Some(Action::Command(command)) => self.run(command),
                     Some(Action::ToggleFollowLatest) => self.update(Message::ToggleFollow),
+                    Some(Action::ShowLog) => self.update(Message::ShowLog),
                     _ => Task::none(),
                 }
             }
             Message::Key(_) | Message::Noop => Task::none(),
+            Message::ShowLog => {
+                self.open_menu = None;
+                if let Some(path) = self.shell.log_location() {
+                    open_folder(path);
+                }
+                Task::none()
+            }
+            Message::ToggleMessages => {
+                self.messages_open = !self.messages_open;
+                Task::none()
+            }
             Message::ToggleFollow => {
                 self.open_menu = None;
                 let follow = !self.shell.state().follow_latest;
@@ -503,6 +521,7 @@ impl App {
                         item = item.on_press(Message::Run(command.clone()));
                     }
                     Action::ToggleFollowLatest => item = item.on_press(Message::ToggleFollow),
+                    Action::ShowLog => item = item.on_press(Message::ShowLog),
                     _ => {}
                 }
             }
@@ -734,30 +753,67 @@ impl App {
             .into()
     }
 
-    fn banner(&self) -> Option<Element<'_, Message>> {
-        let state = self.shell.state();
-        let notice = state.notices.iter().next_back()?;
+    fn notice_line(&self, notice: &la_host::notices::Notice) -> String {
         let shown = self.shell.notice_text(notice);
-        let text_line = if notice.count > 1 {
+        if notice.count > 1 {
             format!("{shown} (\u{d7}{})", notice.count)
         } else {
             shown
-        };
+        }
+    }
+
+    /// The newest message with its buttons, and the list of recent messages when it is open.
+    fn banner(&self) -> Option<Element<'_, Message>> {
+        let state = self.shell.state();
+        let notice = state.notices.iter().next_back()?;
         let id = notice.id;
+        let total = state.notices.len();
+        let mut buttons = row![].spacing(6).align_y(iced::Alignment::Center);
+        if self.shell.log_location().is_some() {
+            buttons = buttons.push(
+                button(text(self.t("notice-log")).size(13))
+                    .style(button::secondary)
+                    .on_press(Message::ShowLog),
+            );
+        }
+        if total > 1 {
+            buttons = buttons.push(
+                button(text(format!("{} ({total})", self.t("notice-list"))).size(13))
+                    .style(button::secondary)
+                    .on_press(Message::ToggleMessages),
+            );
+        }
+        buttons = buttons.push(
+            button(text(self.t("notice-dismiss")).size(13))
+                .style(button::secondary)
+                .on_press(Message::Run(Command::DismissNotice(id))),
+        );
+        if total > 1 {
+            buttons = buttons.push(
+                button(text(self.t("notice-dismiss-all")).size(13))
+                    .style(button::secondary)
+                    .on_press(Message::Run(Command::DismissAllNotices)),
+            );
+        }
+        let mut banner = column![
+            row![text(self.notice_line(notice)).width(Fill), buttons]
+                .spacing(10)
+                .align_y(iced::Alignment::Center)
+        ]
+        .spacing(4);
+        if self.messages_open {
+            let mut list = column![].spacing(2);
+            for older in state.notices.iter().rev() {
+                list = list.push(text(self.notice_line(older)).size(13));
+            }
+            banner = banner.push(scrollable(list).height(Length::Shrink));
+        }
         Some(
-            container(
-                row![
-                    text(text_line).width(Fill),
-                    button(text("\u{d7}"))
-                        .style(button::text)
-                        .on_press(Message::Run(Command::DismissNotice(id))),
-                ]
-                .align_y(iced::Alignment::Center),
-            )
-            .padding([4, 10])
-            .width(Fill)
-            .style(container::danger)
-            .into(),
+            container(banner)
+                .padding([4, 10])
+                .width(Fill)
+                .style(container::danger)
+                .into(),
         )
     }
 
@@ -826,6 +882,18 @@ impl App {
 impl Default for App {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Opens a folder in the file manager of the system (best effort: nothing happens if there is
+/// none).
+fn open_folder(path: &std::path::Path) {
+    #[cfg(windows)]
+    let program = "explorer";
+    #[cfg(not(windows))]
+    let program = "xdg-open";
+    if let Err(error) = std::process::Command::new(program).arg(path).spawn() {
+        tracing::warn!(target: "la_app", %error, "cannot open the folder");
     }
 }
 
@@ -948,6 +1016,37 @@ mod tests {
         if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
             snapshot
                 .matches_image(std::path::Path::new(&directory).join("zoomed"))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn a_damaged_settings_file_shows_a_localized_message_with_its_buttons() {
+        let dir = std::env::temp_dir().join(format!("la-app-banner-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("settings.json"), b"{ not json").unwrap();
+        let mut config = ShellConfig::for_tests(&dir);
+        config.log_location = Some(dir.join("logs"));
+        let app = App::with_shell(Shell::new(config));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(app.shell.state().notices.len(), 1);
+        assert!(app.banner().is_some());
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        // The text of the message, the log button and the dismiss button are on screen.
+        let shown = app
+            .shell
+            .notice_text(app.shell.state().notices.iter().next().unwrap());
+        assert!(ui.find(shown.as_str()).is_ok());
+        assert!(ui.find("Show log location").is_ok());
+        assert!(ui.find("Dismiss").is_ok());
+        let snapshot = ui.snapshot(&app.theme()).unwrap();
+        if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+            snapshot
+                .matches_image(std::path::Path::new(&directory).join("banner"))
                 .unwrap();
         }
     }

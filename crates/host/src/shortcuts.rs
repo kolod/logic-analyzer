@@ -177,6 +177,12 @@ pub fn table() -> Vec<ShortcutEntry> {
             EnabledWhen::Capturing,
         ),
         ShortcutEntry::new(
+            Action::ShowLog,
+            ["menu-help", "menu-help-log"],
+            None,
+            EnabledWhen::Always,
+        ),
+        ShortcutEntry::new(
             Action::ToggleFollowLatest,
             ["menu-capture", "menu-capture-follow"],
             Some(Accelerator::key("F6")),

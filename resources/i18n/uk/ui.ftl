@@ -77,3 +77,12 @@ channel-move-up = Вгору
 channel-move-down = Вниз
 channel-colour = Колір
 channel-reset = Скинути канали
+
+### Повідомлення
+
+notice-dismiss = Закрити
+notice-dismiss-all = Закрити всі
+notice-log = Показати розташування журналу
+notice-list = Повідомлення
+menu-help = Довідка
+menu-help-log = Показати розташування журналу

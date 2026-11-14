@@ -247,6 +247,12 @@ impl Shell {
         self.test_failures = failures;
     }
 
+    /// Adds a device provider (tests and failure checks: scripted devices).
+    #[cfg(feature = "test-support")]
+    pub fn add_provider(&self, provider: Arc<dyn la_devices::DeviceProvider>) {
+        self.registry.add_provider(provider);
+    }
+
     /// The plan of the signal view for a signal area of `size`: a pure function of the state and
     /// the size, with the cost bound of constitution Principle VIII.
     #[must_use]

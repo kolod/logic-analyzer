@@ -77,3 +77,12 @@ channel-move-up = Subir
 channel-move-down = Bajar
 channel-colour = Color
 channel-reset = Restablecer canales
+
+### Mensajes
+
+notice-dismiss = Cerrar
+notice-dismiss-all = Cerrar todos
+notice-log = Mostrar la carpeta del registro
+notice-list = Mensajes
+menu-help = Ayuda
+menu-help-log = Mostrar la carpeta del registro
