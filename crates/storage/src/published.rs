@@ -35,7 +35,8 @@ impl Published {
 
 pub(crate) type Shared = Arc<RwLock<Arc<Published>>>;
 
-/// Handle for readers: cloneable, `Send` and `Sync`.
+/// Handle for readers: cloneable, `Send` and `Sync`. Give a clone to every thread that
+/// needs to read the capture while it is being recorded.
 #[derive(Debug, Clone)]
 pub struct CaptureReader {
     pub(crate) shared: Shared,
@@ -55,6 +56,10 @@ impl CaptureReader {
 
 /// An immutable view of a capture at one moment. Cheap to clone; all queries are methods
 /// of the snapshot.
+///
+/// A snapshot contains exactly the chunks that were published when it was taken (never a
+/// half-appended chunk) and never changes afterwards: results obtained from it stay
+/// valid while the producer keeps appending. Take a new snapshot to see newer data.
 #[derive(Debug, Clone)]
 pub struct Snapshot {
     pub(crate) inner: Arc<Published>,
