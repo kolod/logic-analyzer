@@ -179,12 +179,12 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 ### Tests for User Story 6 (write FIRST, ensure they FAIL)
 
-- [ ] T048 [P] [US6] Create `scripts/tests/check-commits.test.sh` with fixture messages (valid: `feat(ui): add x`, `fix(drivers/logic16): y`, `docs: z`; invalid: `Update stuff`, `feat: missing scope for code change`, non-English text) asserting the script's exit codes and output
+- [X] T048 [P] [US6] Create `scripts/tests/check-commits.test.sh` with fixture messages (valid: `feat(ui): add x`, `fix(drivers/logic16): y`, `docs: z`; invalid: `Update stuff`, `feat: missing scope for code change`, non-English text) asserting the script's exit codes and output
 
 ### Implementation for User Story 6
 
-- [ ] T049 [US6] Write `CONTRIBUTING.md` (English): build and test commands for Windows 10/11 and Debian 13, the MSRV (link to `Cargo.toml`), toolchain pinning, the English-only documentation rule (docs, code comments, commit messages), Conventional Commits with component scope and examples, `NNN-short-name` branch format, `main` merge rules, the lint policy and how to document an exception (`#[allow(..., reason = "...")]`), how to run `cargo deny`, and a link to the constitution
-- [ ] T050 [US6] Implement `scripts/check-commits.sh <range>` (bash, no dependencies) validating the Conventional Commits subject format and reporting offenders; make T048 pass
+- [X] T049 [US6] Write `CONTRIBUTING.md` (English): build and test commands for Windows 10/11 and Debian 13, the MSRV (link to `Cargo.toml`), toolchain pinning, the English-only documentation rule (docs, code comments, commit messages), Conventional Commits with component scope and examples, `NNN-short-name` branch format, `main` merge rules, the lint policy and how to document an exception (`#[allow(..., reason = "...")]`), how to run `cargo deny`, and a link to the constitution
+- [X] T050 [US6] Implement `scripts/check-commits.sh <range>` (bash, no dependencies) validating the Conventional Commits subject format and reporting offenders; make T048 pass
 - [ ] T051 [US6] Add the non-blocking `commits` job (Debian, `continue-on-error: true`, `fetch-depth: 0`) to `.github/workflows/ci.yml` calling `scripts/check-commits.sh origin/main..HEAD`, and add it to the non-blocking table in contracts/ci-checks.md if names differ
 - [ ] T052 [US6] Link `CONTRIBUTING.md` from `README.md` and verify, by following only the guide, that a branch name, a commit message and the local checks can be produced (quickstart step 8)
 
