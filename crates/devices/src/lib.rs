@@ -16,6 +16,7 @@ mod driver;
 pub mod error;
 #[cfg(feature = "test-support")]
 pub mod harness;
+mod registry;
 mod virtual_device;
 
 pub use capabilities::{Capabilities, DeviceDescriptor, DeviceId, SampleRates, TriggerKind};
@@ -24,6 +25,7 @@ pub use driver::{
     Device, DeviceEvent, DeviceEventSink, DeviceProvider, READ_TIMEOUT, ReadOutcome,
     START_STOP_TIMEOUT, Transport,
 };
+pub use registry::{DeviceRegistry, RegistryConfig};
 pub use virtual_device::{
     FailureKind, PROVIDER_NAME as VIRTUAL_PROVIDER_NAME, Pacing, ScriptedFailure, SignalSource,
     SignalSourceFactory, VirtualDevice, VirtualOptions, VirtualProvider, virtual_descriptor,
