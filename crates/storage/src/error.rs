@@ -141,7 +141,6 @@ pub(crate) fn channel_out_of_range(channel: u8, channels: u8) -> Error {
     )
 }
 
-#[expect(dead_code, reason = "used by recording gaps (phase 9)")]
 pub(crate) fn invalid_gap(length: u64) -> Error {
     Error::new(
         ErrorKind::InvalidInput,

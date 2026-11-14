@@ -334,6 +334,69 @@ impl Capture {
         Ok(())
     }
 
+    /// Records that `length` positions were lost (for example a device buffer overrun)
+    /// at the current end of the capture.
+    ///
+    /// The capture advances by `length` positions without samples and is flagged
+    /// incomplete: it can never be reported as complete. Levels inside a gap read as
+    /// missing and pixel columns that touch it are flagged; nothing is invented. The first
+    /// sample after a gap is not compared with the one before it; if the levels differ, a
+    /// transition is stored at the first position after the gap (the real time is lost).
+    /// Adjacent gaps are merged.
+    ///
+    /// # Errors
+    ///
+    /// `storage.closed`, `storage.invalid_gap` (zero length), `storage.position_overflow`,
+    /// or `storage.memory_limit` if a new gap entry would exceed the memory budget (the
+    /// capture is then stopped and stays incomplete). A rejected call changes nothing but
+    /// that flag.
+    pub fn record_gap(&mut self, length: u64) -> Result<()> {
+        if self.closed {
+            return Err(error::closed());
+        }
+        let budget = self.config.limits.memory_budget_bytes;
+        if self.stopped_by_limit {
+            return Err(error::memory_limit(self.used_bytes, 0, budget));
+        }
+        if length == 0 {
+            return Err(error::invalid_gap(length));
+        }
+        let start = self.length;
+        let new_length = checked_position_add(start, length)?;
+        let merges = self.gaps.last().is_some_and(|g| g.end() == Some(start));
+        if !merges {
+            // A new list entry costs memory and must fit the budget.
+            let entry = u64::try_from(std::mem::size_of::<Gap>()).unwrap_or(16);
+            if self.used_bytes.saturating_add(entry) > budget {
+                self.stopped_by_limit = true;
+                self.publish();
+                tracing::warn!(
+                    target: "la_storage",
+                    used_bytes = self.used_bytes,
+                    budget_bytes = budget,
+                    "memory limit reached while recording a gap"
+                );
+                return Err(error::memory_limit(self.used_bytes, entry, budget));
+            }
+        }
+        let gaps = Arc::make_mut(&mut self.gaps);
+        match gaps.last_mut() {
+            Some(last) if merges => last.length = last.length.saturating_add(length),
+            _ => gaps.push(Gap { start, length }),
+        }
+        self.lost_positions = self.lost_positions.saturating_add(length);
+        self.length = new_length;
+        self.recompute_used();
+        self.publish();
+        tracing::warn!(
+            target: "la_storage",
+            position = start,
+            lost_positions = length,
+            "gap recorded"
+        );
+        Ok(())
+    }
+
     /// Ends the capture; later appends fail with `storage.closed`. Closing twice is
     /// harmless and returns the same status.
     ///
