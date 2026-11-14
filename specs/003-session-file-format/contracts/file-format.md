@@ -108,6 +108,8 @@ The channel count of `META` equals that of `CAPT`, and the applied sample rate o
 | file shorter than the header's length, or a length that runs past the end | `session.truncated` |
 | any CRC mismatch, trailing bytes, reserved bit set, bad tag, order or duplicate violation, non-canonical varint, bad UTF-8 | `session.damaged` |
 | structure fine but content inconsistent (rules above, cross-checks) | `session.inconsistent` |
+
+The split between the two: a violation of the encoding or framing (a reserved bit, a stream length or count that does not match its data, a non-canonical varint, a bad checksum, order or text) is `session.damaged`; a violation of a constraint on values that are well encoded (the gap, transition, initial-level, channel-count and sample-rate constraints and the cross-checks) is `session.inconsistent`.
 | unknown critical section | `session.unknown_critical_section` |
 | a size, count, text or section limit exceeded | `session.too_large` |
 | the capture would not fit the memory budget | `session.memory_budget` |
