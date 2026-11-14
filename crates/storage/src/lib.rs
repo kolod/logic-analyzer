@@ -6,3 +6,24 @@
 //! (see `specs/002-signal-storage-core`).
 //!
 //! **Never log signal data.** Log only metadata such as sizes, counts and positions.
+
+mod block;
+mod capture;
+mod channel;
+mod config;
+pub mod error;
+mod ingest;
+mod math;
+mod published;
+mod query;
+mod segment;
+mod types;
+
+pub use capture::Capture;
+pub use channel::TransitionIter;
+pub use config::{CaptureConfig, Limits, MAX_CHANNELS};
+pub use published::{CaptureReader, Snapshot};
+pub use types::{
+    Activity, CaptureStatus, Edge, Gap, LevelState, MAX_REPORTED_TRANSITIONS, PixelSummary,
+    QueryStats, ViewportResult,
+};
