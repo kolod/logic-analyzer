@@ -30,7 +30,7 @@ pub use capabilities::{Capabilities, DeviceDescriptor, DeviceId, SampleRates, Tr
 pub use config::{AppliedConfig, DeviceConfig, DeviceOptions, ResolvedConfig, Trigger, validate};
 pub use description::CaptureDescription;
 pub use driver::{
-    Device, DeviceEvent, DeviceEventSink, DeviceProvider, READ_TIMEOUT, ReadOutcome,
+    Device, DeviceEvent, DeviceEventSink, DeviceProvider, Flow, READ_TIMEOUT, ReadOutcome,
     START_STOP_TIMEOUT, Transport,
 };
 pub use registry::{DeviceRegistry, RegistryConfig};

@@ -192,7 +192,6 @@ impl Control {
     }
 
     /// Time since the driver last gave a sign of life.
-    #[expect(dead_code, reason = "used by the watchdog (phase 6)")]
     pub(crate) fn silence(&self) -> Duration {
         let now = u64::try_from(self.epoch.elapsed().as_millis()).unwrap_or(u64::MAX);
         Duration::from_millis(now.saturating_sub(self.heartbeat_ms.load(Ordering::Acquire)))

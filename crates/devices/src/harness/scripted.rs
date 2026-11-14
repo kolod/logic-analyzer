@@ -9,7 +9,7 @@ use la_core::{Error, Result};
 
 use crate::capabilities::DeviceDescriptor;
 use crate::config::{AppliedConfig, ResolvedConfig};
-use crate::driver::{Device, ReadOutcome};
+use crate::driver::{Device, Flow, ReadOutcome};
 
 /// One step of a [`ScriptedDevice`] script, consumed by one `read` call.
 #[derive(Debug)]
@@ -51,6 +51,7 @@ pub struct ScriptedDevice {
     start_error: Option<Error>,
     stop_behavior: Option<StopBehavior>,
     release: Arc<AtomicBool>,
+    flow: Flow,
 }
 
 impl ScriptedDevice {
@@ -63,6 +64,7 @@ impl ScriptedDevice {
             start_error: None,
             stop_behavior: None,
             release: Arc::new(AtomicBool::new(false)),
+            flow: Flow::Realtime,
         }
     }
 
@@ -77,6 +79,14 @@ impl ScriptedDevice {
     #[must_use]
     pub fn with_stop_behavior(mut self, behavior: StopBehavior) -> Self {
         self.stop_behavior = Some(behavior);
+        self
+    }
+
+    /// Declares whether the device can wait for the store (default: it cannot, like real
+    /// hardware).
+    #[must_use]
+    pub fn with_flow(mut self, flow: Flow) -> Self {
+        self.flow = flow;
         self
     }
 
@@ -95,6 +105,10 @@ impl ScriptedDevice {
 }
 
 impl Device for ScriptedDevice {
+    fn flow(&self) -> Flow {
+        self.flow
+    }
+
     fn descriptor(&self) -> &DeviceDescriptor {
         &self.descriptor
     }

@@ -12,7 +12,7 @@ use la_core::Result;
 
 use crate::capabilities::{Capabilities, DeviceDescriptor, DeviceId, SampleRates, TriggerKind};
 use crate::config::{AppliedConfig, DeviceOptions, ResolvedConfig};
-use crate::driver::{Device, DeviceProvider, ReadOutcome};
+use crate::driver::{Device, DeviceProvider, Flow, ReadOutcome};
 use crate::error;
 
 pub(crate) mod generator;
@@ -169,6 +169,7 @@ pub struct VirtualDevice {
     descriptor: DeviceDescriptor,
     generator: Option<RandomGenerator>,
     remaining: Option<u64>,
+    pacing: Pacing,
 }
 
 impl VirtualDevice {
@@ -179,6 +180,7 @@ impl VirtualDevice {
             descriptor: virtual_descriptor(),
             generator: None,
             remaining: None,
+            pacing: Pacing::Fast,
         }
     }
 }
@@ -194,6 +196,15 @@ impl Device for VirtualDevice {
         &self.descriptor
     }
 
+    fn flow(&self) -> Flow {
+        // As fast as the store accepts: the device waits for the store and never loses data.
+        // In real time it cannot wait, like real hardware.
+        match self.pacing {
+            Pacing::Fast => Flow::Throttleable,
+            Pacing::Realtime => Flow::Realtime,
+        }
+    }
+
     fn start(&mut self, config: &ResolvedConfig) -> Result<AppliedConfig> {
         let options = match config.options() {
             DeviceOptions::Virtual(options) => options.clone(),
@@ -206,6 +217,7 @@ impl Device for VirtualDevice {
             options.mean_gap,
         ));
         self.remaining = config.capture_length();
+        self.pacing = options.pacing;
         Ok(AppliedConfig::new(config.sample_rate_hz()))
     }
 

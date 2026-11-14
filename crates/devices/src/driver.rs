@@ -32,6 +32,18 @@ pub enum ReadOutcome {
     Finished,
 }
 
+/// Whether a device can be made to wait for the store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Flow {
+    /// The data arrives at the device's own pace and cannot wait (real hardware): if the store
+    /// is slower, the excess positions are recorded as lost, never silently dropped.
+    #[default]
+    Realtime,
+    /// The device produces data on demand (for example the virtual device running as fast as
+    /// possible) and waits for the store, so a slow store never causes a loss.
+    Throttleable,
+}
+
 /// One open device, used by exactly one acquisition on its own thread.
 ///
 /// Rules a driver follows: bit `i` of a sample word is channel `i` and bits of disabled
@@ -42,6 +54,12 @@ pub enum ReadOutcome {
 pub trait Device: Send {
     /// The description of this device.
     fn descriptor(&self) -> &DeviceDescriptor;
+
+    /// Whether the device can wait for the store. Asked once, after a successful
+    /// [`start`](Self::start). The default is [`Flow::Realtime`]: real hardware cannot wait.
+    fn flow(&self) -> Flow {
+        Flow::Realtime
+    }
 
     /// Starts capturing with an already validated configuration and returns the configuration
     /// actually in effect.

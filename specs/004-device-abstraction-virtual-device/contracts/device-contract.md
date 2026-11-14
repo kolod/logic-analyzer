@@ -23,6 +23,9 @@ pub trait DeviceProvider: Send + Sync {
 /// One open device, used by exactly one acquisition on its driver thread.
 pub trait Device: Send {
     fn descriptor(&self) -> &DeviceDescriptor;
+    /// Whether the device can wait for the store (asked once, after `start`). Default:
+    /// `Flow::Realtime` (real hardware cannot wait).
+    fn flow(&self) -> Flow { Flow::Realtime }
     /// Starts capturing with the validated configuration. Returns the configuration
     /// actually in effect.
     fn start(&mut self, config: &ResolvedConfig) -> la_core::Result<AppliedConfig>;
@@ -69,6 +72,11 @@ pub trait Transport: Send {
    but it ends the acquisition.
 6. **No global state**: instances are independent; two devices of the same family must be
    usable at once.
+7. **Flow control**: a device whose data arrives at its own pace and cannot wait (real
+   hardware) keeps the default `Flow::Realtime`: if the store is slower, the core records
+   the excess positions as lost (never silently). A device that produces data on demand
+   (the virtual device in fast mode) returns `Flow::Throttleable`: the core then holds it
+   back while the store catches up, so a slow store never causes a loss.
 
 ## What the core guarantees
 

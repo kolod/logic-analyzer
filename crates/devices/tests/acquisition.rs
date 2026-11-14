@@ -213,7 +213,10 @@ fn two_devices_run_independently() {
             let steps: Vec<Step> = (0..20)
                 .map(|_| Step::Samples(vec![0b1, 0b0, 0b1, 0b0]))
                 .collect();
-            Box::new(ScriptedDevice::new(d_for_factory.clone(), steps))
+            Box::new(
+                ScriptedDevice::new(d_for_factory.clone(), steps)
+                    .with_flow(la_devices::Flow::Throttleable),
+            )
         }),
     );
     registry.add_provider(Arc::new(provider.clone()));
@@ -397,4 +400,71 @@ fn a_consumer_that_never_reads_events_cannot_slow_the_acquisition() {
         assert_eq!(wait_outcome(&acq).end, EndReason::Completed);
     }
     assert!(started.elapsed() < Duration::from_secs(30));
+}
+
+// ---- flow control: a device that can wait is never made to lose data --------------------
+
+#[test]
+fn a_device_that_can_wait_is_never_made_to_lose_samples_by_a_slow_store() {
+    use la_devices::Flow;
+
+    let registry = registry_fast();
+    let provider = TestProvider::new("usb");
+    registry.add_provider(Arc::new(provider.clone()));
+    // Dense data keeps the store busy; the device hands over chunks instantly.
+    let dense: Vec<u32> = (0..4_096_u32)
+        .map(|i| if i & 1 == 1 { 0xFF } else { 0 })
+        .collect();
+    let steps: Vec<Step> = (0..500).map(|_| Step::Samples(dense.clone())).collect();
+    let device =
+        ScriptedDevice::new(descriptor("usb", "patient", 8), steps).with_flow(Flow::Throttleable);
+    let acq = common::start_scripted(
+        &registry,
+        &provider,
+        device,
+        AcquisitionOptions {
+            channel_capacity: 1,
+            chunk_samples: 4_096,
+            ..AcquisitionOptions::default()
+        },
+    );
+    let outcome = wait_outcome(&acq);
+    assert_eq!(outcome.end, EndReason::Completed);
+    assert_eq!(
+        outcome.lost_positions, 0,
+        "a device that can wait loses nothing"
+    );
+    assert_eq!(outcome.delivered_samples, 500 * 4_096);
+    assert!(outcome.capture_status.complete);
+}
+
+#[test]
+fn the_virtual_device_in_fast_mode_never_loses_samples_even_with_a_tiny_channel() {
+    let registry = registry_fast();
+    let mut config = virtual_config(0xFF, 100_000_000, Some(300_000), 17);
+    if let la_devices::DeviceOptions::Virtual(v) = &mut config.options {
+        v.mean_gap = 2; // very dense: the store is the bottleneck
+    }
+    let acq = registry
+        .start(
+            &virtual_id(),
+            config,
+            AcquisitionOptions {
+                channel_capacity: 1,
+                limits: Limits {
+                    memory_budget_bytes: 4 * 1024 * 1024 * 1024,
+                    ..Limits::default()
+                },
+                ..AcquisitionOptions::default()
+            },
+        )
+        .unwrap();
+    let outcome = wait_outcome(&acq);
+    assert_eq!(outcome.end, EndReason::Completed);
+    assert_eq!(
+        outcome.lost_positions, 0,
+        "the virtual device never fails on its own"
+    );
+    assert_eq!(outcome.positions, 300_000);
+    assert!(outcome.capture_status.complete);
 }
