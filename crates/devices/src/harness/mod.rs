@@ -3,16 +3,20 @@
 //! * [`ScriptedDevice`] replays a script of samples, losses, errors, panics and hangs;
 //! * [`CountingDevice`] counts every call made to the device it wraps;
 //! * [`TestProvider`] is a provider with scripted appear/disappear sequences;
-//! * (US8) a recorded transport and the shared conformance suite are added in a later phase.
+//! * [`RecordedTransport`] replays recorded USB or serial traffic to protocol code;
+//! * [`conformance`] is the shared suite every driver must pass.
 //!
 //! Deliberate panics and hangs exist only here, as fault injection for tests; production
 //! code never panics on external input.
 
+pub mod conformance;
 mod provider;
 mod scripted;
+mod transport;
 
 pub use provider::{DeviceFactory, TestProvider};
 pub use scripted::{CallCounter, CountingDevice, ScriptedDevice, Step, StopBehavior};
+pub use transport::{RecordedTransport, TransportLog, TransportStep};
 
 use crate::capabilities::{Capabilities, DeviceDescriptor, DeviceId, SampleRates, TriggerKind};
 
