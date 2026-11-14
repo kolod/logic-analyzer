@@ -314,3 +314,34 @@ small and explicit.
 - Resources: a new `ui.ftl` per language (and `host.*` error codes in `errors.ftl`); the parity
   check of feature 005 already scans every `.ftl` and every `.rs` of the workspace, so the new
   strings are covered. The embedded-resource list in `la-i18n` gains `ui.ftl`.
+
+### R10 addendum: spike results (tasks T006 and T007, 2026-11-14)
+
+**Debian build packages (T006)**: the bare `debian:trixie` container with only `build-essential`,
+`ca-certificates`, `curl` and `git` (the existing "Debian prerequisites" step) builds, lints and
+tests `la-app` with iced 0.14 and `rfd` 0.18 without any extra system package; the run-time
+libraries (X11, Wayland, Vulkan, `xdg-desktop-portal`) are loaded dynamically and are only needed
+when a window is opened. Nothing is added to the CI prerequisites.
+
+**Headless layout measurement (T007)**: `iced_test` 0.14 (`Simulator`, MIT, MSRV 1.88) builds a view
+in a window of a chosen size and, through a custom selector, enumerates every widget with its layout
+bounds, visible bounds and text content. Measured on Windows and in the Debian CI container with the
+same numbers (a German sentence in a 200 px container wraps to two lines: 200 × 41.6). Findings:
+
+- Text is wrapped by word or glyph, so overflow shows up as **height growth**, not as extra width.
+- A parent with a fixed height or `clip(true)` shrinks the text's reported bounds to the allotted
+  space; the clipped part cannot be detected from the bounds. The layout rules therefore forbid fixed
+  heights for anything containing text (text containers size from content), which the check enforces
+  by walking the tree: any `Container` candidate whose bounds are smaller than the union of its text
+  children is reported.
+- Overlap (two text widgets with intersecting bounds), elements outside the window, and elements
+  clipped by a scrollable or window edge (`visible_bounds` smaller than `bounds`) are detected
+  directly.
+
+**Decision**: option (a). The text-fit check of task T077 renders every screen and dialog through
+`iced_test::Simulator` at 800 × 560 in each of the six languages and reports (1) a widget outside the
+window, (2) overlapping text widgets, (3) a clipped text (`visible_bounds` ≠ `bounds`), (4) a
+container smaller than its text. Missing glyphs are checked separately and without a window: every
+character of every message and of the bundled sample user texts must have a glyph in the bundled
+fonts or be covered by the declared system fallback list (task T080). The resource-length lint of
+option (b) is not needed. `iced_test` becomes a dev-dependency of `la-app`.
