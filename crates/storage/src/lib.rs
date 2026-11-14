@@ -17,6 +17,8 @@ mod math;
 mod published;
 mod query;
 mod segment;
+#[cfg(feature = "test-support")]
+pub mod testing;
 mod types;
 
 pub use capture::Capture;

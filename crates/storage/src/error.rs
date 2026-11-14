@@ -126,7 +126,6 @@ pub(crate) fn invalid_window(start: u64, end: u64) -> Error {
     )
 }
 
-#[expect(dead_code, reason = "used by the viewport query (phase 4)")]
 pub(crate) fn invalid_pixels(pixels: u32, max: u32) -> Error {
     Error::new(
         ErrorKind::InvalidInput,

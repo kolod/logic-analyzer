@@ -14,10 +14,6 @@ pub(crate) fn checked_position_add(a: u64, b: u64) -> Result<u64> {
 /// `start + floor(i * len / w)`, computed in `u128` so it cannot overflow.
 ///
 /// Returns `None` if `w` is zero or `i` is above `w`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the viewport query (phase 4)")
-)]
 pub(crate) fn pixel_boundary(start: u64, len: u64, i: u32, w: u32) -> Option<u64> {
     if w == 0 || i > w {
         return None;

@@ -20,7 +20,6 @@ pub(crate) struct Published {
     pub(crate) channels: Vec<ChannelData>,
     pub(crate) gaps: Arc<Vec<Gap>>,
     pub(crate) status: CaptureStatus,
-    #[expect(dead_code, reason = "read by the viewport query (phase 4)")]
     pub(crate) limits: Limits,
 }
 

@@ -180,7 +180,6 @@ impl<'a> RankCursor<'a> {
     }
 
     /// Position of the first transition after the point (the one with index `rank`).
-    #[expect(dead_code, reason = "used by the viewport query (phase 4)")]
     pub(crate) fn next_transition(&self, point: &RankPoint, probes: &mut u64) -> Option<u64> {
         *probes = probes.saturating_add(1);
         match point.block {

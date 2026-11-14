@@ -32,7 +32,7 @@ cargo test -p la-storage --test complexity
 
 Expected: probe counts for captures of 10^3 to 10^9 transitions per channel grow
 logarithmically with N (probes(10^9) / probes(10^6) < 3) and within the formula bound
-of research R9. The 10^9 capture is synthetic and uses kilobytes of memory.
+of research R9. The 10^9 capture is synthetic and uses tens of megabytes of memory.
 
 ## 4. Limits, gaps, hostile input (User Stories 4, 6, 7)
 

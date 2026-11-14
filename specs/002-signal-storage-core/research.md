@@ -163,7 +163,7 @@ All Technical Context unknowns are resolved below.
   2. **Large synthetic captures without large memory**: blocks are immutable and
      reference their base position separately, so a test-only feature
      (`test-support`) builds a 10^9-transition capture by referencing one block
-     payload many times (about 100 KB real memory). It verifies SC-002/SC-003 at the
+     payload many times (tens of megabytes: one table of about 10^6 small block descriptors shared by all channels). It verifies SC-002/SC-003 at the
      real size. Caveat (documented): it is cache-friendly, so timings from it are
      optimistic; real-data timings at 10^7–10^8 are measured too.
   3. **Timing benchmarks (informational, recorded baseline)**: a dependency-free

@@ -65,7 +65,7 @@ pub struct CaptureStatus { pub closed: bool, pub complete: bool,
 
 ```rust
 /// Builds a capture whose channels reference one block payload many times, so a
-/// 10^9-transition capture needs only kilobytes (used by complexity tests/benches).
+/// 10^9-transition capture needs tens of megabytes (used by complexity tests/benches).
 pub fn synthetic_capture(channels: u8, transitions_per_channel: u64) -> Result<Snapshot>;
 ```
 
