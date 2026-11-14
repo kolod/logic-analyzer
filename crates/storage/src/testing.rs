@@ -101,6 +101,7 @@ pub fn synthetic_capture(channels: u8, transitions_per_channel: u64) -> Result<S
                 interrupted: false,
             },
             limits: Limits::default(),
+            used_bytes: 0,
         }),
     })
 }

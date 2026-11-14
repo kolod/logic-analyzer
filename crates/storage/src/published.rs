@@ -21,6 +21,8 @@ pub(crate) struct Published {
     pub(crate) gaps: Arc<Vec<Gap>>,
     pub(crate) status: CaptureStatus,
     pub(crate) limits: Limits,
+    /// Memory accounted for the stored data and its indexes when this state was published.
+    pub(crate) used_bytes: u64,
 }
 
 impl Published {
@@ -88,6 +90,13 @@ impl Snapshot {
     #[must_use]
     pub fn status(&self) -> CaptureStatus {
         self.inner.status
+    }
+
+    /// Memory accounted for the stored signal data and its indexes, in bytes (the figure that the
+    /// memory budget limits).
+    #[must_use]
+    pub fn memory_used(&self) -> u64 {
+        self.inner.used_bytes
     }
 
     /// The recorded gaps, sorted by position.

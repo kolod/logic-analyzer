@@ -125,6 +125,7 @@ impl Capture {
                 gaps: Arc::new(Vec::new()),
                 status: CaptureStatus::default(),
                 limits: config.limits,
+                used_bytes: 0,
             }))),
         };
         capture.publish();
@@ -180,6 +181,7 @@ impl Capture {
             gaps: Arc::clone(&self.gaps),
             status: self.status(),
             limits: self.config.limits,
+            used_bytes: self.used_bytes,
         };
         // The lock is held only to swap the pointer.
         let mut guard = self.shared.write().unwrap_or_else(PoisonError::into_inner);
