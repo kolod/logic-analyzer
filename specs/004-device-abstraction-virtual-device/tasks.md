@@ -273,7 +273,7 @@ both pacing modes.
 - [X] T063 [P] Record the remaining constitution gates in the same checklist: localization (no UI strings, stable `device.*` codes, English docs), third-party code (`Cargo.lock` gains only workspace packages; `cargo deny list` before and after; nothing reused from PulseView/sigrok/Saleae), Principle II (the shared conformance suite is what each driver in items 011–013 must pass), Principle XI (virtual device delivered; decoder round-trip tests come with items 007–008), platforms (Windows locally, Debian 13 and MSRV 1.85 through CI)
 - [X] T064 Run the whole quickstart (`specs/004-device-abstraction-virtual-device/quickstart.md`, steps 1–8) on Windows 10/11 and rely on CI for Debian 13 and the MSRV job; fix any gap and update the quickstart where reality differs
 - [X] T065 Update `roadmap.md` (mark item 004 implemented) and the `README.md` status line (devices crate, virtual device, no UI yet, no real drivers yet)
-- [ ] T066 Final local gate: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features`, `cargo deny --all-features check`, `cargo +1.85 test --workspace`, then push the branch, open a pull request and wait for all 10 required checks on both operating systems
+- [X] T066 Final local gate: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features`, `cargo deny --all-features check`, `cargo +1.85 test --workspace`, then push the branch, open a pull request and wait for all 10 required checks on both operating systems
 
 ---
 
