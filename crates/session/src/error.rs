@@ -79,12 +79,12 @@ pub(crate) fn too_large(what: &str, value: u64, limit: u64) -> Error {
     )
 }
 
-pub(crate) fn memory_budget(needed: u64, budget: u64) -> Error {
+pub(crate) fn memory_budget(detail: &str) -> Error {
     Error::new(
         ErrorKind::Resource,
         MEMORY_BUDGET,
         format!(
-            "the capture needs about {needed} bytes of memory but the budget is {budget} bytes; raise the memory budget or open a smaller file"
+            "the capture does not fit the memory budget ({detail}); raise the memory budget or open a smaller file"
         ),
     )
 }
@@ -138,7 +138,7 @@ mod tests {
             (inconsistent("x"), INCONSISTENT),
             (unknown_critical_section("ABCD"), UNKNOWN_CRITICAL_SECTION),
             (too_large("a size", 5, 4), TOO_LARGE),
-            (memory_budget(10, 5), MEMORY_BUDGET),
+            (memory_budget("needs 10, budget 5"), MEMORY_BUDGET),
             (invalid_input("x"), INVALID_INPUT),
             (io_read("x", io()), IO_READ),
             (io_write("x", io()), IO_WRITE),
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn details_are_actionable_and_name_the_numbers() {
         assert!(unsupported_version(2, 1).detail().contains("2.x"));
-        assert!(memory_budget(10, 5).detail().contains("memory budget"));
+        assert!(memory_budget("needs 10").detail().contains("memory budget"));
         assert!(too_large("a size", 5, 4).detail().contains("limit of 4"));
         assert!(unknown_critical_section("ABCD").detail().contains("ABCD"));
     }

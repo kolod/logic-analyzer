@@ -144,6 +144,29 @@ impl CaptureRestorer {
         })
     }
 
+    /// Checks, before any transition is pushed, that channels with the given transition counts
+    /// (one entry per channel, in order) fit the memory budget together with the gap list.
+    ///
+    /// # Errors
+    ///
+    /// `storage.memory_limit` if the lower bound of the memory they need exceeds the budget.
+    pub fn check_budget(&self, transitions_per_channel: &[u64]) -> Result<()> {
+        let budget = self.capture.config.limits.memory_budget_bytes;
+        let needed = transitions_per_channel
+            .iter()
+            .fold(self.gap_bytes, |sum, count| {
+                sum.saturating_add(estimate_channel_bytes(*count))
+            });
+        if needed > budget {
+            return Err(error::memory_limit(
+                self.gap_bytes,
+                needed.saturating_sub(self.gap_bytes),
+                budget,
+            ));
+        }
+        Ok(())
+    }
+
     /// Declares the next channel: its level at the first stored sample and how many
     /// transitions will follow.
     ///

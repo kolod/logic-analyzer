@@ -15,10 +15,22 @@
     reason = "used by the writer, reader and operations added later"
 )]
 
+mod capture_codec;
+mod control;
 mod crc;
 pub mod error;
 mod format;
 mod fs;
 mod limits;
 mod meta;
+mod read;
+mod session;
 mod varint;
+mod write;
+
+pub use control::{Control, OperationState, Progress};
+pub use format::SectionTag;
+pub use limits::LoadLimits;
+pub use read::load_blocking;
+pub use session::{Section, Session, SessionData};
+pub use write::{SaveReport, save_blocking};
