@@ -92,13 +92,12 @@ impl NoticeList {
     /// Adds a notice, or counts it into the most recent one when that is identical. Returns the
     /// id of the notice that now represents it.
     pub fn add(&mut self, severity: Severity, content: NoticeContent, now: i64) -> NoticeId {
-        if let Some(last) = self.items.back_mut()
-            && last.severity == severity
-            && last.content == content
-        {
-            last.count = last.count.saturating_add(1);
-            last.last_at = now;
-            return last.id;
+        if let Some(last) = self.items.back_mut() {
+            if last.severity == severity && last.content == content {
+                last.count = last.count.saturating_add(1);
+                last.last_at = now;
+                return last.id;
+            }
         }
         let id = NoticeId(self.next_id);
         self.next_id = self.next_id.saturating_add(1);
