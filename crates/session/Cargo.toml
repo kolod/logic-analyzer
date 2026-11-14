@@ -1,0 +1,31 @@
+[package]
+name = "la-session"
+version = "0.1.0"
+description = "Session files: atomic save and safe load of captures"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+la-core = { path = "../core" }
+la-devices = { path = "../devices" }
+la-diagnostics = { path = "../diagnostics" }
+la-storage = { path = "../storage" }
+tracing = "0.1.44"
+
+[features]
+# Fault-injecting file system and other test helpers. Not part of the stable API.
+test-support = []
+
+[dev-dependencies]
+la-session = { path = ".", features = ["test-support"] }
+la-devices = { path = "../devices", features = ["test-support"] }
+la-storage = { path = "../storage", features = ["test-support"] }
+
+[[bench]]
+name = "session_io"
+harness = false
+
+[lints]
+workspace = true
