@@ -47,11 +47,29 @@ impl Snapshot {
     pub fn channels(&self) -> u8;
     pub fn status(&self) -> CaptureStatus;
     pub fn gaps(&self) -> &[Gap];
+    /// Added by feature 003 (session files): the level of the first stored sample and the
+    /// number of transitions of a channel (O(1)); together with the transitions they describe
+    /// a channel completely.
+    pub fn initial_high(&self, channel: u8) -> Result<bool>;
+    pub fn transition_count(&self, channel: u8) -> Result<u64>;
 
     pub fn level_at(&self, channel: u8, position: u64) -> Result<LevelState>;
     pub fn transitions(&self, channel: u8, start: u64, end: u64) -> Result<TransitionIter<'_>>;
     pub fn viewport(&self, channel: u8, start: u64, end: u64, pixels: u32) -> Result<ViewportResult>;
 }
+
+// ---- restoring a capture (added by feature 003) -------------------------------------
+/// Builds a closed capture from stored transitions with the recorder's own block layout
+/// and memory accounting; enforces every rule of data-model.md ("Restoring a capture").
+pub struct CaptureRestorer { /* ... */ }
+impl CaptureRestorer {
+    pub fn new(config: CaptureConfig, length: u64, status: RestoredStatus, gaps: Vec<Gap>)
+        -> Result<CaptureRestorer>;
+    pub fn begin_channel(&mut self, channel: u8, initial_high: bool, transitions: u64) -> Result<()>;
+    pub fn push_transition(&mut self, position: u64) -> Result<()>;
+    pub fn finish(self) -> Result<Capture>;   // closed, flags applied
+}
+pub struct RestoredStatus { pub stopped_by_limit: bool, pub interrupted: bool }
 
 // ---- values --------------------------------------------------------------------
 pub enum LevelState { Low, High, Missing }

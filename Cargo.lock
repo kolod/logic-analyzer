@@ -68,6 +68,18 @@ name = "la-lint-fixture"
 version = "0.1.0"
 
 [[package]]
+name = "la-session"
+version = "0.1.0"
+dependencies = [
+ "la-core",
+ "la-devices",
+ "la-diagnostics",
+ "la-session",
+ "la-storage",
+ "tracing",
+]
+
+[[package]]
 name = "la-storage"
 version = "0.1.0"
 dependencies = [

@@ -87,3 +87,19 @@ pub enum AcquisitionEvent { Started { applied: AppliedConfig },
   waiting for its trigger); `CaptureDescription` repeats both.
 - After the outcome is set, the device is released (not busy) and can be started again;
   a hung driver instance is abandoned, the next start opens a fresh instance.
+
+## Saved descriptions (added by feature 003)
+
+```rust
+/// Every field of a CaptureDescription as plain values (for session files).
+pub struct SavedDescription { pub device_id: String, pub device_name: String, pub simulated: bool,
+    pub seed: Option<u64>, pub requested_sample_rate_hz: u64, pub sample_rate_hz: u64, pub channels: u8,
+    pub enabled_mask: u32, pub trigger: Option<Trigger>, pub samples_before_trigger: u64,
+    pub started_at: SystemTime }
+impl CaptureDescription {
+    pub fn to_saved(&self) -> SavedDescription;
+    /// The loading path: validates every field; there is still no setter.
+    pub fn restore(saved: SavedDescription) -> la_core::Result<CaptureDescription>;
+}
+pub const MAX_TEXT_BYTES: usize = 4_096;   // longest device id or name
+```

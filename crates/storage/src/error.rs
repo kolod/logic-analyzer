@@ -34,8 +34,14 @@ pub const INVALID_PIXELS: &str = "storage.invalid_pixels";
 pub const CHANNEL_OUT_OF_RANGE: &str = "storage.channel_out_of_range";
 /// A gap has zero length or does not fit.
 pub const INVALID_GAP: &str = "storage.invalid_gap";
+/// A stored capture violates a rule of the capture data model (restoring a capture).
+pub const INVALID_RESTORE: &str = "storage.invalid_restore";
 /// A state that cannot be reached from external input; indicates a bug.
 pub const INTERNAL: &str = "storage.internal";
+
+pub(crate) fn invalid_restore(detail: impl Into<String>) -> Error {
+    Error::new(ErrorKind::InvalidInput, INVALID_RESTORE, detail)
+}
 
 pub(crate) fn internal(what: &str) -> Error {
     Error::new(

@@ -18,6 +18,7 @@ mod ingest;
 mod math;
 mod published;
 mod query;
+mod restore;
 mod segment;
 #[cfg(feature = "test-support")]
 pub mod testing;
@@ -27,6 +28,7 @@ pub use capture::Capture;
 pub use channel::TransitionIter;
 pub use config::{CaptureConfig, Limits, MAX_CHANNELS};
 pub use published::{CaptureReader, Snapshot};
+pub use restore::{CaptureRestorer, RestoredStatus};
 pub use types::{
     Activity, CaptureStatus, Edge, Gap, LevelState, MAX_REPORTED_TRANSITIONS, PixelSummary,
     QueryStats, ViewportResult,
