@@ -99,11 +99,11 @@ impl CaptureRestorer {
 pub struct RestoredStatus { pub stopped_by_limit: bool, pub interrupted: bool }
 
 // la-devices
-pub struct DescriptionParts { /* every field of CaptureDescription as plain values */ }
+pub struct SavedDescription { /* every field of CaptureDescription as plain values */ }
 impl CaptureDescription {
-    pub fn parts(&self) -> DescriptionParts;
+    pub fn to_saved(&self) -> SavedDescription;
     /// For loading a saved session only; validates the parts. There is still no setter.
-    pub fn restore(parts: DescriptionParts) -> la_core::Result<CaptureDescription>;
+    pub fn restore(saved: SavedDescription) -> la_core::Result<CaptureDescription>;
 }
 ```
 

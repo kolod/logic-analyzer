@@ -28,7 +28,7 @@ pub use acquisition::{
 };
 pub use capabilities::{Capabilities, DeviceDescriptor, DeviceId, SampleRates, TriggerKind};
 pub use config::{AppliedConfig, DeviceConfig, DeviceOptions, ResolvedConfig, Trigger, validate};
-pub use description::CaptureDescription;
+pub use description::{CaptureDescription, MAX_TEXT_BYTES, SavedDescription};
 pub use driver::{
     Device, DeviceEvent, DeviceEventSink, DeviceProvider, Flow, READ_TIMEOUT, ReadOutcome,
     START_STOP_TIMEOUT, Transport,

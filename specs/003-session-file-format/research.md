@@ -201,7 +201,7 @@ into a failing test.
   returns a closed `Capture`. It validates strictly increasing positions in `1..length`, no transition
   inside a gap or before the first stored sample, gap ordering without overlap or adjacency, flag consistency,
   and enforces the memory budget with the same accounting as recording.
-- `la-devices`: `CaptureDescription::parts()` (a plain `DescriptionParts` value of every field) and
+- `la-devices`: `CaptureDescription::to_saved()` (a plain `SavedDescription` value of every field) and
   `CaptureDescription::restore(parts)` (validating: channel count, enabled mask within channels, rates above
   zero, trigger channel enabled, text lengths) documented as the loading path; no setters are added, so a
   consumer still cannot clear the simulated mark of a description it holds.

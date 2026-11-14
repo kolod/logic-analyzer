@@ -21,6 +21,13 @@ impl DeviceId {
         Self(format!("{provider}:{unique}"))
     }
 
+    /// Wraps an id read from outside (a saved session). The text must be `provider:unique`
+    /// with a non-empty provider.
+    pub(crate) fn from_text(text: &str) -> Option<Self> {
+        let (provider, _) = text.split_once(':')?;
+        (!provider.is_empty()).then(|| Self(text.to_owned()))
+    }
+
     /// The full id text.
     #[must_use]
     pub fn as_str(&self) -> &str {
