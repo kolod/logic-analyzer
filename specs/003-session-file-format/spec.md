@@ -314,7 +314,8 @@ the file is a valid, incomplete session.
 - **FR-011**: The system MUST NOT fall back to a non-atomic write when an atomic one is
   not possible; it MUST report the failure instead.
 - **FR-012**: The system MUST NOT overwrite or delete any file other than the target and
-  its own temporary file.
+  its own temporary files, which are recognised by a strict name pattern tied to the target
+  (this includes leftovers of earlier saves of the same target, removed only when stale).
 
 **Safe reading**
 
