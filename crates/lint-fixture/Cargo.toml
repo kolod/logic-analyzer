@@ -1,0 +1,11 @@
+[package]
+name = "la-lint-fixture"
+version = "0.1.0"
+description = "Test-only crate proving the workspace panic-safety lint policy"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
