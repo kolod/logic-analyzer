@@ -17,9 +17,11 @@ use crate::driver::{Device, DeviceProvider, Flow, ReadOutcome};
 use crate::error;
 
 pub(crate) mod generator;
+mod script;
 mod source;
 
 use generator::RandomGenerator;
+use script::{FailureScript, search_trigger};
 pub use source::{SignalSource, SignalSourceFactory};
 
 /// The name of the virtual provider and the prefix of its device id.
@@ -171,11 +173,31 @@ enum Producer {
 }
 
 impl Producer {
-    /// Fills `out` with the samples for the capture positions `start ..`.
+    /// Fills `out` with the samples for the generator positions `start ..`.
     fn fill(&mut self, start: u64, out: &mut [u32]) {
         match self {
             Self::Random(generator) => generator.fill(out),
             Self::Source(source) => source.fill(start, out),
+        }
+    }
+
+    /// Advances over `count` generator positions without keeping the samples.
+    fn skip(&mut self, start: u64, count: u64) {
+        match self {
+            Self::Random(generator) => generator.skip(count),
+            Self::Source(source) => {
+                // A source only knows how to fill, so produce and discard in chunks.
+                let mut scratch = vec![0_u32; 65_536];
+                let mut done = 0_u64;
+                while done < count {
+                    let len = usize::try_from(count.saturating_sub(done))
+                        .map_or(scratch.len(), |l| l.min(scratch.len()));
+                    if let Some(part) = scratch.get_mut(..len) {
+                        source.fill(start.saturating_add(done), part);
+                    }
+                    done = done.saturating_add(u64::try_from(len).unwrap_or(1));
+                }
+            }
         }
     }
 }
@@ -186,8 +208,15 @@ pub struct VirtualDevice {
     producer: Option<Producer>,
     remaining: Option<u64>,
     pacing: Pacing,
-    /// Samples produced so far (the capture position of the next sample).
+    /// The capture position of the next sample: samples delivered plus positions lost.
     position: u64,
+    /// How many samples the generator or source has produced (including samples that were
+    /// skipped while waiting for a trigger or lost).
+    generated: u64,
+    /// Samples generated while searching for the trigger that belong to the capture.
+    carry: Vec<u32>,
+    carry_used: usize,
+    script: FailureScript,
     sample_rate_hz: u64,
     started: Option<Instant>,
 }
@@ -212,6 +241,10 @@ impl VirtualDevice {
             remaining: None,
             pacing: Pacing::Fast,
             position: 0,
+            generated: 0,
+            carry: Vec::new(),
+            carry_used: 0,
+            script: FailureScript::default(),
             sample_rate_hz: 1,
             started: None,
         }
@@ -230,6 +263,28 @@ impl VirtualDevice {
         u64::try_from(due)
             .unwrap_or(u64::MAX)
             .saturating_sub(self.position)
+    }
+
+    /// Samples left over from the trigger search.
+    fn carry_left(&self) -> usize {
+        self.carry.len().saturating_sub(self.carry_used)
+    }
+
+    /// Discards `count` capture positions: first from the trigger carry, then from the
+    /// generator.
+    fn skip_positions(&mut self, count: u64) {
+        let from_carry = usize::try_from(count)
+            .unwrap_or(usize::MAX)
+            .min(self.carry_left());
+        self.carry_used = self.carry_used.saturating_add(from_carry);
+        let rest = count.saturating_sub(u64::try_from(from_carry).unwrap_or(0));
+        if rest > 0 {
+            if let Some(producer) = self.producer.as_mut() {
+                producer.skip(self.generated, rest);
+            }
+            self.generated = self.generated.saturating_add(rest);
+        }
+        self.position = self.position.saturating_add(count);
     }
 }
 
@@ -257,7 +312,7 @@ impl Device for VirtualDevice {
             _ => VirtualOptions::default(),
         };
         options.validate()?;
-        self.producer = Some(match &options.source {
+        let mut producer = match &options.source {
             Some(factory) => Producer::Source(factory.create(
                 config.enabled_channels(),
                 config.sample_rate_hz(),
@@ -268,13 +323,34 @@ impl Device for VirtualDevice {
                 options.seed,
                 options.mean_gap,
             )),
-        });
+        };
+        self.generated = 0;
+        self.carry = Vec::new();
+        self.carry_used = 0;
+        let mut skipped = 0;
+        if let Some(trigger) = config.trigger() {
+            // Generate and discard samples until the trigger condition holds; capturing starts
+            // at the trigger sample.
+            let found = search_trigger(
+                &mut |start, out| producer.fill(start, out),
+                trigger,
+                options.trigger_search_limit,
+            )?;
+            skipped = found.skipped;
+            self.generated = found.generated;
+            self.carry = found.carry;
+        }
+        self.producer = Some(producer);
+        self.script = FailureScript::new(options.failures);
         self.remaining = config.capture_length();
         self.pacing = options.pacing;
         self.sample_rate_hz = config.sample_rate_hz();
         self.position = 0;
         self.started = Some(Instant::now());
-        Ok(AppliedConfig::new(config.sample_rate_hz()))
+        Ok(AppliedConfig {
+            sample_rate_hz: config.sample_rate_hz(),
+            samples_before_trigger: skipped,
+        })
     }
 
     fn read(&mut self, max_samples: usize, out: &mut Vec<u32>) -> Result<ReadOutcome> {
@@ -283,6 +359,41 @@ impl Device for VirtualDevice {
             Some(left) => usize::try_from(left).unwrap_or(usize::MAX).min(max_samples),
             None => max_samples,
         };
+
+        // A scripted failure whose position has been reached happens now.
+        if let Some(failure) = self.script.take_due(self.position) {
+            let position = self.position;
+            match failure.kind {
+                FailureKind::Loss(0) | FailureKind::Overrun(0) => return Ok(ReadOutcome::Idle),
+                FailureKind::Loss(lost) | FailureKind::Overrun(lost) => {
+                    tracing::warn!(
+                        target: "la_devices",
+                        position,
+                        lost,
+                        "the virtual device simulates lost samples"
+                    );
+                    self.skip_positions(lost);
+                    return Ok(ReadOutcome::Lost(lost));
+                }
+                FailureKind::TransportError => {
+                    return Err(error::transport(format!(
+                        "simulated transport error at position {position}; the virtual device was told to fail here"
+                    )));
+                }
+                FailureKind::Disconnect => {
+                    return Err(error::disconnected(format!(
+                        "simulated disconnect at position {position}; the virtual device was told to fail here"
+                    )));
+                }
+            }
+        }
+        // Never read past the next scripted failure: it must happen at its exact position.
+        let wanted = match self.script.next_position() {
+            Some(next) => wanted
+                .min(usize::try_from(next.saturating_sub(self.position)).unwrap_or(usize::MAX)),
+            None => wanted,
+        };
+
         let wanted = if self.pacing == Pacing::Realtime {
             let due = usize::try_from(self.due()).unwrap_or(usize::MAX);
             if due == 0 {
@@ -302,9 +413,27 @@ impl Device for VirtualDevice {
                 "the virtual device was read before it was started".to_owned(),
             ));
         };
+
         out.clear();
-        out.resize(wanted, 0);
-        producer.fill(self.position, out);
+        // Samples left over from the trigger search come first.
+        let from_carry = wanted.min(self.carry.len().saturating_sub(self.carry_used));
+        if let Some(part) = self
+            .carry
+            .get(self.carry_used..self.carry_used.saturating_add(from_carry))
+        {
+            out.extend_from_slice(part);
+        }
+        self.carry_used = self.carry_used.saturating_add(from_carry);
+        let rest = wanted.saturating_sub(from_carry);
+        if rest > 0 {
+            out.resize(wanted, 0);
+            if let Some(part) = out.get_mut(from_carry..) {
+                producer.fill(self.generated, part);
+            }
+            self.generated = self
+                .generated
+                .saturating_add(u64::try_from(rest).unwrap_or(u64::MAX));
+        }
         let produced = u64::try_from(wanted).unwrap_or(u64::MAX);
         self.position = self.position.saturating_add(produced);
         if let Some(left) = self.remaining.as_mut() {

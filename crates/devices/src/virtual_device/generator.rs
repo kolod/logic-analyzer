@@ -129,10 +129,6 @@ impl RandomGenerator {
     }
 
     /// Advances by `count` samples without producing them (used for scripted losses).
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by scripted losses (phase 8)")
-    )]
     pub(crate) fn skip(&mut self, count: u64) {
         let end = self.position.saturating_add(count);
         for channel in &mut self.channels {
