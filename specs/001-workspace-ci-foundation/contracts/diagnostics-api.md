@@ -29,10 +29,19 @@ pub type Result<T> = core::result::Result<T, Error>;
 pub struct LogConfig { /* see data-model.md */ }
 impl Default for LogConfig {}
 
-pub struct LogGuard; // flushes on drop; keep alive for the program's lifetime
+pub enum LogStatus { File { directory: PathBuf }, Fallback { reason: String } }
+
+pub struct LogGuard; // keep alive for the program's lifetime
+impl LogGuard { pub fn status(&self) -> LogStatus; }
 
 /// Never fails the caller: on an unusable log location it falls back to stderr.
 pub fn init_logging(config: LogConfig) -> LogGuard;
+
+/// Same pipeline without installing it globally (tests, embedders): returns the guard
+/// and a `tracing::Dispatch` to scope with `tracing::dispatcher::with_default`.
+pub fn build_logging(config: LogConfig) -> (LogGuard, tracing::Dispatch);
+
+pub fn parse_level(text: &str) -> Option<tracing::Level>;
 
 /// Installs the process-wide panic hook that logs message, location, thread.
 pub fn install_panic_hook();
