@@ -7,11 +7,12 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use iced::widget::{
-    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, row, stack, text,
-    text_input,
+    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, row, scrollable,
+    stack, text, text_input, tooltip,
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
 use la_devices::DeviceId;
+use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::shortcuts::{Accelerator, Action, ShortcutEntry};
 use la_host::window::ViewSize;
 use la_host::{
@@ -56,6 +57,16 @@ pub enum Message {
     SystemTheme(theme::Mode),
     /// The window asked to close.
     CloseRequested,
+    /// A channel was renamed in the channel panel.
+    ChannelName(u8, String),
+    /// A channel was shown or hidden.
+    ChannelVisible(u8, bool),
+    /// The colour of a channel moves to the next palette entry.
+    ChannelColour(u8),
+    /// A channel moves one position up (negative) or down (positive) in the order.
+    ChannelMove(usize, i8),
+    /// Follow the newest data on or off.
+    ToggleFollow,
     /// Nothing to do.
     Noop,
 }
@@ -124,6 +135,8 @@ fn key_name(key: &keyboard::Key) -> Option<String> {
             };
             Some(name.to_owned())
         }
+        // The plus key is a shifted `=` on many layouts: accept both for zooming in.
+        keyboard::Key::Character(text) if text.as_str() == "=" => Some("+".to_owned()),
         keyboard::Key::Character(text) => Some(text.to_uppercase()),
         keyboard::Key::Unidentified => None,
     }
@@ -177,6 +190,7 @@ pub struct App {
     rate_text: String,
     length_text: String,
     seed_text: String,
+    names: std::collections::BTreeMap<u8, String>,
 }
 
 impl App {
@@ -204,8 +218,10 @@ impl App {
             rate_text: String::new(),
             length_text: String::new(),
             seed_text: String::new(),
+            names: std::collections::BTreeMap::new(),
         };
         app.sync_texts();
+        app.sync_names();
         app.refresh();
         app
     }
@@ -222,6 +238,18 @@ impl App {
         self.seed_text = config.seed.map_or_else(String::new, |s| s.to_string());
     }
 
+    /// Copies the channel names of the presentation into the text fields.
+    fn sync_names(&mut self) {
+        self.names = self
+            .shell
+            .state()
+            .presentation
+            .channels
+            .iter()
+            .map(|style| (style.index, style.name.clone()))
+            .collect();
+    }
+
     /// Recomputes the frame plan and the canvas cache when what they depend on changed.
     fn refresh(&mut self) {
         let state = self.shell.state();
@@ -234,7 +262,9 @@ impl App {
         );
         if key != self.plan_key {
             self.plan_key = key;
+            let started = Instant::now();
             self.plan = self.shell.frame_plan(state.view_size);
+            crate::frame_log::record(crate::frame_log::Stage::Plan, started.elapsed());
             self.cache.clear();
         }
         let cache_key = (
@@ -276,7 +306,11 @@ impl App {
 
     /// Runs a host command and turns its outcome into a task.
     fn run(&mut self, command: Command) -> Task<Message> {
+        let renames = matches!(command, Command::RenameChannel { .. });
         let outcome = self.shell.apply(command);
+        if !renames {
+            self.sync_names();
+        }
         self.after(&outcome)
     }
 
@@ -310,10 +344,50 @@ impl App {
                     .map(|entry| entry.action.clone());
                 match action {
                     Some(Action::Command(command)) => self.run(command),
+                    Some(Action::ToggleFollowLatest) => self.update(Message::ToggleFollow),
                     _ => Task::none(),
                 }
             }
             Message::Key(_) | Message::Noop => Task::none(),
+            Message::ToggleFollow => {
+                self.open_menu = None;
+                let follow = !self.shell.state().follow_latest;
+                self.run(Command::SetFollowLatest(follow))
+            }
+            Message::ChannelName(channel, name) => {
+                self.names.insert(channel, name.clone());
+                self.run(Command::RenameChannel { channel, name })
+            }
+            Message::ChannelVisible(channel, visible) => {
+                self.run(Command::SetChannelVisible { channel, visible })
+            }
+            Message::ChannelColour(channel) => {
+                let next = self
+                    .shell
+                    .state()
+                    .presentation
+                    .channels
+                    .iter()
+                    .find(|style| style.index == channel)
+                    .map(|style| match style.colour {
+                        Colour::Palette(index) => {
+                            Colour::Palette(index.saturating_add(1) % PALETTE_SIZE)
+                        }
+                        Colour::Rgb(..) => Colour::Palette(channel % PALETTE_SIZE),
+                    });
+                match next {
+                    Some(colour) => self.run(Command::SetChannelColour { channel, colour }),
+                    None => Task::none(),
+                }
+            }
+            Message::ChannelMove(position, direction) => {
+                let to = if direction < 0 {
+                    position.saturating_sub(1)
+                } else {
+                    position.saturating_add(1)
+                };
+                self.run(Command::MoveChannel { from: position, to })
+            }
             Message::AreaResized(width) => {
                 let pixels = width.max(1.0) as u32;
                 self.run(Command::SetViewSize(ViewSize { pixels, scale: 1.0 }))
@@ -423,8 +497,14 @@ impl App {
                 .style(button::text)
                 .padding([4, 12])
                 .width(Length::Shrink);
-            if enabled && let Action::Command(command) = &entry.action {
-                item = item.on_press(Message::Run(command.clone()));
+            if enabled {
+                match &entry.action {
+                    Action::Command(command) => {
+                        item = item.on_press(Message::Run(command.clone()));
+                    }
+                    Action::ToggleFollowLatest => item = item.on_press(Message::ToggleFollow),
+                    _ => {}
+                }
             }
             items = items.push(item);
         }
@@ -544,6 +624,92 @@ impl App {
         toolbar.into()
     }
 
+    /// The panel that lists the channels: show, name, colour and order.
+    fn channel_panel(&self) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let variant = self.variant;
+        let mut list = column![].spacing(4).padding(iced::Padding {
+            top: 6.0,
+            right: 18.0,
+            bottom: 6.0,
+            left: 6.0,
+        });
+        list = list.push(text(self.t("panel-channels")).size(14));
+        let last = state.presentation.channels.len().saturating_sub(1);
+        for (position, style) in state.presentation.channels.iter().enumerate() {
+            let default_label = localizer.message(
+                &Key::from_static("channel-default"),
+                &Args::new().uint("number", u64::from(style.index)),
+            );
+            let name = self.names.get(&style.index).map_or("", String::as_str);
+            let swatch = container(Space::new().width(14).height(14)).style({
+                let colour = variant.channel(style.colour);
+                move |_theme: &Theme| container::Style {
+                    background: Some(colour.into()),
+                    border: iced::Border {
+                        radius: 3.0.into(),
+                        ..iced::Border::default()
+                    },
+                    ..container::Style::default()
+                }
+            });
+            let index = style.index;
+            let line = row![
+                tooltip(
+                    checkbox(style.visible).on_toggle(move |v| Message::ChannelVisible(index, v)),
+                    text(self.t("channel-show")),
+                    tooltip::Position::Bottom,
+                ),
+                text_input(&default_label, name)
+                    .size(13)
+                    .width(Fill)
+                    .on_input(move |t| Message::ChannelName(index, t)),
+                tooltip(
+                    button(swatch)
+                        .style(button::text)
+                        .padding(4)
+                        .on_press(Message::ChannelColour(index)),
+                    text(self.t("channel-colour")),
+                    tooltip::Position::Bottom,
+                ),
+                tooltip(
+                    button(text("\u{25b2}").size(11))
+                        .style(button::text)
+                        .padding(3)
+                        .on_press_maybe(
+                            (position > 0).then_some(Message::ChannelMove(position, -1))
+                        ),
+                    text(self.t("channel-move-up")),
+                    tooltip::Position::Bottom,
+                ),
+                tooltip(
+                    button(text("\u{25bc}").size(11))
+                        .style(button::text)
+                        .padding(3)
+                        .on_press_maybe(
+                            (position < last).then_some(Message::ChannelMove(position, 1))
+                        ),
+                    text(self.t("channel-move-down")),
+                    tooltip::Position::Bottom,
+                ),
+            ]
+            .spacing(4)
+            .align_y(iced::Alignment::Center);
+            list = list.push(line);
+        }
+        list = list.push(
+            button(text(self.t("channel-reset")).size(13))
+                .style(button::secondary)
+                .on_press(Message::Run(Command::ResetPresentation)),
+        );
+        container(scrollable(list))
+            .width(250)
+            .height(Fill)
+            .style(container::bordered_box)
+            .into()
+    }
+
     fn status_bar(&self) -> Element<'_, Message> {
         let line = self.shell.status_line();
         let mut parts: Vec<String> = vec![line.activity];
@@ -633,7 +799,9 @@ impl App {
         if let Some(banner) = self.banner() {
             content = content.push(banner);
         }
-        let content = content.push(signal).push(self.status_bar());
+        let content = content
+            .push(row![signal, self.channel_panel()].height(Fill))
+            .push(self.status_bar());
 
         let mut layers: Vec<Element<'_, Message>> = vec![content.into()];
         if let Some(menu) = self.open_menu_view() {
@@ -751,6 +919,35 @@ mod tests {
         if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
             snapshot
                 .matches_image(std::path::Path::new(&directory).join("capture"))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn the_view_renders_a_zoomed_capture_with_single_edges() {
+        let mut app = app_with_capture("zoomed");
+        let _ = app.update(Message::Run(Command::ZoomToRange {
+            start: 150_000,
+            end: 150_400,
+        }));
+        let _ = app.update(Message::Run(Command::RenameChannel {
+            channel: 1,
+            name: "SDA".into(),
+        }));
+        assert!(app.plan.channels.iter().any(|c| {
+            c.segments
+                .iter()
+                .any(|s| matches!(s, la_host::plan::Segment::Edge { .. }))
+        }));
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        let snapshot = ui.snapshot(&app.theme()).unwrap();
+        if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+            snapshot
+                .matches_image(std::path::Path::new(&directory).join("zoomed"))
                 .unwrap();
         }
     }

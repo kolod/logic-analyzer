@@ -9,6 +9,7 @@ use iced::mouse;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, LineDash, Path, Stroke, Text};
 use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
 use la_host::plan::{FramePlan, FrameState, Segment};
+use la_host::{Command, ZoomAnchor, ZoomFactor};
 use la_i18n::{Args, Key, Localizer};
 
 use crate::app::Message;
@@ -39,6 +40,10 @@ pub struct SignalView<'a> {
 pub struct ViewState {
     /// The last width reported to the application.
     reported_width: f32,
+    /// The modifier keys currently held.
+    modifiers: iced::keyboard::Modifiers,
+    /// The x position where a drag last was, while the left button is down.
+    drag_from: Option<f32>,
 }
 
 fn lane_height(total: f32, lanes: usize) -> f32 {
@@ -322,16 +327,80 @@ impl canvas::Program<Message> for SignalView<'_> {
     fn update(
         &self,
         state: &mut ViewState,
-        _event: &canvas::Event,
+        event: &canvas::Event,
         bounds: Rectangle,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         let width = (bounds.width - GUTTER).max(1.0);
         if (width - state.reported_width).abs() >= 1.0 {
             state.reported_width = width;
             return Some(canvas::Action::publish(Message::AreaResized(width)));
         }
-        None
+        match event {
+            canvas::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
+                state.modifiers = *modifiers;
+                None
+            }
+            canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
+                let position = cursor.position_in(bounds)?;
+                let lines = match delta {
+                    mouse::ScrollDelta::Lines { y, .. } => *y,
+                    mouse::ScrollDelta::Pixels { y, .. } => *y / 40.0,
+                };
+                if lines == 0.0 {
+                    return None;
+                }
+                let command = if state.modifiers.shift() {
+                    Command::Pan {
+                        pixels: (-lines * 60.0) as i64,
+                    }
+                } else {
+                    // One notch changes the zoom by a factor of 5/4; a few notches at once
+                    // are combined.
+                    let notches = lines.abs().ceil().clamp(1.0, 5.0) as u32;
+                    let (small, large) = (4_u64.pow(notches), 5_u64.pow(notches));
+                    let (numerator, denominator) = if lines > 0.0 {
+                        (small, large)
+                    } else {
+                        (large, small)
+                    };
+                    Command::Zoom {
+                        factor: ZoomFactor {
+                            numerator,
+                            denominator,
+                        },
+                        anchor: ZoomAnchor::Column((position.x - GUTTER).max(0.0) as u32),
+                    }
+                };
+                Some(canvas::Action::publish(Message::Run(command)).and_capture())
+            }
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                let position = cursor.position_in(bounds)?;
+                if position.x >= GUTTER {
+                    state.drag_from = Some(position.x);
+                    return Some(canvas::Action::capture());
+                }
+                None
+            }
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let from = state.drag_from?;
+                let position = cursor.position_in(bounds)?;
+                let moved = (from - position.x) as i64;
+                if moved == 0 {
+                    return None;
+                }
+                state.drag_from = Some(position.x);
+                Some(
+                    canvas::Action::publish(Message::Run(Command::Pan { pixels: moved }))
+                        .and_capture(),
+                )
+            }
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                state.drag_from = None;
+                None
+            }
+            _ => None,
+        }
     }
 
     fn draw(
@@ -343,9 +412,11 @@ impl canvas::Program<Message> for SignalView<'_> {
         cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
         let size = bounds.size();
-        let waveforms = self
-            .cache
-            .draw(renderer, size, |frame| self.draw_plan(frame, size, theme));
+        let waveforms = self.cache.draw(renderer, size, |frame| {
+            let started = std::time::Instant::now();
+            self.draw_plan(frame, size, theme);
+            crate::frame_log::record(crate::frame_log::Stage::Draw, started.elapsed());
+        });
         let mut overlay = Frame::new(renderer, size);
         if let Some(position) = cursor.position_in(bounds) {
             self.draw_hover(&mut overlay, size, position, theme);
