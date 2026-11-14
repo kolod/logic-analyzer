@@ -189,8 +189,8 @@ formatted in each language and compared with a hand-written table of the expecte
 3. **Given** a file size of 31,981,568 bytes, **When** formatted, **Then** it is written in binary
    units with the locale's separators (about 30.5 MiB).
 4. **Given** one fixed point in time, **When** formatted in each language, **Then** date and time
-   follow that locale's order and clock convention, in the user's chosen time zone setting
-   (default: the system's).
+   follow that locale's order and clock convention, in the UTC offset supplied by the caller (the
+   application passes the system's).
 5. **Given** a number that is not finite or is out of the displayable range, **When** formatted,
    **Then** a readable marker is produced, never a panic.
 
@@ -352,8 +352,9 @@ unchanged and the message around them is unaffected.
   resources, not from code.
 - **FR-019**: Formatting of a value that cannot be displayed (not finite, out of range) MUST produce
   a readable marker and MUST NOT panic.
-- **FR-020**: Time zone and clock conventions MUST follow the locale, with the time zone supplied by
-  the caller (default: the system's), so that formatted times are testable and reproducible.
+- **FR-020**: Clock conventions MUST follow the locale, and the UTC offset MUST be supplied by the
+  caller (the application passes the system's offset; named time zones and daylight-saving rules are
+  not part of this item), so that formatted times are testable and reproducible.
 
 **Safety of inserted content**
 
