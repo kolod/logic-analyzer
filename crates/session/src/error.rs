@@ -4,14 +4,6 @@
 //! the localization layer maps them to user-facing text later, and tests compare against them.
 //! `detail` is English text for the log only and never contains signal data.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "constructors are used as the reader, writer and operations are implemented; remove this attribute in the last task"
-    )
-)]
-
 use la_core::{Error, ErrorKind};
 
 /// The file is not a session file (wrong or missing magic).
