@@ -42,6 +42,13 @@ pub enum Activity {
 }
 
 /// Everything needed to draw one pixel column faithfully.
+///
+/// A consumer draws a column from its `start_level` (the line before any edge) and its
+/// [`Activity`]: a flat line for `None`, one clean edge at the exact position for `One`,
+/// and a dense-activity mark for `Many`. `end_level` is the level the next column starts
+/// with, so adjacent columns always join without a visual jump. Columns with
+/// `missing_data` or `beyond_end` are drawn as "no data", never as a level that was
+/// not captured. The store only supplies the data; it draws nothing itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PixelSummary {
     /// Level at the first sample of the column.
