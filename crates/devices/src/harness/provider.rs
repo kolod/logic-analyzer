@@ -112,6 +112,16 @@ impl TestProvider {
         }
     }
 
+    /// Pushes an arbitrary event through the registry's sink without changing what `scan`
+    /// reports (to test that the registry ignores events that do not change the list).
+    /// Returns `false` if the registry is not watching or is gone.
+    pub fn inject(&self, event: DeviceEvent) -> bool {
+        lock_recover(&self.inner.state)
+            .sink
+            .as_ref()
+            .is_some_and(|sink| sink.send(event))
+    }
+
     /// Enables or disables pushing of hot-plug events (disabled: only scans reveal changes).
     pub fn set_push(&self, push: bool) {
         lock_recover(&self.inner.state).push = push;

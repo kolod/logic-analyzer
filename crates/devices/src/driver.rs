@@ -3,7 +3,8 @@
 //! Everything else (validation, threading, storage, failure handling) is done by the core.
 //! See `specs/004-device-abstraction-virtual-device/contracts/device-contract.md`.
 
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::Arc;
+use std::sync::mpsc::{Receiver, channel};
 use std::time::Duration;
 
 use la_core::Result;
@@ -94,23 +95,41 @@ pub enum DeviceEvent {
     Disappeared(DeviceId),
 }
 
+/// The function a sink calls for every event; it returns `false` if nobody listens any more.
+type SinkFn = dyn Fn(DeviceEvent) -> bool + Send + Sync;
+
 /// Where a provider pushes hot-plug events. Cloneable; sending never panics or blocks.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DeviceEventSink {
-    sender: Sender<DeviceEvent>,
+    send: Arc<SinkFn>,
+}
+
+impl std::fmt::Debug for DeviceEventSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceEventSink").finish_non_exhaustive()
+    }
 }
 
 impl DeviceEventSink {
+    /// Creates a sink that hands every event to `send` (which returns `false` once nobody
+    /// listens any more). The registry builds its sinks this way.
+    #[must_use]
+    pub fn new(send: impl Fn(DeviceEvent) -> bool + Send + Sync + 'static) -> Self {
+        Self {
+            send: Arc::new(send),
+        }
+    }
+
     /// Creates a sink and the receiver of its events.
     #[must_use]
     pub fn channel() -> (Self, Receiver<DeviceEvent>) {
         let (sender, receiver) = channel();
-        (Self { sender }, receiver)
+        (Self::new(move |event| sender.send(event).is_ok()), receiver)
     }
 
     /// Sends an event; returns `false` if nobody listens any more.
     pub fn send(&self, event: DeviceEvent) -> bool {
-        self.sender.send(event).is_ok()
+        (self.send)(event)
     }
 }
 
