@@ -85,7 +85,7 @@ pub mod parity {
                         pub line: Option<usize>, pub key: String, pub detail: String }
     pub enum DefectKind { MissingKey, ExtraKey, UnusedKey, UndefinedKey, PlaceholderMismatch,
         MissingPluralCategory, DuplicateKey, EmptyMessage, SyntaxError, UnregisteredFile,
-        MissingFile, MissingStatusHeader }
+        MissingFile, MissingStatusHeader, LineEndings }
     /// Checks the resources under `resources_dir` against the sources under `workspace_dir`.
     pub fn check(resources_dir: &Path, workspace_dir: &Path) -> Report;
     impl Report { pub fn is_clean(&self) -> bool; pub fn render(&self) -> String; }   // `file:line key kind`

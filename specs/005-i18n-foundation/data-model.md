@@ -124,5 +124,5 @@ license); each row has a test row written by hand.
 
 `missing-key`, `extra-key`, `unused-key`, `undefined-key` (used by code, defined nowhere),
 `placeholder-mismatch`, `missing-plural-category`, `duplicate-key`, `empty-message`, `syntax-error`,
-`unregistered-file`, `missing-file`, `missing-status-header`. Each defect carries file, line (where
+`unregistered-file`, `missing-file`, `missing-status-header`, `line-endings`. Each defect carries file, line (where
 known), key and the language.
