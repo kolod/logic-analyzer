@@ -74,7 +74,7 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 - [X] T016 [P] [US1] Create `scripts/protection.json` listing the required status check names from contracts/ci-checks.md (`fmt`, `clippy`, `test`, `msrv`, `deny` for both OSes) for `gh api -X PUT repos/<owner>/<repo>/branches/main/protection`
 - [X] T017 [US1] Push the branch and confirm CI is green on both OSes for the clean workspace; fix workflow errors until it is
 - [X] T018 [US1] Verify the gate with deliberate failures on throw-away branches (not merged): a formatting error, a clippy warning, a failing test, a dependency with a disallowed license (`deny`), and a change that only builds on the newest toolchain (`msrv`); record the outcome in `specs/001-workspace-ci-foundation/checklists/ci-verification.md`
-- [ ] T019 [US1] **Manual (repository owner)**: apply `scripts/protection.json` to `main` with `gh api -X PUT repos/kolod/logic-analyzer/branches/main/protection --input scripts/protection.json` and confirm a failing check blocks the merge button
+- [X] T019 [US1] **Manual (repository owner)**: apply `scripts/protection.json` to `main` with `gh api -X PUT repos/kolod/logic-analyzer/branches/main/protection --input scripts/protection.json` and confirm a failing check blocks the merge button
 
 **Checkpoint**: User Story 1 is functional and testable on its own
 

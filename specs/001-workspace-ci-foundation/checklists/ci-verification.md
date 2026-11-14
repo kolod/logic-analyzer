@@ -38,8 +38,8 @@ Observations:
 
 ## Branch protection (T019)
 
-Applying `scripts/protection.json` to `main` changes repository settings and is a
-manual step for the repository owner. Status: see tasks.md T019.
+Applying `scripts/protection.json` to `main` changes repository settings and was a
+manual step for the repository owner. Status: applied (10 required checks, `strict: true`, `enforce_admins: false`, force pushes and deletions disabled).
 
 ## Constitution gates (T054–T056)
 
@@ -67,4 +67,4 @@ from PulseView, sigrok or Saleae.
 - SC-002 (a new contributor builds in under 30 minutes on a clean machine) was not
   measured on a clean machine; the Debian 13 build runs only in CI (container), not on
   a physical Debian installation.
-- T019 (required status checks on `main`) is pending the repository owner.
+- Because `enforce_admins` is false, repository admins can still bypass the required checks.
