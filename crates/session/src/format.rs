@@ -6,9 +6,7 @@ use la_core::Result;
 
 use crate::crc::crc32c;
 use crate::error;
-use crate::limits::{
-    FOOTER_LEN, FORMAT_MAJOR, HEADER_LEN, MAX_SECTIONS, SECTION_CRC_LEN, SECTION_HEAD_LEN,
-};
+use crate::limits::{FOOTER_LEN, FORMAT_MAJOR, HEADER_LEN, MAX_SECTIONS, SECTION_HEAD_LEN};
 
 /// The first eight bytes of every session file (PNG-style: a non-ASCII first byte and line-ending
 /// bytes that expose text-mode transfers).
@@ -245,13 +243,6 @@ impl SectionHead {
             payload_len: u64::from_le_bytes(length),
         })
     }
-
-    /// The total size of the section in the file: head, payload and checksum.
-    #[must_use]
-    pub fn total_len(&self) -> Option<u64> {
-        let overhead = u64::try_from(SECTION_HEAD_LEN.checked_add(SECTION_CRC_LEN)?).ok()?;
-        self.payload_len.checked_add(overhead)
-    }
 }
 
 /// Encodes the footer for a file of `file_length` bytes.
@@ -451,12 +442,6 @@ mod tests {
             ]
         );
         assert_eq!(SectionHead::decode(&bytes).unwrap(), head);
-        assert_eq!(head.total_len(), Some(0x0A0B + 20));
-        let huge = SectionHead {
-            payload_len: u64::MAX,
-            ..head
-        };
-        assert_eq!(huge.total_len(), None);
         let optional = SectionHead {
             critical: false,
             ..head

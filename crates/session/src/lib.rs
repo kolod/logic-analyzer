@@ -8,12 +8,6 @@
 //! durations.
 
 #![deny(missing_docs)]
-// The building blocks are used by the writer, reader and operations that later tasks add; remove
-// this attribute when the public API is complete (the last task of the feature).
-#![allow(
-    dead_code,
-    reason = "used by the writer, reader and operations added later"
-)]
 
 mod capture_codec;
 mod control;

@@ -27,11 +27,13 @@ committed reference files match byte for byte; the file size follows the number 
 
 ```text
 cargo test -p la-session --test atomic_save --test kill_save
+cargo test -p la-session --release --test kill_save   # 1,000 kills
 ```
 
 Expected: a failure injected at every step (20+ points: create, each write, flush, sync, rename,
-directory sync, remove) leaves the previous file intact and no temporary file; 1,000 killed child
-processes leave either the old or the new complete file; a leftover temporary file never blocks a save.
+directory sync, listing) leaves the previous file intact and no temporary file; killed child
+processes (150 in a debug run, 1,000 with `--release` or `LA_KILL_ITERATIONS=1000`) leave either the
+old or the new complete file; a leftover temporary file never blocks a save.
 
 ## 4. Hostile and damaged files (User Story 3)
 

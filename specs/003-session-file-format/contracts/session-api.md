@@ -9,7 +9,12 @@ non-blocking functions never wait for the disk.
 // ---- values --------------------------------------------------------------------------
 /// A section tag: exactly four ASCII letters or digits.
 pub struct SectionTag([u8; 4]);
-impl SectionTag { pub fn new(text: &str) -> la_core::Result<SectionTag>; pub fn as_str(&self) -> &str; }
+impl SectionTag {
+    pub fn new(text: &str) -> la_core::Result<SectionTag>;
+    pub fn as_str(&self) -> &str;
+    pub fn bytes(&self) -> [u8; 4];
+    pub fn is_reserved(&self) -> bool;   // META, CAPT
+}
 
 /// An optional section carried through a session. `META` and `CAPT` are reserved.
 pub struct Section { pub tag: SectionTag, pub critical: bool, pub payload: Vec<u8> }
@@ -20,6 +25,9 @@ impl SessionData {
     pub fn new(description: CaptureDescription, snapshot: Snapshot) -> SessionData;
     pub fn with_section(self, section: Section) -> la_core::Result<SessionData>; // rejects reserved/duplicate tags
     pub fn from_session(session: &Session) -> SessionData;                       // re-save a loaded session
+    pub fn description(&self) -> &CaptureDescription;
+    pub fn snapshot(&self) -> Snapshot;
+    pub fn extras(&self) -> &[Section];                                            // ascending tags
 }
 
 /// A loaded session. Its capture is closed.
@@ -29,6 +37,7 @@ impl Session {
     pub fn reader(&self) -> la_storage::CaptureReader;
     pub fn snapshot(&self) -> la_storage::Snapshot;
     pub fn extras(&self) -> &[Section];
+    pub fn memory_used(&self) -> u64;
 }
 
 pub struct LoadLimits {
@@ -39,12 +48,24 @@ impl Default for LoadLimits {}
 
 // ---- blocking (tests, tools, worker bodies) ----------------------------------------------
 pub struct Control { /* cancel flag + progress; cloneable */ }
-impl Control { pub fn new() -> Control; pub fn cancel(&self); pub fn progress(&self) -> Progress; }
+impl Control {
+    pub fn new() -> Control;
+    pub fn cancel(&self);
+    pub fn is_cancelled(&self) -> bool;
+    pub fn progress(&self) -> Progress;
+}
 
 pub fn save_blocking(path: &Path, data: &SessionData, control: &Control) -> la_core::Result<SaveReport>;
 pub fn load_blocking(path: &Path, limits: &LoadLimits, control: &Control) -> la_core::Result<Session>;
 
-pub struct SaveReport { pub bytes_written: u64, pub sections: u32 }
+pub struct SaveReport {
+    pub bytes_written: u64,
+    pub sections: u32,
+    /// `false` if the directory entry could not be forced to disk after the rename: the new file
+    /// is complete and in place, only its durability across a power failure is not guaranteed
+    /// (always `true` on Unix when it works; Windows cannot sync a directory and reports `true`).
+    pub directory_synced: bool,
+}
 
 // ---- background --------------------------------------------------------------------------
 /// Returns at once; the work runs on a supervised worker.
@@ -94,6 +115,9 @@ impl CaptureRestorer {
         -> la_core::Result<CaptureRestorer>;             // checks gaps, flags and the memory estimate
     pub fn begin_channel(&mut self, channel: u8, initial_high: bool, transitions: u64) -> la_core::Result<()>;
     pub fn push_transition(&mut self, position: u64) -> la_core::Result<()>;   // strictly increasing, validated
+    /// Checks, before any transition is pushed, that channels with these transition counts fit the
+    /// memory budget together with the gap list.
+    pub fn check_budget(&self, transitions_per_channel: &[u64]) -> la_core::Result<()>;
     pub fn finish(self) -> la_core::Result<Capture>;     // closed, flags applied
 }
 pub struct RestoredStatus { pub stopped_by_limit: bool, pub interrupted: bool }
@@ -120,3 +144,19 @@ impl CaptureDescription {
 - Cancellation is honoured at least every 64 KiB; a cancelled operation reports `session.cancelled`.
 - A worker panic never reaches the caller as a panic: it becomes `session.worker_failed`.
 - Logging contains sizes, counts, codes and durations only.
+
+## Test support (feature `test-support`, not part of the stable API)
+
+`la_session::harness` re-exports the file-system seam (`FileSystem`, `WriteSink`, `RealFileSystem`,
+`PathKind`, `DirEntryInfo`), the fault-injecting `FaultFs` / `FaultPlan` / `Op`, and the entry points
+that take a file system: `save_with`, `load_with`, `start_save_with`, `start_load_with`.
+
+## Notes fixed during implementation
+
+- A failing directory sync after the rename is not an error: the save succeeded and the report says
+  `directory_synced: false`; a failing scan for stale temporary files never fails a save either.
+- A damaged section is reported as `session.damaged` when its checksum is wrong even if decoding
+  failed first, but only when little of the section remains (the loader does not read a huge file just
+  to improve an error message).
+- Violations of the capture rules in well-encoded data are `session.inconsistent`; violations of the
+  encoding or framing are `session.damaged` (see `file-format.md`).
