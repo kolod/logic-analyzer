@@ -160,7 +160,16 @@ fn main() {
         .map(|c| format!("    \"{}\": {{\"msps\": {:.1}}}", c.name, c.msps))
         .collect();
     let section = format!("\"ingest\": {{\n{}\n  }}", rows.join(",\n"));
-    let dir: PathBuf = ["target", "la-storage-bench"].iter().collect();
+    // The workspace target directory (a bench runs in the crate directory), so CI finds the file.
+    let dir: PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "target",
+        "la-storage-bench",
+    ]
+    .iter()
+    .collect();
     let _ = std::fs::create_dir_all(&dir);
     std::fs::write(dir.join("ingest.json"), format!("{{\n  {section}\n}}\n")).unwrap();
     println!("wrote {}", dir.join("ingest.json").display());
