@@ -10,17 +10,25 @@
 
 #![deny(missing_docs)]
 
+mod acquisition;
 mod capabilities;
 mod config;
+mod description;
 mod driver;
 pub mod error;
 #[cfg(feature = "test-support")]
 pub mod harness;
 mod registry;
+mod supervisor;
 mod virtual_device;
 
+pub use acquisition::{
+    Acquisition, AcquisitionEvent, AcquisitionOptions, AcquisitionOutcome, AcquisitionState,
+    EndReason, Progress,
+};
 pub use capabilities::{Capabilities, DeviceDescriptor, DeviceId, SampleRates, TriggerKind};
 pub use config::{AppliedConfig, DeviceConfig, DeviceOptions, ResolvedConfig, Trigger, validate};
+pub use description::CaptureDescription;
 pub use driver::{
     Device, DeviceEvent, DeviceEventSink, DeviceProvider, READ_TIMEOUT, ReadOutcome,
     START_STOP_TIMEOUT, Transport,

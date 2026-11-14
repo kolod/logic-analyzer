@@ -13,8 +13,12 @@ use std::time::Duration;
 
 use la_diagnostics::{lock_recover, spawn_worker};
 
+use crate::acquisition::{Acquisition, AcquisitionOptions};
 use crate::capabilities::{DeviceDescriptor, DeviceId};
+use crate::config::{DeviceConfig, DeviceOptions, validate};
 use crate::driver::DeviceProvider;
+use crate::error;
+use crate::supervisor::{Launch, launch};
 use crate::virtual_device::{PROVIDER_NAME, VirtualProvider, virtual_descriptor};
 
 /// How the registry scans its providers.
@@ -51,6 +55,8 @@ struct Shared {
     wake: Condvar,
     stop: AtomicBool,
     reported_invalid: Mutex<HashSet<DeviceId>>,
+    /// Devices that currently run an acquisition.
+    busy: Mutex<HashSet<DeviceId>>,
 }
 
 /// The device registry. Owns the monitor thread; dropping the registry stops it.
@@ -83,6 +89,7 @@ impl DeviceRegistry {
             wake: Condvar::new(),
             stop: AtomicBool::new(false),
             reported_invalid: Mutex::new(HashSet::new()),
+            busy: Mutex::new(HashSet::new()),
         });
         let weak = Arc::downgrade(&shared);
         // Dropping the handle detaches the monitor; it ends when the registry is dropped.
@@ -107,6 +114,65 @@ impl DeviceRegistry {
     #[must_use]
     pub fn list(&self) -> Vec<DeviceDescriptor> {
         lock_recover(&self.shared.known).clone()
+    }
+
+    /// Validates `config`, claims the device and starts an acquisition in the background.
+    ///
+    /// Returns at once: opening and starting the driver happen on the acquisition's own
+    /// thread, so a slow or hung driver cannot block the caller. The configuration is checked
+    /// against the device's capabilities first, so an invalid one never reaches a driver
+    /// (not even `DeviceProvider::open`).
+    ///
+    /// # Errors
+    ///
+    /// `device.not_found`; the validation errors of [`validate`]; `device.busy` if the device
+    /// already runs an acquisition; `device.invalid_state` for virtual device options on a
+    /// device that is not virtual; storage errors for invalid limits.
+    pub fn start(
+        &self,
+        id: &DeviceId,
+        config: DeviceConfig,
+        options: AcquisitionOptions,
+    ) -> la_core::Result<Acquisition> {
+        let descriptor = self
+            .describe(id)
+            .ok_or_else(|| error::not_found(id.as_str()))?;
+        let resolved = validate(&descriptor.capabilities, &config, &options.limits)?;
+        if matches!(config.options, DeviceOptions::Virtual(_))
+            && descriptor.id.provider() != PROVIDER_NAME
+        {
+            return Err(error::invalid_state(format!(
+                "virtual device options were given for `{id}`, which is not the virtual device"
+            )));
+        }
+        let provider = lock_recover(&self.shared.slots)
+            .iter()
+            .find(|slot| slot.provider.name() == id.provider())
+            .map(|slot| Arc::clone(&slot.provider))
+            .ok_or_else(|| error::not_found(id.as_str()))?;
+
+        // Claim the device: exactly one of several simultaneous starts succeeds.
+        if !lock_recover(&self.shared.busy).insert(id.clone()) {
+            return Err(error::busy(id.as_str()));
+        }
+        let shared = Arc::clone(&self.shared);
+        let claimed = id.clone();
+        let release: Box<dyn FnOnce() + Send> = Box::new(move || {
+            lock_recover(&shared.busy).remove(&claimed);
+        });
+        let shared = Arc::clone(&self.shared);
+        let claimed = id.clone();
+        let release_on_error = move || {
+            lock_recover(&shared.busy).remove(&claimed);
+        };
+        launch(Launch {
+            descriptor,
+            provider,
+            config: resolved,
+            options,
+            release,
+        })
+        .inspect_err(|_| release_on_error())
     }
 
     /// The descriptor of a listed device.

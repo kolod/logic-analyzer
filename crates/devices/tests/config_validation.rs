@@ -625,3 +625,63 @@ fn thirty_two_channel_devices_accept_every_channel() {
     );
     assert_eq!(e.unwrap_err().code(), INVALID_CHANNEL);
 }
+
+// ---- through the registry: an invalid configuration never reaches the provider ----------
+
+#[test]
+fn registry_start_rejects_every_invalid_case_before_the_provider_is_opened() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use common::{descriptor, registry_fast, wait_until};
+    use la_devices::AcquisitionOptions;
+    use la_devices::harness::TestProvider;
+
+    let registry = registry_fast();
+    let provider = TestProvider::new("usb");
+    // The device in the registry has the capabilities of the table above (8 channels,
+    // rates 1 kHz / 1 MHz / 100 MHz, rising and falling edge triggers, streaming).
+    let device = descriptor("usb", "dev", 8);
+    provider.plug(device.clone());
+    registry.add_provider(Arc::new(provider.clone()));
+    assert!(wait_until(Duration::from_secs(5), || registry
+        .describe(&device.id)
+        .is_some()));
+
+    let options = AcquisitionOptions {
+        limits: small_budget(),
+        ..AcquisitionOptions::default()
+    };
+    let mut checked = 0;
+    for c in invalid_cases() {
+        // Only the cases that are invalid for a streaming device with 8 channels apply here
+        // (the buffer-depth cases belong to the buffered capability set).
+        if c.caps != streaming() && c.caps != buffered() {
+            continue;
+        }
+        if c.caps.buffer_depth.is_some() && c.code == INVALID_CAPTURE_LENGTH {
+            continue;
+        }
+        let mut config = base();
+        (c.mutate)(&mut config);
+        let error = registry.start(&device.id, config, options).unwrap_err();
+        assert_eq!(error.code(), c.code, "case `{}`: {error}", c.name);
+        checked += 1;
+    }
+    assert!(checked >= 25, "checked {checked} cases");
+    assert_eq!(
+        provider.open_calls(),
+        0,
+        "no invalid configuration reached the provider"
+    );
+
+    // Virtual device options on a device that is not the virtual device are rejected too.
+    let config = DeviceConfig {
+        options: virtual_options(50),
+        ..base()
+    };
+    let error = registry.start(&device.id, config, options).unwrap_err();
+    assert_eq!(error.code(), INVALID_STATE);
+    assert_eq!(error.kind(), la_core::ErrorKind::InvalidInput);
+    assert_eq!(provider.open_calls(), 0);
+}

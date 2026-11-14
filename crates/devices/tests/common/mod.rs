@@ -50,3 +50,32 @@ pub fn std_config(enabled_channels: u32, sample_rate_hz: u64) -> DeviceConfig {
         accept_budget_risk: false,
     }
 }
+
+use la_devices::{Acquisition, AcquisitionOutcome, VirtualOptions};
+
+/// Waits up to 10 seconds for the outcome of an acquisition and fails the test on timeout.
+pub fn wait_outcome(acquisition: &Acquisition) -> AcquisitionOutcome {
+    acquisition
+        .wait_timeout(Duration::from_secs(10))
+        .expect("the acquisition must end within 10 seconds")
+}
+
+/// A configuration for the virtual device with the given mask, rate, length and seed.
+pub fn virtual_config(
+    enabled_channels: u32,
+    sample_rate_hz: u64,
+    capture_length: Option<u64>,
+    seed: u64,
+) -> DeviceConfig {
+    DeviceConfig {
+        enabled_channels,
+        sample_rate_hz,
+        trigger: None,
+        capture_length,
+        options: DeviceOptions::Virtual(VirtualOptions {
+            seed,
+            ..VirtualOptions::default()
+        }),
+        accept_budget_risk: false,
+    }
+}
