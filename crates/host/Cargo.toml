@@ -13,7 +13,6 @@ la-core = { path = "../core" }
 la-devices = { path = "../devices" }
 la-diagnostics = { path = "../diagnostics" }
 la-i18n = { path = "../i18n" }
-la-session = { path = "../session" }
 la-storage = { path = "../storage" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

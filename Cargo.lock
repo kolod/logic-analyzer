@@ -1708,7 +1708,6 @@ dependencies = [
  "la-diagnostics",
  "la-host",
  "la-i18n",
- "la-session",
  "la-storage",
  "serde",
  "serde_json",

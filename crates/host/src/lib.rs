@@ -11,6 +11,25 @@
 
 #![deny(missing_docs)]
 
+pub mod axis;
+mod command;
+pub mod error;
+pub mod notices;
+pub mod plan;
+pub mod presentation;
+pub mod sanitize;
+pub mod settings;
+mod shell;
+mod state;
+pub mod window;
+
+pub use command::{
+    Changes, Command, ConfigEdit, Decision, Guarded, Outcome, PanStep, Tick, ZoomAnchor,
+    ZoomDirection, ZoomFactor,
+};
+pub use shell::{Shell, ShellConfig};
+pub use state::{Activity, State, Unsaved, Versions};
+
 /// Version of the host API contract (`docs/host-api.md`). A change to commands, state fields,
 /// events or their meaning changes this value together with the document.
 pub const HOST_API_VERSION: &str = "1.0";
