@@ -43,6 +43,8 @@ jobs:
         run: cargo test -p la-session --release --test kill_save
         env:
           LA_KILL_ITERATIONS: "1000"
+      - name: One million hostile localization operations
+        run: cargo test -p la-i18n --release --test stress -- --ignored
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

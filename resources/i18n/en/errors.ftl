@@ -1,0 +1,106 @@
+### status: draft
+### The user-facing text of every stable error code. The key of a message is `error-` plus the
+### error code with the dot written as a hyphen (`session.damaged` is `error-session-damaged`).
+### Each message says what happened and what the user can do. The technical detail of an error is
+### for the log and never appears here.
+
+# Shown when something fails that has no message of its own (an error code added without text).
+# $code is the stable error code, shown so the user can report it.
+error-unexpected = Something unexpected went wrong (code { $code }). Please try again; if it keeps happening, report it with the log file.
+
+### Devices
+
+# Starting a capture on a device that another capture is already using.
+error-device-busy = This device is already in use by another capture. Stop that capture or choose another device.
+# The device was unplugged while it was in use.
+error-device-disconnected = The device was disconnected. Everything captured so far is kept. Reconnect the device and start a new capture.
+# The driver of the device reported a failure.
+error-device-driver_error = The device reported an error and the capture stopped. Everything captured so far is kept. Unplug and reconnect the device, then try again.
+# The driver of the device failed in a way it should not (a contained internal failure).
+error-device-driver_panic = The driver for this device stopped unexpectedly. Everything captured so far is kept. Reconnect the device and try again; if it keeps happening, report it with the log file.
+# The device described its own abilities in a way that makes no sense.
+error-device-invalid_capabilities = The device described itself in a way the program cannot use, so it is not available. Reconnect it, and if the problem stays, report it with the log file.
+# The requested number of samples cannot be captured by this device.
+error-device-invalid_capture_length = The requested capture length is not possible for this device. Choose a shorter length or a different device.
+# The selected channels are not channels of this device.
+error-device-invalid_channel = The selected channels are not available on this device. Choose channels the device has.
+# An action was requested at a moment when it cannot be done.
+error-device-invalid_state = That action is not possible right now. Wait for the current operation to finish and try again.
+# A capture of the chosen length might not fit in the memory the program may use.
+error-device-memory_budget = A capture of this length might not fit in memory. Choose a shorter capture or allow the program to use more memory.
+# The chosen device is not in the list of connected devices.
+error-device-not_found = The device is not connected or is no longer available. Check the connection and refresh the device list.
+# The communication with the device (USB or serial) failed.
+error-device-transport = Communication with the device failed. Everything captured so far is kept. Check the cable and the USB port, then try again.
+# A trigger was set but its condition never happened in the allowed time.
+error-device-trigger_timeout = The trigger condition did not occur in time, so the capture did not start. Check the trigger settings and the signal, or capture without a trigger.
+# The device stopped answering.
+error-device-unresponsive = The device stopped responding. Everything captured so far is kept. Unplug and reconnect it, then try again.
+# The chosen sample rate is not one of the device's rates.
+error-device-unsupported_sample_rate = This device cannot capture at the chosen sample rate. Choose one of the rates the device offers.
+# The chosen trigger kind is not supported by the device.
+error-device-unsupported_trigger = This device does not support the chosen trigger. Choose a trigger the device offers or capture without one.
+
+### Session files
+
+# The user cancelled saving or opening a session.
+error-session-cancelled = The operation was cancelled. Nothing was changed.
+# A checksum of the session file does not match (the file was damaged on disk or in transfer).
+error-session-damaged = The session file is damaged and cannot be opened. If you have a backup copy of the file, open that instead.
+# The session file is well formed but its content contradicts itself.
+error-session-inconsistent = The session file contains data that does not make sense, so it cannot be opened. If you have a backup copy of the file, open that instead.
+# An internal problem while saving or opening a session.
+error-session-internal = The program hit an unexpected problem while handling the session file. Please try again; if it keeps happening, report it with the log file.
+# The file name, the folder or another input of a save is unusable.
+error-session-invalid_input = The file name or location cannot be used. Choose another file name or folder.
+# Reading the session file failed (missing, no permission, in use).
+error-session-io_read = The session file could not be read. Check that the file exists and that you may open it, then try again.
+# Writing the session file failed (disk full, no permission, folder missing).
+error-session-io_write = The session file could not be saved. Your existing file was not changed. Check that there is free disk space and that you may write to the folder, or choose another location.
+# The session would not fit in the memory the program may use.
+error-session-memory_budget = This session is too large to open with the current memory limit. Allow the program to use more memory or open a smaller file.
+# The file is not a session file (another format, or random data).
+error-session-not_a_session = This file is not a session file from this program. Choose a file that was saved by it.
+# A size or a count in the file is larger than the program allows.
+error-session-too_large = This session file is larger than the program allows. Open a smaller file.
+# The file ends too early (cut off while copying or saving).
+error-session-truncated = The session file is incomplete, probably because it was cut off while being copied or saved. If you have a backup copy, open that instead.
+# The file contains a required part this version does not know.
+error-session-unknown_critical_section = This session file needs a newer version of the program. Update the program to open it.
+# The file was written by a newer, incompatible version.
+error-session-unsupported_version = This session file was made by a newer version of the program. Update the program to open it.
+# The background task of saving or opening failed unexpectedly.
+error-session-worker_failed = Saving or opening the session stopped unexpectedly. Your data in the program was not changed. Please try again; if it keeps happening, report it with the log file.
+
+### Captured signal storage
+
+# A channel number that the capture does not have was requested.
+error-storage-channel_out_of_range = That channel does not exist in this capture. Choose a channel the capture has.
+# A block of data without samples arrived.
+error-storage-chunk_empty = The device delivered an empty block of data. Try again; if it keeps happening, report it with the log file.
+# A block of data did not continue where the capture ended.
+error-storage-chunk_out_of_order = Data arrived out of order, so the capture was stopped. Everything captured so far is kept. Try again; if it keeps happening, report it with the log file.
+# A block of data was larger than the program accepts at once.
+error-storage-chunk_too_large = The device delivered more data at once than the program accepts. Try again with a lower sample rate.
+# Data was added to a capture that has already been finished.
+error-storage-closed = The capture is already finished and cannot take more data. Start a new capture.
+# An internal problem of the signal storage.
+error-storage-internal = The program hit an unexpected problem while storing the capture. Everything captured so far is kept. Please report it with the log file.
+# The number of channels is outside what a capture can hold.
+error-storage-invalid_channel_count = The number of channels is not supported. Choose between 1 and 32 channels.
+# A gap (lost samples) was described with a length that cannot be right.
+error-storage-invalid_gap = A gap in the capture was described incorrectly. Everything captured so far is kept. Please report it with the log file.
+# The memory or size limits of a capture are outside the allowed range.
+error-storage-invalid_limits = The memory or size limits are not valid. Open the settings and enter valid values.
+# The view asked for a number of pixel columns that is not allowed.
+error-storage-invalid_pixels = The view could not be drawn at that width. Resize the window or change the zoom and try again.
+# A stored capture breaks the rules a capture must follow.
+error-storage-invalid_restore = The stored capture does not follow the rules for captures, so it cannot be opened. If you have a backup copy of the file, open that instead.
+# The sample rate is zero.
+error-storage-invalid_sample_rate = The sample rate must be greater than zero. Enter a valid sample rate.
+# The part of the capture to show has its end before its start.
+error-storage-invalid_window = The part of the capture to show is not valid. Select a range that starts before it ends.
+# The capture reached the memory limit.
+error-storage-memory_limit = The capture reached the memory limit and stopped. Everything captured so far is kept. Save it, then raise the memory limit or capture less data.
+# The capture grew longer than the largest position the program can address.
+error-storage-position_overflow = The capture became longer than the program can handle and was stopped. Everything captured so far is kept. Save it and capture in shorter parts.
