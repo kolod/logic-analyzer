@@ -155,4 +155,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check commit subjects
-        run: bash scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # The container user differs from the checkout owner; git refuses otherwise.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          bash scripts/check-commits.sh "origin/${BASE_REF}..HEAD"
