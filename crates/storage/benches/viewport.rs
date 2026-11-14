@@ -158,7 +158,16 @@ fn main() {
         results.push(measure(&format!("real_1e{}", n.ilog10()), &snap, 1));
     }
 
-    let dir: PathBuf = ["target", "la-storage-bench"].iter().collect();
+    // The workspace target directory (a bench runs in the crate directory), so CI finds the file.
+    let dir: PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "target",
+        "la-storage-bench",
+    ]
+    .iter()
+    .collect();
     let out = to_json(&results);
     let _ = std::fs::create_dir_all(&dir);
     std::fs::write(dir.join("viewport.json"), &out).unwrap();
