@@ -78,8 +78,8 @@ accepted chunk less than 36 bytes of the budget remain).
   --all-features check` passes. Nothing was reused from PulseView, sigrok or Saleae.
 - **Principle VIII (rendering)**: the achieved bound is
   `O(log N + W·(1 + log(1 + N_w/W)))`, the literal `O(log N + W)` when zoomed in. The
-  deviation is recorded in the plan's Complexity Tracking; amending the constitution
-  wording is the project owner's decision (task T060).
+  deviation is recorded in the plan's Complexity Tracking; the project owner approved the
+  clarification and the constitution now states this bound (version 1.4.1, task T060).
 - **Platforms (Principle IV and the platform gate)**: pure `std` Rust, no OS-specific
   code. Verified locally on Windows; Debian 13 and the MSRV 1.85 job are verified by CI
   (task T061): all 10 required checks and the commit report passed on pull request #7.
