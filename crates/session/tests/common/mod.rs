@@ -8,6 +8,10 @@
     clippy::panic
 )]
 
+mod support;
+#[allow(unused_imports)]
+pub use support::*;
+
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};

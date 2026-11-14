@@ -176,6 +176,11 @@ fn prefer_checksum_error<R: Read>(
     if original.code() == error::CANCELLED || original.code() == error::TRUNCATED {
         return original;
     }
+    // Draining a large section just to name the cause better would read the whole file; only a
+    // small remainder is worth it.
+    if reader.payload_left > u64::try_from(IO_BUFFER_BYTES).unwrap_or(0) {
+        return original;
+    }
     match reader
         .skip_payload()
         .and_then(|()| reader.verify_section_crc())
