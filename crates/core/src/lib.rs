@@ -3,3 +3,5 @@
 mod error;
 
 pub use error::{Error, ErrorKind, Result};
+
+pub   fn   badly_formatted( )   {  }
