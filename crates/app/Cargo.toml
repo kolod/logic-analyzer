@@ -19,5 +19,8 @@ la-diagnostics = { path = "../diagnostics" }
 la-i18n = { path = "../i18n" }
 tracing = "0.1.44"
 
+[dev-dependencies]
+iced_test = "0.14.0"
+
 [lints]
 workspace = true
