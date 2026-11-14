@@ -1,8 +1,10 @@
 <!--
 Sync Impact Report
-- Version change: 1.2.0 → 1.3.0
-  (MINOR: target platforms fixed and localization mechanism redefined; no code
-  existed yet, so nothing is invalidated)
+- Version change: 1.3.0 → 1.4.0
+  (MINOR: Principle XII materially expanded with third-party/PulseView code reuse
+  rules driven by stability; project license GPL-3.0 recorded)
+- 1.2.0 → 1.3.0 (earlier): target platforms fixed and localization mechanism
+  redefined; no code existed yet, so nothing was invalidated
 - Modified: Localization Requirements (Android strings.xml / Windows .resx replaced by
   one shared resource format for Windows and Debian; CLDR plurals); commit-scope
   example; Technology Constraints (target OS, device access)
@@ -234,9 +236,24 @@ the decoders get an automatic correctness check.
   product as affiliated with Saleae. Interaction concepts and general ideas (for
   example, overlay markers on signals) MAY be adopted when re-implemented
   independently.
-- The same applies to PulseView/sigrok: code, decoders or assets from GPL-licensed
-  projects MUST NOT be incorporated without an explicit license-compatibility
-  decision recorded in the plan.
+- PulseView/sigrok are a source of ideas, protocol knowledge and test data, NOT a
+  codebase to port. PulseView is known to crash frequently, which directly contradicts
+  Principle I; code taken from it (or from libsigrok / libsigrokdecode and their
+  decoders) MUST be treated as untrusted quality.
+- Any code, algorithm or decoder derived from PulseView/sigrok or another third-party
+  project MUST be recorded in the plan (origin, version, why reuse instead of a fresh
+  implementation) and MUST, before it is merged:
+  1. be reviewed line by line against Principle I (no panics on external input, no
+     unchecked indexing or arithmetic, no unbounded memory, errors returned as typed
+     values), and rewritten idiomatically in safe Rust rather than transliterated from
+     C/C++/Python;
+  2. be covered by tests, including malformed, truncated and boundary input, and
+     fuzzing where it parses external data;
+  3. be isolated so that a defect cannot crash the application or lose user data.
+- Reuse is the exception, justified per case; reimplementation from the protocol
+  specification is the default.
+- Independently of stability, the project is licensed under GPL-3.0: incorporated code
+  MUST have a compatible license, and attribution MUST be preserved.
 - Visual identity (name, icons, color palette, layout details) MUST be original.
 
 ## Hardware Support & Technology Constraints
@@ -320,4 +337,4 @@ conflicts with it, the constitution wins until it is formally amended.
 - **Runtime guidance**: day-to-day agent guidance lives in the repository's agent
   guidance file (e.g., `CLAUDE.md`) and MUST NOT contradict this document.
 
-**Version**: 1.3.0 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-14
+**Version**: 1.4.0 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-14

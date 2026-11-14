@@ -68,8 +68,10 @@ justification in Complexity Tracking) for each:
 - [ ] **XI. Virtual device**: every decoder usable with the virtual device has a
   generator, seeded and reproducible, with a round-trip test; simulated data is
   labelled in UI, captures and exports.
-- [ ] **XII. Original design**: no Saleae/GPL code, assets, names or exact visuals;
-  any license decision is recorded here.
+- [ ] **XII. Original design & third-party code**: no Saleae code, assets, names or
+  exact visuals; any code reused from PulseView/sigrok or elsewhere is listed here
+  (origin, version, reason), audited against Principle I, tested incl. malformed
+  input, isolated, and license-compatible with GPL-3.0.
 - [ ] **Platforms**: works on Windows 10/11 and Debian 13; OS-specific code is isolated;
   device-access instructions (driver / udev) updated if drivers are touched.
 
