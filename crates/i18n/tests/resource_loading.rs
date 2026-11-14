@@ -40,7 +40,9 @@ fn every_message_of_every_language_formats_without_a_problem() {
             .uint("count", 3)
             .trusted("code", "x.y")
             .text("name", "n")
-            .trusted("value", "1");
+            .trusted("value", "1")
+            .trusted("first", "1")
+            .trusted("second", "2");
         for id in &ids {
             let text = l.message(
                 &Key::from_static(Box::leak(id.clone().into_boxed_str())),
