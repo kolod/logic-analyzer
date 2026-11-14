@@ -16,17 +16,17 @@ use crate::types::{CaptureStatus, Gap};
 
 /// Producer-side state of one channel.
 #[derive(Debug)]
-struct ChannelState {
-    initial_high: bool,
-    segments: SegmentList,
-    sealed: usize,
-    sealed_bytes: u64,
-    open: OpenBlock,
-    transitions: u64,
+pub(crate) struct ChannelState {
+    pub(crate) initial_high: bool,
+    pub(crate) segments: SegmentList,
+    pub(crate) sealed: usize,
+    pub(crate) sealed_bytes: u64,
+    pub(crate) open: OpenBlock,
+    pub(crate) transitions: u64,
 }
 
 impl ChannelState {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             initial_high: false,
             segments: segment::new_list(),
@@ -38,7 +38,7 @@ impl ChannelState {
     }
 
     /// Exact memory accounted for this channel.
-    fn bytes(&self) -> u64 {
+    pub(crate) fn bytes(&self) -> u64 {
         let segments = u64::try_from(self.segments.len()).unwrap_or(u64::MAX);
         self.sealed_bytes
             .saturating_add(self.open.bytes())
@@ -84,16 +84,16 @@ struct Prepared {
 /// partially written data.
 #[derive(Debug)]
 pub struct Capture {
-    config: CaptureConfig,
-    channels: Vec<ChannelState>,
-    length: u64,
+    pub(crate) config: CaptureConfig,
+    pub(crate) channels: Vec<ChannelState>,
+    pub(crate) length: u64,
     last_word: Option<u32>,
-    used_bytes: u64,
-    gaps: Arc<Vec<Gap>>,
-    lost_positions: u64,
-    stopped_by_limit: bool,
-    interrupted: bool,
-    closed: bool,
+    pub(crate) used_bytes: u64,
+    pub(crate) gaps: Arc<Vec<Gap>>,
+    pub(crate) lost_positions: u64,
+    pub(crate) stopped_by_limit: bool,
+    pub(crate) interrupted: bool,
+    pub(crate) closed: bool,
     shared: Shared,
 }
 
@@ -172,7 +172,7 @@ impl Capture {
     }
 
     /// Replaces the published state with the current one.
-    fn publish(&mut self) {
+    pub(crate) fn publish(&mut self) {
         let published = Published {
             length: self.length,
             sample_rate_hz: self.config.sample_rate_hz,
@@ -193,7 +193,7 @@ impl Capture {
             .saturating_mul(u64::try_from(std::mem::size_of::<Gap>()).unwrap_or(16))
     }
 
-    fn recompute_used(&mut self) {
+    pub(crate) fn recompute_used(&mut self) {
         let channels: u64 = self.channels.iter().map(ChannelState::bytes).sum();
         self.used_bytes = channels.saturating_add(self.gap_bytes());
     }

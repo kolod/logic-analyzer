@@ -161,3 +161,22 @@ ChannelData (1) ──> Segment list ──> Block slots (shared, immutable)
 CaptureReader (1) ──creates──> Snapshot (many) ──holds──> Published
 Snapshot ──query──> ViewportResult / Edge iterator / LevelState
 ```
+
+## Restoring a capture (added by feature 003)
+
+A closed capture can be rebuilt from stored data (`CaptureRestorer`, used by session files)
+instead of being recorded. It builds the same blocks, so layout, memory accounting and query
+cost equal those of a recorded capture. Rules enforced (error `storage.invalid_restore`, or
+`storage.memory_limit` for the budget):
+
+- gaps: length at least 1, inside the capture length, sorted, and separated by at least one stored
+  position (adjacent gaps are merged by the recorder, so an adjacent pair is invalid);
+- per channel: the initial level is the level of the first stored sample (low if the capture has
+  none); transitions are strictly increasing positions in `1..length`, none inside a gap, none at
+  or before the first stored position (position 0, or the end of a gap that starts at 0), and at
+  most `length - first_stored_position - 1` of them;
+- channels are declared once each, in order, and each receives exactly its declared count;
+- the memory the declared transitions need (lower bound, blocks full) is checked against the
+  budget before any transition is pushed, and the exact accounting is checked while pushing;
+- the result is closed; `stopped_by_limit` and `interrupted` come from the caller, `complete` and
+  `lost_positions` are derived as for a recorded capture.

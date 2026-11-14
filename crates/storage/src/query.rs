@@ -132,6 +132,32 @@ impl Snapshot {
         })
     }
 
+    /// The level of the first stored sample of `channel` (`false` for a capture that has no
+    /// stored sample). Together with the transitions it describes the channel completely.
+    ///
+    /// # Errors
+    ///
+    /// `storage.channel_out_of_range` if the channel does not exist.
+    pub fn initial_high(&self, channel: u8) -> Result<bool> {
+        Ok(self.channel_data(channel)?.initial_high)
+    }
+
+    /// The number of transitions stored for `channel`. Cost O(1).
+    ///
+    /// # Errors
+    ///
+    /// `storage.channel_out_of_range` if the channel does not exist.
+    pub fn transition_count(&self, channel: u8) -> Result<u64> {
+        let data = self.channel_data(channel)?;
+        let Some(last) = data.block_count().checked_sub(1) else {
+            return Ok(0);
+        };
+        Ok(data.block(last).map_or(0, |view| {
+            view.first_rank
+                .saturating_add(u64::try_from(view.len()).unwrap_or(0))
+        }))
+    }
+
     /// Iterates over the transitions of `channel` with `start < position <= end`, in
     /// increasing order, each exactly once. Finding the first one costs O(log N); every
     /// further one is O(1).
