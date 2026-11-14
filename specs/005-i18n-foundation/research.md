@@ -201,3 +201,12 @@ switch for information; the tests assert generous bounds (a lookup under 100 µs
 machine in release builds, the switch under 10 ms).
 
 **Rationale**: SC-005 only needs "never noticeable"; the design has no I/O or parsing on the hot path.
+
+## R3 addendum (found while implementing)
+
+The plural rules of the shipped `intl_pluralrules` predate CLDR 42: French and Spanish have only `one`
+and `other` there, not `many` for exact millions. The tests pin what the library does today (so a
+library update that adds `many` is noticed and reviewed), the parity check requires exactly the
+categories the library produces and **allows** a `many` variant in French and Spanish, and the
+resources already carry those `many` forms (`d'échantillons`, `de muestras`) so that they start to be
+used when the library is updated.

@@ -68,7 +68,7 @@ files only lack some messages is not degraded: those messages fall back one by o
 2. not in the current language but in English → English text, diagnostic `missing-translation`;
 3. in neither → the placeholder `⟦key⟧` (visible, contains the key), diagnostic `missing-key`;
 4. a placeable cannot be resolved (missing argument, wrong type) → the message with that placeable
-   shown as `⟦$name⟧`, diagnostic `format-error`;
+   rendered by Fluent as `{$name}`, diagnostic `format-error`;
 5. a counted message lacks the needed plural category → the default variant is used by Fluent; the
    parity check catches it before release.
 

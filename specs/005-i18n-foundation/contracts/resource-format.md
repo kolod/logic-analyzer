@@ -53,7 +53,7 @@ Rules:
    | Language | Variants required |
    |----------|-------------------|
    | `en`, `de` | `one`, `*other` |
-   | `fr`, `es` | `one`, `many`, `*other` (`many` is used for exact millions: `1 000 000 de samples`) |
+   | `fr`, `es` | `one`, `*other`; also write `many` (exact millions: `1 000 000 de samples`), which the shipped plural rules do not select yet (CLDR 42) but a library update will |
    | `uk` | `one`, `few`, `many`, `*other` |
    | `ja` | `*other` only |
 

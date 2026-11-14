@@ -12,4 +12,19 @@
     reason = "used by the localizer and the languages added in later tasks"
 )]
 
+mod args;
+mod errors_catalogue;
+mod functions;
+mod key;
+mod language;
+mod locale_data;
+mod localizer;
+mod numbers;
+mod problems;
 mod resources;
+
+pub use args::Args;
+pub use key::Key;
+pub use language::Language;
+pub use localizer::{Localizer, ReviewStatus};
+pub use problems::{Problem, ProblemKind};
