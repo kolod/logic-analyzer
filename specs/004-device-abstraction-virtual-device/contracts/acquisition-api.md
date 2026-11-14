@@ -14,7 +14,8 @@ impl DeviceRegistry {
     pub fn add_provider(&self, provider: Arc<dyn DeviceProvider>);
     /// The cached device list: instant, never waits for a device.
     pub fn list(&self) -> Vec<DeviceDescriptor>;
-    /// Hot-plug events in order, none lost or duplicated.
+    /// A new subscriber: receives every hot-plug event from now on, in order, none lost or
+    /// duplicated (every call returns its own receiver, so several consumers each see all).
     pub fn events(&self) -> std::sync::mpsc::Receiver<DeviceEvent>;
     pub fn describe(&self, id: &DeviceId) -> Option<DeviceDescriptor>;
 }
@@ -29,10 +30,9 @@ pub fn validate(caps: &Capabilities, config: &DeviceConfig, limits: &la_storage:
 // ---- acquisition -----------------------------------------------------------------
 pub struct AcquisitionOptions {
     pub limits: la_storage::Limits,      // the capture's memory budget etc.
-    pub read_timeout: Duration,          // default 50 ms
-    pub stall_timeout: Duration,         // default 2 s
-    pub channel_capacity: usize,         // chunks buffered between the two threads
-    pub chunk_samples: usize,            // read size, <= limits.max_chunk_samples
+    pub stall_timeout: Duration,         // default 2 s; also bounds start/stop of the driver
+    pub channel_capacity: usize,         // default 8; chunks buffered between the two threads
+    pub chunk_samples: usize,            // default 16_384; read size, <= limits.max_chunk_samples
 }
 impl Default for AcquisitionOptions {}
 
@@ -46,9 +46,10 @@ impl DeviceRegistry {
 pub struct Acquisition { /* handle; Send + Sync */ }
 impl Acquisition {
     pub fn progress(&self) -> Progress;                       // lock-free
-    pub fn description(&self) -> &CaptureDescription;         // immutable
+    pub fn description(&self) -> CaptureDescription;          // owned copy; cannot be altered
     pub fn capture(&self) -> la_storage::CaptureReader;       // read while it runs
-    pub fn events(&self) -> &std::sync::mpsc::Receiver<AcquisitionEvent>; // best effort
+    /// Events since the last call (best effort; the outcome is authoritative).
+    pub fn drain_events(&self) -> Vec<AcquisitionEvent>;
     /// Requests a stop and returns at once.
     pub fn stop(&self);
     /// The authoritative result, once available.
@@ -60,7 +61,7 @@ impl Acquisition {
 // ---- values (see data-model.md) ---------------------------------------------------
 pub struct Progress { pub state: AcquisitionState, pub samples_captured: u64, pub positions: u64 }
 pub enum AcquisitionState { Starting, Running, Stopping, Finished, Failed }
-pub struct AcquisitionOutcome { pub end: EndReason, pub error: Option<la_core::Error>,
+pub struct AcquisitionOutcome { pub end: EndReason, pub error: Option<Arc<la_core::Error>>,
     pub capture_status: la_storage::CaptureStatus, pub positions: u64,
     pub delivered_samples: u64, pub lost_positions: u64 }
 pub enum EndReason { Completed, Stopped, Failed }
@@ -82,5 +83,7 @@ pub enum AcquisitionEvent { Started { applied: AppliedConfig },
   live viewing during an acquisition.
 - The `CaptureDescription` is built by the acquisition from the device descriptor; there
   is no way for a consumer to create or alter one, so `simulated` cannot be cleared.
+- `AppliedConfig` carries `sample_rate_hz` and `samples_before_trigger` (samples a device skipped
+  waiting for its trigger); `CaptureDescription` repeats both.
 - After the outcome is set, the device is released (not busy) and can be started again;
   a hung driver instance is abandoned, the next start opens a fresh instance.

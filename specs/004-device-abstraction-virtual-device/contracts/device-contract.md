@@ -16,7 +16,8 @@ pub trait DeviceProvider: Send + Sync {
     /// Creates a fresh driver instance for one acquisition. Does not touch the hardware
     /// beyond what is needed to claim it.
     fn open(&self, id: &DeviceId) -> la_core::Result<Box<dyn Device>>;
-    /// Optional: push hot-plug events. The default does nothing (scans are reconciled).
+    /// Optional: push hot-plug events through `sink` (a cloneable closure-based
+    /// `DeviceEventSink`; sending never blocks). The default does nothing (scans are reconciled).
     fn watch(&self, sink: DeviceEventSink) {}
 }
 

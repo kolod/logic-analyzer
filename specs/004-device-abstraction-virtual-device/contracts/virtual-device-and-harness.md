@@ -30,7 +30,8 @@ filling constant stretches and applying one XOR per flip: cost O(samples + flips
 ### Failure script
 
 `failures: Vec<ScriptedFailure>`, sorted by position, applied as the device passes each
-position (positions count samples produced after the trigger, from 0):
+position. Positions are capture positions (samples stored plus positions lost so far,
+counted from 0 at the trigger sample):
 
 | Failure | Effect |
 |---------|--------|
@@ -79,6 +80,9 @@ exactly like any other and decodes back to what was generated.
 ```rust
 /// Scriptable replacement for USB/serial access; drivers are written against Transport.
 pub struct RecordedTransport { /* script of steps */ }
+/// What a driver wrote; clone it (`RecordedTransport::log()`) before the transport moves.
+pub struct TransportLog;
+impl TransportLog { pub fn written(&self) -> Vec<Vec<u8>>; }
 pub enum TransportStep { Bytes(Vec<u8>), ShortRead(usize), Timeout, Disconnect, Error(String) }
 impl RecordedTransport {
     pub fn new(steps: Vec<TransportStep>) -> Self;
@@ -89,20 +93,40 @@ impl Transport for RecordedTransport {}
 /// A device that replays a script; used for conformance and fault-injection tests.
 pub struct ScriptedDevice { /* descriptor + steps */ }
 pub enum Step { Samples(Vec<u32>), Lost(u64), Idle, Error(la_core::Error), Panic, Hang(Duration), Finish }
-impl ScriptedDevice { pub fn new(descriptor: DeviceDescriptor, steps: Vec<Step>) -> Self; }
+impl ScriptedDevice {
+    pub fn new(descriptor: DeviceDescriptor, steps: Vec<Step>) -> Self;
+    pub fn with_start_error(self, e: la_core::Error) -> Self;
+    pub fn with_stop_behavior(self, b: StopBehavior) -> Self;
+    pub fn with_flow(self, flow: Flow) -> Self;
+    pub fn release_handle(&self) -> Arc<AtomicBool>;   // ends hangs so threads can finish
+}
 
 /// Records every call made to the wrapped device.
 pub struct CountingDevice<D: Device> { /* ... */ }
-impl<D: Device> CountingDevice<D> { pub fn calls(&self) -> CallCounts; }
+impl<D: Device> CountingDevice<D> { pub fn counter(&self) -> CallCounter; }  // starts(), reads(), stops(), total()
 
 /// Provider with scripted appear/disappear sequences, for hot-plug tests.
 pub struct TestProvider { /* ... */ }
-impl TestProvider { pub fn plug(&self, d: DeviceDescriptor); pub fn unplug(&self, id: &DeviceId); }
+impl TestProvider {
+    pub fn plug(&self, d: DeviceDescriptor);
+    pub fn plug_with(&self, d: DeviceDescriptor, factory: DeviceFactory);  // custom driver
+    pub fn unplug(&self, id: &DeviceId);
+    pub fn inject(&self, event: DeviceEvent) -> bool;   // raw push, for odd sequences
+    pub fn set_push(&self, push: bool);                 // push events or rely on scans
+    pub fn set_scan_hang(&self, hang: bool);
+    pub fn set_scan_error(&self, fail: bool);
+    pub fn release(&self);
+    pub fn scan_calls(&self) -> usize;
+    pub fn open_calls(&self) -> usize;
+}
 
 pub mod conformance {
-    /// Runs the shared checks against any driver: descriptor sanity, capability
-    /// enforcement with zero device calls, start/stop, completion, loss accounting,
-    /// failure handling and panic containment.
+    /// Runs the shared checks against any driver and panics, naming every broken rule:
+    /// `[descriptor]`, `[capability-enforcement]`, `[start-stop]`, `[finite-capture]`
+    /// (skipped when `Expectations::finite_capture_samples` is `None`) and
+    /// `[failure-containment]` (stop, books balance, device released, second acquisition
+    /// works). Each check is also public and returns `Result<(), String>`, so the suite is
+    /// itself tested against deliberately broken devices.
     pub fn run_all(provider: Arc<dyn DeviceProvider>, id: &DeviceId, expectations: Expectations);
 }
 ```
