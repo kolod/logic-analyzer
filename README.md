@@ -3,8 +3,10 @@
 A logic analyzer application written in Rust, functionally comparable to PulseView.
 The main goal is a program that is stable: it does not crash and does not lose data.
 
-**Status**: early development. Only the foundation exists so far (workspace, CI, error
-model, logging, worker panic containment). See [roadmap.md](roadmap.md).
+**Status**: early development. The foundation (workspace, CI, error model, logging,
+worker panic containment) and the signal storage core (`la-storage`: transition-based
+storage, fast viewport queries, bounded memory, gaps) exist so far; there is no UI or
+device support yet. See [roadmap.md](roadmap.md).
 
 Supported operating systems: Windows 10/11 and Debian 13.
 

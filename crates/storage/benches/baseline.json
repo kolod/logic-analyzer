@@ -1,0 +1,31 @@
+{
+  "machine": {"os":"windows","arch":"x86_64","cpu":"Intel64 Family 6 Model 183 Stepping 1, GenuineIntel","cores":32},
+  "pixels": 2000,
+  "channels": 16,
+  "viewport": {
+    "synthetic_1e6": {"median_us": 445.9, "p95_us": 469.5, "probes": 367584},
+    "synthetic_1e7": {"median_us": 646.6, "p95_us": 720.1, "probes": 511968},
+    "synthetic_1e8": {"median_us": 1526.6, "p95_us": 1676.1, "probes": 703952},
+    "synthetic_1e9": {"median_us": 2738.8, "p95_us": 3062.6, "probes": 895968},
+    "real_1e6": {"median_us": 29.9, "p95_us": 41.2, "probes": 22974},
+    "real_1e7": {"median_us": 75.1, "p95_us": 102.4, "probes": 31998}
+  },
+  "ingest": {
+    "1ch_sparse": {"msps": 1075.8},
+    "1ch_typical": {"msps": 888.2},
+    "1ch_stress": {"msps": 773.6},
+    "1ch_alternating": {"msps": 206.0},
+    "8ch_sparse": {"msps": 863.3},
+    "8ch_typical": {"msps": 410.1},
+    "8ch_stress": {"msps": 204.0},
+    "8ch_alternating": {"msps": 26.2},
+    "16ch_sparse": {"msps": 741.7},
+    "16ch_typical": {"msps": 240.1},
+    "16ch_stress": {"msps": 122.1},
+    "16ch_alternating": {"msps": 10.9},
+    "32ch_sparse": {"msps": 642.4},
+    "32ch_typical": {"msps": 128.1},
+    "32ch_stress": {"msps": 81.7},
+    "32ch_alternating": {"msps": 4.3}
+  }
+}

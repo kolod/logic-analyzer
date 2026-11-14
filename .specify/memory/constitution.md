@@ -1,8 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: 1.3.0 → 1.4.0
-  (MINOR: Principle XII materially expanded with third-party/PulseView code reuse
-  rules driven by stability; project license GPL-3.0 recorded)
+- Version change: 1.4.0 → 1.4.1
+  (PATCH: Principle VIII bound clarified from O(log N + W) to
+  O(log N + W·(1 + log(1 + N_w/W))), never O(N); found while planning and measuring
+  feature 002 signal storage core, see its research R2)
+- 1.3.0 → 1.4.0 (earlier): Principle XII expanded with third-party/PulseView code reuse
+  rules driven by stability; project license GPL-3.0 recorded
 - 1.2.0 → 1.3.0 (earlier): target platforms fixed and localization mechanism
   redefined; no code existed yet, so nothing was invalidated
 - Modified: Localization Requirements (Android strings.xml / Windows .resx replaced by
@@ -137,10 +140,14 @@ No feature is complete until it is localized in all six languages.
 
 ### VIII. Fast Signal Rendering
 
-- Rendering the visible part of a signal MUST cost O(log N + W), where N is the number
-  of stored samples/transitions and W is the number of visible pixels. It MUST NOT
-  be O(N) in the capture size, so zooming and panning stay smooth on very large
-  captures.
+- Rendering the visible part of a signal MUST cost O(log N + W·(1 + log(1 + N_w / W))),
+  where N is the number of stored samples/transitions, N_w the number of them inside
+  the visible window and W the number of visible pixels. This is O(log N + W) when the
+  window holds a bounded number of transitions per pixel, and it is polylogarithmic in
+  N otherwise. It MUST NOT be O(N) or O(N_w) in the capture or window size, so zooming
+  and panning stay smooth on very large captures. (Resolving W pixel boundaries on
+  arbitrary sorted positions needs W searches; the extra logarithm is the optimum for
+  comparison-based search and is a few probes in practice.)
 - To achieve this, signal storage MUST be indexed for logarithmic lookup (for example,
   transition-based storage with a binary-searchable index, plus a multi-resolution
   summary of transition counts per time bucket for zoomed-out views).
@@ -337,4 +344,4 @@ conflicts with it, the constitution wins until it is formally amended.
 - **Runtime guidance**: day-to-day agent guidance lives in the repository's agent
   guidance file (e.g., `CLAUDE.md`) and MUST NOT contradict this document.
 
-**Version**: 1.4.0 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-14
+**Version**: 1.4.1 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-14

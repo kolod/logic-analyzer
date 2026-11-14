@@ -1,0 +1,54 @@
+# Timing benchmarks of the signal storage core (specs/002-signal-storage-core, research R9).
+#
+# Informational, NOT a required check: wall-clock numbers on shared runners are too noisy
+# to gate merges on. The merge-blocking complexity check is the deterministic probe-count
+# test in crates/storage/tests/complexity.rs, which runs in the normal CI. This workflow
+# records the numbers as artifacts so trends can be compared with
+# crates/storage/benches/baseline.json (recorded on the maintainer machine).
+
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 5 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  bench:
+    name: bench (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, container: "" }
+          - { name: debian, os: ubuntu-latest, container: "debian:trixie" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    # A slower or noisier runner than the baseline machine must not turn this red.
+    continue-on-error: true
+    steps:
+      - name: Debian prerequisites
+        if: matrix.name == 'debian'
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Viewport benchmark
+        run: cargo bench -p la-storage --bench viewport
+        continue-on-error: true
+      - name: Ingestion benchmark
+        run: cargo bench -p la-storage --bench ingest
+        continue-on-error: true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: bench-${{ matrix.name }}
+          path: target/la-storage-bench/*.json
+          if-no-files-found: warn

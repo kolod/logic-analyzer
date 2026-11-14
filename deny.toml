@@ -32,6 +32,8 @@ ignore = true
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Path dependencies between the workspace crates have no version requirement.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"

@@ -1,0 +1,13 @@
+{
+  "machine": {"os":"windows","arch":"x86_64","cpu":"Intel64 Family 6 Model 183 Stepping 1, GenuineIntel","cores":32},
+  "pixels": 2000,
+  "channels": 16,
+  "viewport": {
+    "synthetic_1e6": {"median_us": 425.6, "p95_us": 490.6, "probes": 367584},
+    "synthetic_1e7": {"median_us": 657.1, "p95_us": 739.7, "probes": 511968},
+    "synthetic_1e8": {"median_us": 1770.4, "p95_us": 2126.8, "probes": 703952},
+    "synthetic_1e9": {"median_us": 3196.7, "p95_us": 3933.4, "probes": 895968},
+    "real_1e6": {"median_us": 91.0, "p95_us": 101.6, "probes": 22974},
+    "real_1e7": {"median_us": 85.6, "p95_us": 116.2, "probes": 31998}
+  }
+}

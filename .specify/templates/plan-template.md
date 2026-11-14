@@ -58,8 +58,9 @@ justification in Complexity Tracking) for each:
 - [ ] **VII. Localization**: all new UI strings have keys in English and translations
   for en/de/fr/es/ja/uk; plurals, locale formatting and CJK/long-German layout
   considered; docs and comments in English.
-- [ ] **VIII. Rendering**: visible-range cost stays O(log N + W); indexed storage and
-  zoomed-out summaries; dense activity visible; benchmark with recorded baseline.
+- [ ] **VIII. Rendering**: visible-range cost stays O(log N + W·(1 + log(1 + N_w/W))), never O(N);
+  indexed storage and zoomed-out summaries; dense activity visible; benchmark with
+  recorded baseline.
 - [ ] **IX. Decoding**: decoder faults contained and cancellable; annotations support
   lane and signal-overlay placement (points, edge markers, ranges); recorded-signal
   tests including malformed input; overlay lookup stays indexed.
