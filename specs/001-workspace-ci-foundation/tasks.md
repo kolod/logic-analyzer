@@ -72,8 +72,8 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 - [X] T014 [US1] Add dependency caching (`Swatinem/rust-cache`) to all Rust jobs in `.github/workflows/ci.yml`
 - [X] T015 [US1] Pin every third-party action in `.github/workflows/ci.yml` by full commit SHA (resolve each with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`), keeping the version in a trailing comment (research R8, FR-006)
 - [X] T016 [P] [US1] Create `scripts/protection.json` listing the required status check names from contracts/ci-checks.md (`fmt`, `clippy`, `test`, `msrv`, `deny` for both OSes) for `gh api -X PUT repos/<owner>/<repo>/branches/main/protection`
-- [ ] T017 [US1] Push the branch and confirm CI is green on both OSes for the clean workspace; fix workflow errors until it is
-- [ ] T018 [US1] Verify the gate with deliberate failures on throw-away branches (not merged): a formatting error, a clippy warning, a failing test, a dependency with a disallowed license (`deny`), and a change that only builds on the newest toolchain (`msrv`); record the outcome in `specs/001-workspace-ci-foundation/checklists/ci-verification.md`
+- [X] T017 [US1] Push the branch and confirm CI is green on both OSes for the clean workspace; fix workflow errors until it is
+- [X] T018 [US1] Verify the gate with deliberate failures on throw-away branches (not merged): a formatting error, a clippy warning, a failing test, a dependency with a disallowed license (`deny`), and a change that only builds on the newest toolchain (`msrv`); record the outcome in `specs/001-workspace-ci-foundation/checklists/ci-verification.md`
 - [ ] T019 [US1] **Manual (repository owner)**: apply `scripts/protection.json` to `main` with `gh api -X PUT repos/kolod/logic-analyzer/branches/main/protection --input scripts/protection.json` and confirm a failing check blocks the merge button
 
 **Checkpoint**: User Story 1 is functional and testable on its own
@@ -186,7 +186,7 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 - [X] T049 [US6] Write `CONTRIBUTING.md` (English): build and test commands for Windows 10/11 and Debian 13, the MSRV (link to `Cargo.toml`), toolchain pinning, the English-only documentation rule (docs, code comments, commit messages), Conventional Commits with component scope and examples, `NNN-short-name` branch format, `main` merge rules, the lint policy and how to document an exception (`#[allow(..., reason = "...")]`), how to run `cargo deny`, and a link to the constitution
 - [X] T050 [US6] Implement `scripts/check-commits.sh <range>` (bash, no dependencies) validating the Conventional Commits subject format and reporting offenders; make T048 pass
 - [X] T051 [US6] Add the non-blocking `commits` job (Debian, `continue-on-error: true`, `fetch-depth: 0`) to `.github/workflows/ci.yml` calling `scripts/check-commits.sh origin/main..HEAD`, and add it to the non-blocking table in contracts/ci-checks.md if names differ
-- [ ] T052 [US6] Link `CONTRIBUTING.md` from `README.md` and verify, by following only the guide, that a branch name, a commit message and the local checks can be produced (quickstart step 8)
+- [X] T052 [US6] Link `CONTRIBUTING.md` from `README.md` and verify, by following only the guide, that a branch name, a commit message and the local checks can be produced (quickstart step 8)
 
 **Checkpoint**: all user stories are independently functional
 
@@ -196,13 +196,13 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 **Purpose**: scenarios spanning stories and constitution gates
 
-- [ ] T053 Write `crates/diagnostics/tests/process_scenarios.rs`: the test binary re-executes itself (environment-variable switch) to verify (a) a main-thread panic is logged before the process exits non-zero and previously written files are intact, (b) abrupt termination (`std::process::abort` in the child) leaves earlier log lines readable and at most the last line malformed, (c) `init_logging` with an unwritable directory still lets the child start (edge cases in spec.md, SC-007)
-- [ ] T054 [P] Data-safety review (constitution Principle I): grep production code for `unwrap`, `expect`, `[..]` indexing, `unsafe`, `panic!`; confirm there are no `#[allow]` exceptions without a `reason`, and note the result in `specs/001-workspace-ci-foundation/checklists/ci-verification.md`
-- [ ] T055 [P] Confirm localization gate (Principle VII): no UI strings were introduced, all documentation and comments are English, log text is intentionally untranslated (spec Assumptions); record in the same checklist
-- [ ] T056 [P] Confirm the third-party gate (Principle XII / V): list the four runtime dependencies with versions and licenses (`cargo deny list`), none reused from PulseView/sigrok/Saleae
-- [ ] T057 Run the whole quickstart (`specs/001-workspace-ci-foundation/quickstart.md` steps 1–8) on Windows 10/11 and on Debian 13 and fix any gap; update the quickstart where reality differs
-- [ ] T058 Update `roadmap.md` to mark item 001 as done and note anything that changed the order of later items (for example the MSRV or toolchain pin); update the constitution's `TODO` list only if a TODO was resolved
-- [ ] T059 Final local gate before merging to `main`: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace`, `cargo deny --all-features check`, and CI green on both OSes
+- [X] T053 Write `crates/diagnostics/tests/process_scenarios.rs`: the test binary re-executes itself (environment-variable switch) to verify (a) a main-thread panic is logged before the process exits non-zero and previously written files are intact, (b) abrupt termination (`std::process::abort` in the child) leaves earlier log lines readable and at most the last line malformed, (c) `init_logging` with an unwritable directory still lets the child start (edge cases in spec.md, SC-007)
+- [X] T054 [P] Data-safety review (constitution Principle I): grep production code for `unwrap`, `expect`, `[..]` indexing, `unsafe`, `panic!`; confirm there are no `#[allow]` exceptions without a `reason`, and note the result in `specs/001-workspace-ci-foundation/checklists/ci-verification.md`
+- [X] T055 [P] Confirm localization gate (Principle VII): no UI strings were introduced, all documentation and comments are English, log text is intentionally untranslated (spec Assumptions); record in the same checklist
+- [X] T056 [P] Confirm the third-party gate (Principle XII / V): list the four runtime dependencies with versions and licenses (`cargo deny list`), none reused from PulseView/sigrok/Saleae
+- [X] T057 Run the whole quickstart (`specs/001-workspace-ci-foundation/quickstart.md` steps 1–8) on Windows 10/11 and on Debian 13 and fix any gap; update the quickstart where reality differs
+- [X] T058 Update `roadmap.md` to mark item 001 as done and note anything that changed the order of later items (for example the MSRV or toolchain pin); update the constitution's `TODO` list only if a TODO was resolved
+- [X] T059 Final local gate before merging to `main`: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace`, `cargo deny --all-features check`, and CI green on both OSes
 
 ---
 

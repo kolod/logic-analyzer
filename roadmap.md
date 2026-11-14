@@ -10,7 +10,7 @@ built and verified without capture hardware, using the virtual device.
 
 | No. | Branch | Scope | Depends on |
 |-----|--------|-------|------------|
-| 001 | `001-workspace-ci-foundation` | Rust workspace, MSRV, fmt/clippy/test/`cargo deny` in CI on Windows and Debian, size-bounded logging, error type, "no panic on external input" rule. | — |
+| 001 | `001-workspace-ci-foundation` (implemented; awaiting merge) | Rust workspace, MSRV, fmt/clippy/test/`cargo deny` in CI on Windows and Debian, size-bounded logging, error type, "no panic on external input" rule. | — |
 | 002 | `002-signal-storage-core` | Transition-based signal storage with an index for O(log N) lookup, summaries for zoomed-out views, bounded memory, benchmarks with a recorded baseline. | 001 |
 | 003 | `003-session-file-format` | Atomic write and safe read of the native session format, validation, fuzzing, "simulated" flag. Sigrok `.sr` import/export is a later, separate item. | 002 |
 | 004 | `004-device-abstraction-virtual-device` | Common device abstraction (discovery, capabilities, configuration, sample stream), seeded virtual device, configuration validation, disconnect and buffer-overrun handling. | 002 |
