@@ -25,6 +25,7 @@ mod format;
 mod fs;
 mod limits;
 mod meta;
+mod operation;
 mod read;
 mod session;
 mod varint;
@@ -33,6 +34,7 @@ mod write;
 pub use control::{Control, OperationState, Progress};
 pub use format::SectionTag;
 pub use limits::LoadLimits;
+pub use operation::{LoadOperation, SaveOperation, start_load, start_save};
 pub use read::load_blocking;
 pub use session::{Section, Session, SessionData};
 pub use write::{SaveReport, save_blocking};
@@ -43,6 +45,7 @@ pub use write::{SaveReport, save_blocking};
 pub mod harness {
     pub use crate::fault::{FaultFs, FaultPlan, Op};
     pub use crate::fs::{DirEntryInfo, FileSystem, PathKind, RealFileSystem, WriteSink};
+    pub use crate::operation::{start_load_with, start_save_with};
     pub use crate::read::load_with;
     pub use crate::write::save_with;
 }
