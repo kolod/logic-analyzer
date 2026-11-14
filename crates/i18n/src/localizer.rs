@@ -2,13 +2,14 @@
 
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU8, Ordering};
 
 use fluent_bundle::FluentResource;
 use fluent_bundle::concurrent::FluentBundle;
 use unic_langid::LanguageIdentifier;
 
 use crate::args::Args;
+use crate::formatter::Formatter;
 use crate::functions;
 use crate::key::Key;
 use crate::language::Language;
@@ -33,11 +34,13 @@ struct LanguageBundle {
     /// A file of this language could not be parsed: every lookup resolves from English.
     degraded: bool,
     status: ReviewStatus,
+    formatter: Arc<Formatter>,
 }
 
 struct Shared {
     bundles: Vec<LanguageBundle>,
     current: AtomicU8,
+    offset_seconds: Arc<AtomicI32>,
     problems: Arc<ProblemLog>,
 }
 
@@ -76,11 +79,17 @@ fn build(
     language: Language,
     files: &[(String, String)],
     problems: &Arc<ProblemLog>,
+    offset_seconds: &Arc<AtomicI32>,
 ) -> LanguageBundle {
     let id = LanguageIdentifier::from_str(language.tag()).unwrap_or_default();
     let mut bundle = FluentBundle::new_concurrent(vec![id]);
     bundle.set_use_isolating(false);
-    functions::register(&mut bundle, language, problems);
+    let formatter = Arc::new(Formatter::new(
+        language,
+        Arc::clone(offset_seconds),
+        Arc::clone(problems),
+    ));
+    functions::register(&mut bundle, &formatter, problems);
     let mut degraded = false;
     let mut status = ReviewStatus::Reviewed;
     for (name, raw) in files {
@@ -104,10 +113,14 @@ fn build(
     if files.is_empty() {
         status = ReviewStatus::Draft;
     }
+    if !degraded {
+        formatter.load_patterns(&bundle);
+    }
     LanguageBundle {
         bundle,
         degraded,
         status,
+        formatter,
     }
 }
 
@@ -180,6 +193,7 @@ impl Localizer {
 
     fn build_from(initial: Language, sources: Vec<(Language, Vec<(String, String)>)>) -> Localizer {
         let problems = Arc::new(ProblemLog::default());
+        let offset_seconds = Arc::new(AtomicI32::new(0));
         let bundles = Language::ALL
             .into_iter()
             .map(|language| {
@@ -187,13 +201,14 @@ impl Localizer {
                     .iter()
                     .find(|(l, _)| *l == language)
                     .map_or(&[], |(_, files)| files.as_slice());
-                build(language, files, &problems)
+                build(language, files, &problems, &offset_seconds)
             })
             .collect();
         Localizer {
             shared: Arc::new(Shared {
                 bundles,
                 current: AtomicU8::new(u8::try_from(initial.index()).unwrap_or(0)),
+                offset_seconds,
                 problems,
             }),
         }
@@ -281,6 +296,61 @@ impl Localizer {
             && self
                 .bundle(Language::En)
                 .is_some_and(|b| b.bundle.has_message(key.as_str()))
+    }
+
+    /// Sets the offset from UTC, in seconds, that dates and times are written in (default 0). The
+    /// application passes the system's offset; named time zones are not supported.
+    pub fn set_utc_offset_seconds(&self, seconds: i32) {
+        self.shared.offset_seconds.store(seconds, Ordering::Release);
+    }
+
+    fn formatter(&self) -> Option<&Formatter> {
+        self.bundle(self.language()).map(|b| &*b.formatter)
+    }
+
+    /// A number with the separators of the current language (at most three fraction digits).
+    #[must_use]
+    pub fn format_number(&self, value: f64) -> String {
+        self.formatter()
+            .map_or_else(String::new, |f| f.number(value))
+    }
+
+    /// A frequency in hertz, scaled to Hz, kHz, MHz or GHz.
+    #[must_use]
+    pub fn format_frequency(&self, hertz: f64) -> String {
+        self.formatter()
+            .map_or_else(String::new, |f| f.frequency(hertz))
+    }
+
+    /// A size in bytes, scaled to B, KiB, MiB, GiB or TiB.
+    #[must_use]
+    pub fn format_size(&self, bytes: u64) -> String {
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "sizes beyond 2^53 bytes are shown rounded"
+        )]
+        let value = bytes as f64;
+        self.formatter().map_or_else(String::new, |f| f.size(value))
+    }
+
+    /// A duration in seconds, from nanoseconds to hours.
+    #[must_use]
+    pub fn format_duration(&self, seconds: f64) -> String {
+        self.formatter()
+            .map_or_else(String::new, |f| f.duration(seconds))
+    }
+
+    /// Date and time of an instant (seconds since the Unix epoch) at the UTC offset set with
+    /// [`set_utc_offset_seconds`](Self::set_utc_offset_seconds).
+    #[must_use]
+    pub fn format_datetime(&self, epoch_seconds: i64) -> String {
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "instants beyond 2^53 seconds are outside the displayable years"
+        )]
+        let value = epoch_seconds as f64;
+        self.formatter()
+            .map_or_else(String::new, |f| f.datetime(value))
     }
 
     /// The review status of a language (the weakest status of its files).

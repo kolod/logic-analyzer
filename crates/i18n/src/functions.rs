@@ -1,4 +1,6 @@
-//! The functions resources can call: `FORMAT_NUMBER` and, in later tasks, the other formats.
+//! The functions resources can call: `FORMAT_NUMBER`, `FORMAT_FREQUENCY`, `FORMAT_SIZE`,
+//! `FORMAT_DURATION`, `FORMAT_DATE`, `FORMAT_TIME` and `FORMAT_DATETIME`. Each takes one number and
+//! returns text in the language of the bundle; anything else gives the marker and a problem.
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -6,13 +8,10 @@ use std::sync::Arc;
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentResource, FluentValue};
 
+use crate::formatter::Formatter;
 use crate::language::Language;
-use crate::locale_data::LocaleData;
-use crate::numbers::{MARKER, format_decimal};
+use crate::numbers::MARKER;
 use crate::problems::{ProblemKind, ProblemLog};
-
-/// Fraction digits of a plain number.
-const NUMBER_FRACTION_DIGITS: usize = 3;
 
 /// The result of a format function for its first argument: the formatted text, or the marker and
 /// a problem if the argument is not a number.
@@ -32,20 +31,34 @@ fn number_argument<'a>(
     }
 }
 
-/// Registers the format functions of `language` on `bundle`.
+/// Registers one format function.
+macro_rules! register_function {
+    ($bundle:expr, $name:literal, $formatter:expr, $problems:expr, $method:ident) => {{
+        let formatter = Arc::clone($formatter);
+        let log = Arc::clone($problems);
+        let language = $formatter.language();
+        let added = $bundle.add_function($name, move |positional, _named| {
+            number_argument(positional, $name, language, &log, |value| {
+                formatter.$method(value)
+            })
+        });
+        if added.is_err() {
+            $problems.record(ProblemKind::FormatError, language, $name);
+        }
+    }};
+}
+
+/// Registers the format functions of one language on `bundle`.
 pub(crate) fn register(
     bundle: &mut FluentBundle<FluentResource>,
-    language: Language,
+    formatter: &Arc<Formatter>,
     problems: &Arc<ProblemLog>,
 ) {
-    let data = LocaleData::for_language(language);
-    let log = Arc::clone(problems);
-    let added = bundle.add_function("FORMAT_NUMBER", move |positional, _named| {
-        number_argument(positional, "FORMAT_NUMBER", language, &log, |value| {
-            format_decimal(value, NUMBER_FRACTION_DIGITS, data)
-        })
-    });
-    if added.is_err() {
-        problems.record(ProblemKind::FormatError, language, "FORMAT_NUMBER");
-    }
+    register_function!(bundle, "FORMAT_NUMBER", formatter, problems, number);
+    register_function!(bundle, "FORMAT_FREQUENCY", formatter, problems, frequency);
+    register_function!(bundle, "FORMAT_SIZE", formatter, problems, size);
+    register_function!(bundle, "FORMAT_DURATION", formatter, problems, duration);
+    register_function!(bundle, "FORMAT_DATE", formatter, problems, date);
+    register_function!(bundle, "FORMAT_TIME", formatter, problems, time);
+    register_function!(bundle, "FORMAT_DATETIME", formatter, problems, datetime);
 }

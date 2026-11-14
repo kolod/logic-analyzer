@@ -42,3 +42,73 @@ count-gaps =
         [many] { FORMAT_NUMBER($count) } de lacunes
        *[other] { FORMAT_NUMBER($count) } lacunes
     }
+
+### Unités
+
+# @reserved
+unit-hz = { $value }{ "\u202F" }Hz
+
+# @reserved
+unit-khz = { $value }{ "\u202F" }kHz
+
+# @reserved
+unit-mhz = { $value }{ "\u202F" }MHz
+
+# @reserved
+unit-ghz = { $value }{ "\u202F" }GHz
+
+# @reserved
+unit-b = { $value }{ "\u202F" }o
+
+# @reserved
+unit-kib = { $value }{ "\u202F" }Kio
+
+# @reserved
+unit-mib = { $value }{ "\u202F" }Mio
+
+# @reserved
+unit-gib = { $value }{ "\u202F" }Gio
+
+# @reserved
+unit-tib = { $value }{ "\u202F" }Tio
+
+# @reserved
+unit-ns = { $value }{ "\u202F" }ns
+
+# @reserved
+unit-us = { $value }{ "\u202F" }µs
+
+# @reserved
+unit-ms = { $value }{ "\u202F" }ms
+
+# @reserved
+unit-s = { $value }{ "\u202F" }s
+
+# @reserved
+unit-min = { $value }{ "\u202F" }min
+
+# @reserved
+unit-h = { $value }{ "\u202F" }h
+
+# @reserved
+format-duration-parts = { $first } { $second }
+
+### Noms des langues
+
+# @reserved
+language-name-en = English
+
+# @reserved
+language-name-de = Deutsch
+
+# @reserved
+language-name-fr = Français
+
+# @reserved
+language-name-es = Español
+
+# @reserved
+language-name-ja = 日本語
+
+# @reserved
+language-name-uk = Українська

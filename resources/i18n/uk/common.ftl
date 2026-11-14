@@ -47,3 +47,73 @@ count-gaps =
         [many] { FORMAT_NUMBER($count) } пропусків
        *[other] { FORMAT_NUMBER($count) } пропуску
     }
+
+### Одиниці
+
+# @reserved
+unit-hz = { $value }{ "\u00A0" }Гц
+
+# @reserved
+unit-khz = { $value }{ "\u00A0" }кГц
+
+# @reserved
+unit-mhz = { $value }{ "\u00A0" }МГц
+
+# @reserved
+unit-ghz = { $value }{ "\u00A0" }ГГц
+
+# @reserved
+unit-b = { $value }{ "\u00A0" }Б
+
+# @reserved
+unit-kib = { $value }{ "\u00A0" }КіБ
+
+# @reserved
+unit-mib = { $value }{ "\u00A0" }МіБ
+
+# @reserved
+unit-gib = { $value }{ "\u00A0" }ГіБ
+
+# @reserved
+unit-tib = { $value }{ "\u00A0" }ТіБ
+
+# @reserved
+unit-ns = { $value }{ "\u00A0" }нс
+
+# @reserved
+unit-us = { $value }{ "\u00A0" }мкс
+
+# @reserved
+unit-ms = { $value }{ "\u00A0" }мс
+
+# @reserved
+unit-s = { $value }{ "\u00A0" }с
+
+# @reserved
+unit-min = { $value }{ "\u00A0" }хв
+
+# @reserved
+unit-h = { $value }{ "\u00A0" }год
+
+# @reserved
+format-duration-parts = { $first } { $second }
+
+### Назви мов
+
+# @reserved
+language-name-en = English
+
+# @reserved
+language-name-de = Deutsch
+
+# @reserved
+language-name-fr = Français
+
+# @reserved
+language-name-es = Español
+
+# @reserved
+language-name-ja = 日本語
+
+# @reserved
+language-name-uk = Українська
