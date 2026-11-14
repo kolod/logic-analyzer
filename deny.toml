@@ -12,8 +12,6 @@ unmaintained = "workspace"
 version = 2
 # Licenses of third-party crates that are compatible with the project license (GPL-3.0).
 allow = [
-  "MIT",
-  "Apache-2.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
