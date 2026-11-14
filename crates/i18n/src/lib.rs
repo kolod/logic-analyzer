@@ -7,10 +7,6 @@
 //! **Never log placeholder values.** Log only language, key and file names.
 
 #![deny(missing_docs)]
-#![allow(
-    dead_code,
-    reason = "used by the localizer and the languages added in later tasks"
-)]
 
 mod args;
 mod datetime;

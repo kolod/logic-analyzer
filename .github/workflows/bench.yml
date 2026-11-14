@@ -54,6 +54,9 @@ jobs:
       - name: Session file throughput benchmark
         run: cargo bench -p la-session --bench session_io
         continue-on-error: true
+      - name: Localization lookup benchmark
+        run: cargo bench -p la-i18n --bench lookup
+        continue-on-error: true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -62,4 +65,5 @@ jobs:
             target/la-storage-bench/*.json
             target/la-devices-bench/*.json
             target/la-session-bench/*.json
+            target/la-i18n-bench/*.json
           if-no-files-found: warn

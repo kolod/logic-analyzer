@@ -21,8 +21,7 @@ cargo test -p la-i18n --test plurals
 ```
 
 Expected: for 16 or more counts in each language the category and wording equal the hand-written CLDR
-table (Ukrainian one/few/many/other, Japanese single form, French 0 and 1 as one, exact millions in
-Spanish and French, fractions).
+table (Ukrainian one/few/many/other, Japanese single form, French 0 and 1 as one, fractions; the `many` forms of French and Spanish are written but not selected by the shipped plural rules yet).
 
 ## 3. Fallback (User Story 3)
 

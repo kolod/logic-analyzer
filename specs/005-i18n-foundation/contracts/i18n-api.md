@@ -47,6 +47,11 @@ pub struct Localizer { /* Arc */ }
 impl Localizer {
     /// Loads the embedded resources. Never fails: a damaged language degrades to English.
     pub fn new(initial: Language) -> Localizer;
+    /// The language is the stored choice if valid, else the first supported system tag, else
+    /// English; an invalid stored value is recorded as `InvalidLanguageTag` and ignored.
+    pub fn from_settings(stored: Option<&str>, system: &[&str]) -> Localizer;
+    /// From in-memory files (features `test-support` and `check`; for tests and the parity check).
+    pub fn from_sources(initial: Language, sources: Vec<(Language, Vec<(String, String)>)>) -> Localizer;
     pub fn language(&self) -> Language;
     /// Takes effect for every message requested afterwards; safe while other threads format.
     pub fn set_language(&self, language: Language);
@@ -65,7 +70,7 @@ impl Localizer {
     // Formatting through the same code the resources use.
     pub fn format_number(&self, value: f64) -> String;
     pub fn format_frequency(&self, hertz: f64) -> String;
-    pub fn format_size(&self, bytes: u64) -> String;
+    pub fn format_size(&self, bytes: u64) -> String;   // binary units; bytes are shown without a fraction
     pub fn format_duration(&self, seconds: f64) -> String;
     pub fn format_datetime(&self, epoch_seconds: i64) -> String;
 
@@ -76,7 +81,8 @@ impl Localizer {
 
 pub enum ReviewStatus { Draft, Reviewed }
 pub struct Problem { pub kind: ProblemKind, pub language: Language, pub subject: String }
-pub enum ProblemKind { MissingTranslation, MissingKey, DamagedResource, FormatError, UnknownErrorCode }
+pub enum ProblemKind { MissingTranslation, MissingKey, DamagedResource, FormatError, UnknownErrorCode,
+                       InvalidLanguageTag }
 
 // ---- the parity check (feature `check`) ---------------------------------------------
 pub mod parity {
@@ -85,9 +91,12 @@ pub mod parity {
                         pub line: Option<usize>, pub key: String, pub detail: String }
     pub enum DefectKind { MissingKey, ExtraKey, UnusedKey, UndefinedKey, PlaceholderMismatch,
         MissingPluralCategory, DuplicateKey, EmptyMessage, SyntaxError, UnregisteredFile,
-        MissingFile, MissingStatusHeader, LineEndings }
-    /// Checks the resources under `resources_dir` against the sources under `workspace_dir`.
-    pub fn check(resources_dir: &Path, workspace_dir: &Path) -> Report;
+        MissingFile, MissingStatusHeader, LineEndings, RawNumber }
+    /// Checks the resources under `resources_dir` (one directory per language) against the sources
+    /// under `source_dirs`; `registered` lists the file names the program embeds.
+    pub fn check(resources_dir: &Path, source_dirs: &[PathBuf], registered: &[String]) -> Report;
+    /// The file names registered in `resources.rs`.
+    pub fn registered_files() -> Vec<String>;
     impl Report { pub fn is_clean(&self) -> bool; pub fn render(&self) -> String; }   // `file:line key kind`
 }
 ```
@@ -111,3 +120,15 @@ problem. (Fluent's built-in `NUMBER` is not used for display; it stays available
 - The embedded resources never change at run time; no file on the user's disk is read.
 - `error_message` for a code with no message returns `error-unexpected` with the code as an argument and
   records `unknown-error-code`.
+
+## Notes fixed during implementation
+
+- A missing argument is rendered by Fluent as `{$name}` (the message still renders); a `FormatError`
+  problem is recorded.
+- The parity check is called with the directories and the registered file list (the fixtures of its
+  tests are built in code, one broken copy per defect class).
+- Units and the duration joiner are read from the resources when a language loads
+  (`unit-hz` … `unit-h`, `format-duration-parts`); a unit without a message falls back to an English
+  symbol and records `MissingTranslation` the first time it is needed.
+- The shipped plural rules predate CLDR 42: French and Spanish select only `one` and `other`; their
+  `many` forms are written already and allowed by the check.
