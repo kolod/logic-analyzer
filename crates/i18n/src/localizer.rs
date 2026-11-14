@@ -174,7 +174,7 @@ impl Localizer {
 
     /// Builds a localizer from in-memory resource files (for tests). A language that is not listed
     /// has no messages.
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test-support", feature = "check"))]
     #[must_use]
     pub fn from_sources(
         initial: Language,
@@ -183,7 +183,7 @@ impl Localizer {
         Localizer::build_from(initial, sources)
     }
 
-    #[cfg(not(any(test, feature = "test-support")))]
+    #[cfg(not(any(test, feature = "test-support", feature = "check")))]
     fn from_sources(
         initial: Language,
         sources: Vec<(Language, Vec<(String, String)>)>,

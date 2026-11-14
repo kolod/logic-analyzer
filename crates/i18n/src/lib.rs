@@ -22,6 +22,8 @@ mod language;
 mod locale_data;
 mod localizer;
 mod numbers;
+#[cfg(feature = "check")]
+pub mod parity;
 mod problems;
 mod quantity;
 mod resources;
