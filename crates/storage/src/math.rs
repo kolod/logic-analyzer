@@ -25,10 +25,6 @@ pub(crate) fn pixel_boundary(start: u64, len: u64, i: u32, w: u32) -> Option<u64
 
 /// Worst-case number of temporary bytes needed to convert a chunk of `len` samples for
 /// `channels` channels (4 bytes per sample and channel). `None` on overflow.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the memory budget check (phase 6)")
-)]
 pub(crate) fn chunk_temp_bytes(len: usize, channels: u8) -> Option<u64> {
     u64::try_from(len)
         .ok()?

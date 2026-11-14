@@ -101,7 +101,6 @@ pub(crate) fn position_overflow() -> Error {
     )
 }
 
-#[expect(dead_code, reason = "used by the memory budget check (phase 6)")]
 pub(crate) fn memory_limit(used: u64, needed: u64, budget: u64) -> Error {
     Error::new(
         ErrorKind::Resource,

@@ -4,14 +4,14 @@ use std::sync::{Arc, PoisonError, RwLock};
 
 use la_core::Result;
 
-use crate::block::{Block, OpenBlock};
+use crate::block::{Block, OpenBlock, block_bytes};
 use crate::channel::{ChannelData, Tail};
 use crate::config::CaptureConfig;
 use crate::error;
 use crate::ingest::ingest_chunk;
-use crate::math::checked_position_add;
+use crate::math::{checked_position_add, chunk_temp_bytes};
 use crate::published::{CaptureReader, Published, Shared};
-use crate::segment::{self, SEGMENT_BYTES, SegmentList};
+use crate::segment::{self, SEGMENT_BYTES, SEGMENT_SLOTS, SegmentList};
 use crate::types::{CaptureStatus, Gap};
 
 /// Producer-side state of one channel.
@@ -169,12 +169,40 @@ impl Capture {
         *guard = Arc::new(published);
     }
 
+    /// Memory accounted for the gap list.
+    fn gap_bytes(&self) -> u64 {
+        u64::try_from(self.gaps.len())
+            .unwrap_or(u64::MAX)
+            .saturating_mul(u64::try_from(std::mem::size_of::<Gap>()).unwrap_or(16))
+    }
+
     fn recompute_used(&mut self) {
         let channels: u64 = self.channels.iter().map(ChannelState::bytes).sum();
-        let gaps = u64::try_from(self.gaps.len())
-            .unwrap_or(u64::MAX)
-            .saturating_mul(u64::try_from(std::mem::size_of::<Gap>()).unwrap_or(16));
-        self.used_bytes = channels.saturating_add(gaps);
+        self.used_bytes = channels.saturating_add(self.gap_bytes());
+    }
+
+    /// Exact total memory after committing `prepared`, computed without committing.
+    fn bytes_after(&self, prepared: &[Prepared]) -> u64 {
+        let channels = self
+            .channels
+            .iter()
+            .zip(prepared)
+            .map(|(state, new)| {
+                let new_sealed = new
+                    .sealed
+                    .iter()
+                    .map(|b| block_bytes(b.offsets.len()))
+                    .fold(0_u64, u64::saturating_add);
+                let blocks = state.sealed.saturating_add(new.sealed.len());
+                let segments = u64::try_from(blocks.div_ceil(SEGMENT_SLOTS)).unwrap_or(u64::MAX);
+                state
+                    .sealed_bytes
+                    .saturating_add(new_sealed)
+                    .saturating_add(new.open.bytes())
+                    .saturating_add(segments.saturating_mul(SEGMENT_BYTES))
+            })
+            .fold(0_u64, u64::saturating_add);
+        channels.saturating_add(self.gap_bytes())
     }
 
     /// Appends a chunk of consecutive samples for all channels.
@@ -187,7 +215,11 @@ impl Capture {
     ///
     /// `storage.closed`, `storage.chunk_empty`, `storage.chunk_too_large`,
     /// `storage.chunk_out_of_order` or `storage.position_overflow` for invalid input;
-    /// a rejected call changes nothing.
+    /// `storage.memory_limit` when the chunk would exceed the memory budget (the capture
+    /// is then stopped: stored data stays readable, every later append fails the same
+    /// way, and the status reports `stopped_by_limit`) or when converting the chunk could
+    /// not fit the budget even in the worst case (`4 × samples × channels` bytes, the
+    /// capture is not stopped). A rejected call changes no stored data.
     pub fn append(&mut self, start: u64, samples: &[u32]) -> Result<()> {
         if self.closed {
             return Err(error::closed());
@@ -204,6 +236,19 @@ impl Capture {
         }
         if start != self.length {
             return Err(error::chunk_out_of_order(self.length, start));
+        }
+        let budget = self.config.limits.memory_budget_bytes;
+        if self.stopped_by_limit {
+            // Once stopped by the memory budget, the capture stays stopped.
+            return Err(error::memory_limit(self.used_bytes, 0, budget));
+        }
+        // Converting a chunk needs at most 4 bytes of temporary memory per sample and
+        // channel. A chunk whose worst case alone exceeds the whole budget is rejected
+        // before anything is allocated; this does not stop the capture, a smaller chunk
+        // is still accepted.
+        let temp = chunk_temp_bytes(samples.len(), self.config.channels).unwrap_or(u64::MAX);
+        if temp > budget {
+            return Err(error::memory_limit(self.used_bytes, temp, budget));
         }
         let samples_len = u64::try_from(samples.len()).map_err(|_| error::position_overflow())?;
         let new_length = checked_position_add(self.length, samples_len)?;
@@ -228,6 +273,26 @@ impl Capture {
             });
         }
 
+        // Memory budget: the chunk is accepted completely or not at all. A rejection
+        // discards the prepared blocks and publishes only the "stopped" flag.
+        let total_after = self.bytes_after(&prepared);
+        if total_after > budget {
+            self.stopped_by_limit = true;
+            self.publish();
+            tracing::warn!(
+                target: "la_storage",
+                used_bytes = self.used_bytes,
+                budget_bytes = budget,
+                rejected_samples = samples_len,
+                "memory limit reached"
+            );
+            return Err(error::memory_limit(
+                self.used_bytes,
+                total_after.saturating_sub(self.used_bytes),
+                budget,
+            ));
+        }
+
         // Commit: nothing below can fail for external reasons.
         let first_ever = self.last_word.is_none();
         for (channel, (state, new)) in self.channels.iter_mut().zip(prepared).enumerate() {
@@ -238,7 +303,7 @@ impl Capture {
                 state.initial_high = bit.is_some_and(|w| w & 1 == 1);
             }
             for block in new.sealed {
-                let bytes = crate::block::block_bytes(block.offsets.len());
+                let bytes = block_bytes(block.offsets.len());
                 if !segment::push_block(&mut state.segments, state.sealed, block) {
                     return Err(error::internal("a block slot was already written"));
                 }
