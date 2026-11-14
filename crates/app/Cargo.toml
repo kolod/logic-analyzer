@@ -14,8 +14,10 @@ name = "logic-analyzer"
 path = "src/main.rs"
 
 [dependencies]
-iced = { version = "0.14.0", features = ["canvas"] }
+iced = { version = "0.14.0", features = ["canvas", "tokio"] }
+la-devices = { path = "../devices" }
 la-diagnostics = { path = "../diagnostics" }
+la-host = { path = "../host" }
 la-i18n = { path = "../i18n" }
 tracing = "0.1.44"
 

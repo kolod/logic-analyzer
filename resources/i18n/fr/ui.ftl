@@ -4,3 +4,56 @@
 ### Application
 
 app-title = Logic Analyzer
+
+### État et résultats de la capture
+
+status-idle = Prêt
+status-capturing = Capture en cours
+status-saving = Enregistrement
+status-loading = Chargement
+status-memory = { $used } / { $limit }
+end-reason-completed = Capture terminée
+end-reason-stopped = Arrêtée par vous
+end-reason-memory-limit = Limite de mémoire atteinte
+end-reason-disconnected = Appareil déconnecté
+end-reason-device-error = Erreur de l'appareil
+end-reason-samples-lost = Terminée avec des échantillons perdus
+end-reason-loaded = Chargée depuis un fichier
+notice-device-removed = L'appareil sélectionné « { $text } » n'est plus disponible ; l'appareil par défaut a été sélectionné.
+
+### Menus
+
+menu-file = Fichier
+menu-file-new = Nouvelle capture
+menu-file-quit = Quitter
+menu-capture = Capture
+menu-capture-start = Démarrer
+menu-capture-stop = Arrêter
+
+### Barre d'outils, vue et boîtes de dialogue
+
+toolbar-device = Appareil
+toolbar-channels = Canaux
+toolbar-rate = Fréquence d'échantillonnage (Hz)
+toolbar-length = Durée (échantillons)
+toolbar-seed = Graine
+toolbar-seed-random = aléatoire
+toolbar-profile = Signal
+profile-sparse = Clairsemé
+profile-normal = Normal
+profile-dense = Dense
+toolbar-realtime = Temps réel
+toolbar-start = Démarrer
+toolbar-stop = Arrêter
+status-simulated = Simulé
+status-incomplete = Incomplète
+status-unsaved = Modifications non enregistrées
+view-no-capture = Aucune capture pour le moment. Choisissez un appareil et appuyez sur Démarrer.
+view-empty = La capture ne contient aucun échantillon.
+view-cannot-draw = Les signaux ne peuvent pas être dessinés.
+channel-default = Canal { $number }
+dialog-unsaved-title = Capture non enregistrée
+dialog-unsaved-body = La capture n'a pas été enregistrée. Que souhaitez-vous en faire ?
+dialog-save = Enregistrer
+dialog-discard = Abandonner
+dialog-cancel = Annuler
