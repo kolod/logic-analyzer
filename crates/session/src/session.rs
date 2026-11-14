@@ -122,7 +122,14 @@ impl Session {
         }
     }
 
-    /// Where the data came from.
+    /// Where the data came from. The description is read-only: no setter exists, so the simulated
+    /// mark cannot be cleared.
+    ///
+    /// ```compile_fail
+    /// fn clear(session: &la_session::Session) {
+    ///     session.description().simulated = false;
+    /// }
+    /// ```
     #[must_use]
     pub fn description(&self) -> &CaptureDescription {
         &self.description
