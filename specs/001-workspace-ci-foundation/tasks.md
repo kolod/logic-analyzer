@@ -156,16 +156,16 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 ### Tests for User Story 4 (write FIRST, ensure they FAIL)
 
-- [ ] T041 [P] [US4] Write `crates/diagnostics/tests/worker_containment.rs`: a panicking worker yields `Err(WorkerFailure)` with name, message and location; non-string panic payloads are rendered as `<non-string panic payload>`; sibling workers complete normally; a shared `Mutex<Vec<_>>` stays usable via `lock_recover` after a worker panics while holding it and the contents equal the last committed state; a loop test repeats the panic scenario 1,000 times with no process termination (SC-005)
-- [ ] T042 [P] [US4] Write `crates/diagnostics/tests/panic_log.rs`: after `install_panic_hook()` and `init_logging(...)` into a temp directory, a worker panic produces an `ERROR` entry containing `worker`, `panic_message` and `location` fields; a panic inside the hook's own logging path (simulated failing writer) does not recurse or abort
+- [X] T041 [P] [US4] Write `crates/diagnostics/tests/worker_containment.rs`: a panicking worker yields `Err(WorkerFailure)` with name, message and location; non-string panic payloads are rendered as `<non-string panic payload>`; sibling workers complete normally; a shared `Mutex<Vec<_>>` stays usable via `lock_recover` after a worker panics while holding it and the contents equal the last committed state; a loop test repeats the panic scenario 1,000 times with no process termination (SC-005)
+- [X] T042 [P] [US4] Write `crates/diagnostics/tests/panic_log.rs`: after `install_panic_hook()` and `init_logging(...)` into a temp directory, a worker panic produces an `ERROR` entry containing `worker`, `panic_message` and `location` fields; a panic inside the hook's own logging path (simulated failing writer) does not recurse or abort
 
 ### Implementation for User Story 4
 
-- [ ] T043 [US4] Implement `WorkerFailure`, `WorkerHandle<T>::join` and `spawn_worker` using a named `std::thread` and `std::panic::catch_unwind(AssertUnwindSafe(..))` in `crates/diagnostics/src/worker.rs`, extracting message and location (location captured by the hook and handed over through a thread-local)
-- [ ] T044 [US4] Implement `lock_recover` (recover a poisoned `Mutex`, log a `WARN` event) in `crates/diagnostics/src/worker.rs` and document the transactional-update rule (build the new value, then swap under the lock) in the module rustdoc
-- [ ] T045 [US4] Implement `install_panic_hook()` in `crates/diagnostics/src/panic_hook.rs`: chain the previous hook, log message, location, thread name and backtrace (when enabled) through `tracing`, flush the log, guard against re-entrancy with a thread-local flag; install at most once
-- [ ] T046 [US4] Export `spawn_worker`, `WorkerHandle`, `WorkerFailure`, `lock_recover` and `install_panic_hook` from `crates/diagnostics/src/lib.rs` with English rustdoc
-- [ ] T047 [US4] Make T041–T042 pass; run clippy with `-D warnings`
+- [X] T043 [US4] Implement `WorkerFailure`, `WorkerHandle<T>::join` and `spawn_worker` using a named `std::thread` and `std::panic::catch_unwind(AssertUnwindSafe(..))` in `crates/diagnostics/src/worker.rs`, extracting message and location (location captured by the hook and handed over through a thread-local)
+- [X] T044 [US4] Implement `lock_recover` (recover a poisoned `Mutex`, log a `WARN` event) in `crates/diagnostics/src/worker.rs` and document the transactional-update rule (build the new value, then swap under the lock) in the module rustdoc
+- [X] T045 [US4] Implement `install_panic_hook()` in `crates/diagnostics/src/panic_hook.rs`: chain the previous hook, log message, location, thread name and backtrace (when enabled) through `tracing`, flush the log, guard against re-entrancy with a thread-local flag; install at most once
+- [X] T046 [US4] Export `spawn_worker`, `WorkerHandle`, `WorkerFailure`, `lock_recover` and `install_panic_hook` from `crates/diagnostics/src/lib.rs` with English rustdoc
+- [X] T047 [US4] Make T041–T042 pass; run clippy with `-D warnings`
 
 **Checkpoint**: User Stories 1–5 work independently
 
