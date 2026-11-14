@@ -405,9 +405,13 @@ fn the_real_resources_and_sources_pass_in_under_ten_seconds() {
 #[test]
 fn a_placeholder_renamed_only_inside_a_plural_variant_is_reported() {
     let mut f = good();
-    let text = f
-        .file_mut(Language::De)
-        .replace("[one] { FORMAT_NUMBER($count) } Ding", "[one] { FORMAT_NUMBER($anzahl) } Ding");
+    let text = f.file_mut(Language::De).replace(
+        "[one] { FORMAT_NUMBER($count) } Ding",
+        "[one] { FORMAT_NUMBER($anzahl) } Ding",
+    );
     *f.file_mut(Language::De) = text;
-    expect(&f.run(), &[(DefectKind::PlaceholderMismatch, "de", "count-things")]);
+    expect(
+        &f.run(),
+        &[(DefectKind::PlaceholderMismatch, "de", "count-things")],
+    );
 }
