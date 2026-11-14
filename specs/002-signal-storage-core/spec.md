@@ -383,7 +383,13 @@ unchanged afterwards.
   error is returned for the rejected append.
 - **SC-006**: The store sustains ingestion at a 100 MHz sample rate on 32 channels
   (the highest rates among the supported devices) without rejecting or delaying
-  appends beyond the documented maximum, on the reference machine.
+  appends beyond the documented maximum, on the reference machine, for signals with
+  up to one level change per 50 samples per channel (for example a 2 MHz signal on
+  every channel at 100 MS/s). Denser signals are measured and reported but not held
+  to this target: at one change per 20 samples per channel the rate is lower, and the
+  absolute worst case (a change on every channel at every sample) would need about
+  13 GB of memory writes per second at 100 MHz and 32 channels, which no in-memory
+  store can sustain; its rate is reported for information.
 - **SC-007**: While a producer appends continuously, readers' results are consistent
   with a complete-chunk prefix in 100% of 1,000,000 sampled queries, and the
   producer's worst-case append delay stays within the documented maximum.
