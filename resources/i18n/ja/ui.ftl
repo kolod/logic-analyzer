@@ -57,3 +57,23 @@ dialog-unsaved-body = キャプチャは保存されていません。どうし�
 dialog-save = 保存
 dialog-discard = 破棄
 dialog-cancel = キャンセル
+
+### 表示とチャンネル
+
+menu-view = 表示
+menu-view-zoom-in = 拡大
+menu-view-zoom-out = 縮小
+menu-view-fit = 全体を表示
+menu-view-start = 先頭へ
+menu-view-end = 末尾へ
+menu-view-pan-left = 左へ移動
+menu-view-pan-right = 右へ移動
+menu-view-page-left = 前のページ
+menu-view-page-right = 次のページ
+menu-capture-follow = 最新データを追従
+panel-channels = チャンネル
+channel-show = 表示する
+channel-move-up = 上へ
+channel-move-down = 下へ
+channel-colour = 色
+channel-reset = チャンネルをリセット

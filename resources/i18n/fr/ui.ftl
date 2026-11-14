@@ -57,3 +57,23 @@ dialog-unsaved-body = La capture n'a pas été enregistrée. Que souhaitez-vous 
 dialog-save = Enregistrer
 dialog-discard = Abandonner
 dialog-cancel = Annuler
+
+### Affichage et canaux
+
+menu-view = Affichage
+menu-view-zoom-in = Zoom avant
+menu-view-zoom-out = Zoom arrière
+menu-view-fit = Tout afficher
+menu-view-start = Aller au début
+menu-view-end = Aller à la fin
+menu-view-pan-left = Défiler à gauche
+menu-view-pan-right = Défiler à droite
+menu-view-page-left = Page précédente
+menu-view-page-right = Page suivante
+menu-capture-follow = Suivre les dernières données
+panel-channels = Canaux
+channel-show = Afficher
+channel-move-up = Monter
+channel-move-down = Descendre
+channel-colour = Couleur
+channel-reset = Réinitialiser les canaux

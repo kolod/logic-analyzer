@@ -57,3 +57,23 @@ dialog-unsaved-body = Захоплення не збережено. Що з ни
 dialog-save = Зберегти
 dialog-discard = Відкинути
 dialog-cancel = Скасувати
+
+### Вигляд і канали
+
+menu-view = Вигляд
+menu-view-zoom-in = Збільшити
+menu-view-zoom-out = Зменшити
+menu-view-fit = Показати все
+menu-view-start = До початку
+menu-view-end = До кінця
+menu-view-pan-left = Прокрутити ліворуч
+menu-view-pan-right = Прокрутити праворуч
+menu-view-page-left = Сторінка назад
+menu-view-page-right = Сторінка вперед
+menu-capture-follow = Стежити за новими даними
+panel-channels = Канали
+channel-show = Показати
+channel-move-up = Вгору
+channel-move-down = Вниз
+channel-colour = Колір
+channel-reset = Скинути канали

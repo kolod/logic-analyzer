@@ -4,7 +4,7 @@
 //! every action has exactly one place where it is defined and a test can check that every command
 //! is reachable and that no accelerator is used twice (contract `shell-layout.md`).
 
-use crate::command::Command;
+use crate::command::{Command, PanStep, ZoomDirection};
 use crate::state::{Activity, State};
 
 /// A keyboard shortcut. `key` is a name from a small fixed vocabulary: a letter or digit, `F1`..
@@ -82,6 +82,8 @@ pub enum Action {
     ShowLog,
     /// Show the about dialog.
     About,
+    /// Turn following the newest data of a running capture on or off.
+    ToggleFollowLatest,
 }
 
 /// When an entry can be used.
@@ -173,6 +175,66 @@ pub fn table() -> Vec<ShortcutEntry> {
             ["menu-capture", "menu-capture-stop"],
             Some(Accelerator::shift("F5")),
             EnabledWhen::Capturing,
+        ),
+        ShortcutEntry::new(
+            Action::ToggleFollowLatest,
+            ["menu-capture", "menu-capture-follow"],
+            Some(Accelerator::key("F6")),
+            EnabledWhen::Capturing,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::ZoomStep(ZoomDirection::In)),
+            ["menu-view", "menu-view-zoom-in"],
+            Some(Accelerator::key("+")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::ZoomStep(ZoomDirection::Out)),
+            ["menu-view", "menu-view-zoom-out"],
+            Some(Accelerator::key("-")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::FitAll),
+            ["menu-view", "menu-view-fit"],
+            Some(Accelerator::ctrl("0")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::GoToStart),
+            ["menu-view", "menu-view-start"],
+            Some(Accelerator::key("Home")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::GoToEnd),
+            ["menu-view", "menu-view-end"],
+            Some(Accelerator::key("End")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::PanStep(PanStep::Left)),
+            ["menu-view", "menu-view-pan-left"],
+            Some(Accelerator::key("Left")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::PanStep(PanStep::Right)),
+            ["menu-view", "menu-view-pan-right"],
+            Some(Accelerator::key("Right")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::PanStep(PanStep::PageLeft)),
+            ["menu-view", "menu-view-page-left"],
+            Some(Accelerator::shift("Left")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::PanStep(PanStep::PageRight)),
+            ["menu-view", "menu-view-page-right"],
+            Some(Accelerator::shift("Right")),
+            EnabledWhen::CaptureExists,
         ),
     ]
 }

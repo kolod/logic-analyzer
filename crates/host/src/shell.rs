@@ -13,12 +13,14 @@ use la_storage::Limits;
 use crate::capture::{
     CaptureEnd, CaptureOrigin, CaptureView, ProgressView, Running, is_incomplete,
 };
-use crate::command::{Changes, Command, Decision, Guarded, Outcome, Tick};
+use crate::command::{
+    Changes, Command, Decision, Guarded, Outcome, PanStep, Tick, ZoomAnchor, ZoomDirection,
+};
 use crate::devices::{ConfigDraft, fresh_seed, problems};
 use crate::error;
 use crate::notices::{Notice, NoticeContent, NoticeId, NoticeList, Severity, notice_text};
 use crate::plan::{ChannelView, FramePlan, build_plan};
-use crate::presentation::{Colour, PALETTE_SIZE};
+use crate::presentation::Presentation;
 use crate::settings::{RealSettingsFs, Settings, SettingsFs};
 use crate::state::{Activity, State, Unsaved, Versions};
 use crate::status::{StatusLine, status_line};
@@ -164,6 +166,7 @@ impl Shell {
             config_problems: Vec::new(),
             capture: None,
             progress: None,
+            presentation: Presentation::default(),
             pending_decision: None,
             follow_latest: loaded.settings.follow_latest,
             notices: NoticeList::new(),
@@ -257,16 +260,21 @@ impl Shell {
         } else {
             self.state.window.clamp(&limits)
         };
-        let channels: Vec<ChannelView> = capture
-            .map(CaptureView::enabled_channels)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|channel| ChannelView {
-                channel,
-                name: String::new(),
-                colour: Colour::Palette(channel % PALETTE_SIZE),
-            })
-            .collect();
+        let channels: Vec<ChannelView> = if capture.is_some() {
+            self.state
+                .presentation
+                .channels
+                .iter()
+                .filter(|style| style.visible)
+                .map(|style| ChannelView {
+                    channel: style.index,
+                    name: style.name.clone(),
+                    colour: style.colour,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         build_plan(capture.map(|c| &c.snapshot), &window, pixels, &channels)
     }
 
@@ -361,6 +369,7 @@ impl Shell {
         }
         let description = acquisition.description();
         let end = outcome.as_ref().map(CaptureEnd::from_outcome);
+        let outcome_is_none = outcome.is_none();
         let grown = state
             .capture
             .as_ref()
@@ -375,10 +384,16 @@ impl Shell {
                 end,
             });
             changes.insert(Changes::CAPTURE);
+            let limits = window_limits(snapshot.length(), plan_pixels(state));
             if state.auto_fit {
-                state.window =
-                    ViewWindow::fit_all(&window_limits(snapshot.length(), state.view_size.pixels));
+                state.window = ViewWindow::fit_all(&limits);
                 changes.insert(Changes::WINDOW);
+            } else if state.follow_latest && outcome_is_none {
+                let followed = state.window.go_to_end(&limits);
+                if followed != state.window {
+                    state.window = followed;
+                    changes.insert(Changes::WINDOW);
+                }
             }
         }
         if let Some(outcome) = outcome {
@@ -501,6 +516,116 @@ impl Shell {
                     state.window.clamp(&limits)
                 };
                 changed(Changes::WINDOW)
+            }
+            Command::Zoom { factor, anchor } => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                let pixels = u64::from(limits.pixels.max(1));
+                let anchor = match anchor {
+                    ZoomAnchor::Column(column) => (u64::from(column).min(pixels), pixels),
+                    ZoomAnchor::Centre => (1, 2),
+                };
+                let current = current_window(state, &limits);
+                state.window = current.zoom(&limits, factor.numerator, factor.denominator, anchor);
+                state.auto_fit = false;
+                changed(Changes::WINDOW)
+            }
+            Command::ZoomStep(direction) => {
+                let (numerator, denominator) = match direction {
+                    ZoomDirection::In => (1, 2),
+                    ZoomDirection::Out => (2, 1),
+                };
+                self.execute(
+                    state,
+                    Command::Zoom {
+                        factor: crate::command::ZoomFactor {
+                            numerator,
+                            denominator,
+                        },
+                        anchor: ZoomAnchor::Centre,
+                    },
+                )
+            }
+            Command::Pan { pixels } => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                state.window = current_window(state, &limits).pan_pixels(&limits, pixels);
+                state.auto_fit = false;
+                state.follow_latest = false;
+                changed(Changes::WINDOW)
+            }
+            Command::PanStep(step) => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                let current = current_window(state, &limits);
+                let tenth = i64::try_from(current.length / 10)
+                    .unwrap_or(i64::MAX)
+                    .max(1);
+                let page = i64::try_from(current.length).unwrap_or(i64::MAX);
+                let delta = match step {
+                    PanStep::Left => tenth.saturating_neg(),
+                    PanStep::Right => tenth,
+                    PanStep::PageLeft => page.saturating_neg(),
+                    PanStep::PageRight => page,
+                };
+                state.window = current.pan_samples(&limits, delta);
+                state.auto_fit = false;
+                state.follow_latest = false;
+                changed(Changes::WINDOW)
+            }
+            Command::FitAll => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                state.window = ViewWindow::fit_all(&limits);
+                state.auto_fit = true;
+                changed(Changes::WINDOW)
+            }
+            Command::GoToStart => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                state.window = current_window(state, &limits).go_to_start(&limits);
+                state.auto_fit = false;
+                state.follow_latest = false;
+                changed(Changes::WINDOW)
+            }
+            Command::GoToEnd => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                state.window = current_window(state, &limits).go_to_end(&limits);
+                state.auto_fit = false;
+                changed(Changes::WINDOW)
+            }
+            Command::ZoomToRange { start, end } => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                state.window = ViewWindow::zoom_to(&limits, start, end);
+                state.auto_fit = false;
+                state.follow_latest = false;
+                changed(Changes::WINDOW)
+            }
+            Command::SetFollowLatest(follow) => {
+                state.follow_latest = follow;
+                changed(Changes::WINDOW)
+            }
+            Command::RenameChannel { channel, name } => {
+                edit_presentation(state, |p| p.rename(channel, &name))
+            }
+            Command::SetChannelColour { channel, colour } => {
+                edit_presentation(state, |p| p.set_colour(channel, colour))
+            }
+            Command::SetChannelVisible { channel, visible } => {
+                edit_presentation(state, |p| p.set_visible(channel, visible))
+            }
+            Command::MoveChannel { from, to } => {
+                edit_presentation(state, |p| p.move_channel(from, to))
+            }
+            Command::ResetPresentation => {
+                let Some(capture) = &state.capture else {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                };
+                state.presentation = default_presentation(capture);
+                mark_dirty(state);
+                changed(Changes::PRESENTATION)
             }
             #[cfg(feature = "test-support")]
             #[allow(clippy::panic, reason = "provokes a contained panic for the tests")]
@@ -629,6 +754,11 @@ impl Shell {
             memory_limit: limits.memory_budget_bytes,
             planned: Some(state.config.length),
         });
+        state.presentation = state
+            .capture
+            .as_ref()
+            .map(default_presentation)
+            .unwrap_or_default();
         state.activity = Activity::Capturing;
         state.unsaved = Unsaved::Running;
         state.auto_fit = true;
@@ -687,8 +817,58 @@ fn revalidate(state: &mut State) {
         .unwrap_or_default();
 }
 
+/// The default presentation of a capture: its enabled channels, in index order.
+fn default_presentation(capture: &CaptureView) -> Presentation {
+    Presentation::defaults(
+        capture.snapshot.channels(),
+        capture.description.enabled_mask(),
+    )
+}
+
+/// The pixel width the window limits use.
+fn plan_pixels(state: &State) -> u32 {
+    state.view_size.pixels.clamp(1, MAX_PLAN_PIXELS)
+}
+
+/// The limits of the view of the capture on screen; `None` without a capture.
+fn capture_limits_of(state: &State) -> Option<WindowLimits> {
+    state
+        .capture
+        .as_ref()
+        .map(|c| window_limits(c.snapshot.length(), plan_pixels(state)))
+}
+
+/// The window now shown (the whole capture while it follows "fit all").
+fn current_window(state: &State, limits: &WindowLimits) -> ViewWindow {
+    if state.auto_fit {
+        ViewWindow::fit_all(limits)
+    } else {
+        state.window.clamp(limits)
+    }
+}
+
+/// An unsaved capture stays unsaved; a saved one becomes unsaved when its presentation changes.
+fn mark_dirty(state: &mut State) {
+    if state.capture.is_some() && state.unsaved == Unsaved::Clean {
+        state.unsaved = Unsaved::Dirty;
+    }
+}
+
+/// Applies a presentation edit; the edit returns `false` for an unknown channel or position.
+fn edit_presentation(
+    state: &mut State,
+    edit: impl FnOnce(&mut Presentation) -> bool,
+) -> Result<Executed, Reject> {
+    if state.capture.is_none() || !edit(&mut state.presentation) {
+        return Err(Reject::Ignored(error::INVALID_COMMAND));
+    }
+    mark_dirty(state);
+    Ok(Executed::Changed(Changes::PRESENTATION))
+}
+
 /// Removes the capture and everything about it.
 fn clear_capture(state: &mut State) {
+    state.presentation = Presentation::default();
     state.capture = None;
     state.progress = None;
     state.activity = Activity::Idle;

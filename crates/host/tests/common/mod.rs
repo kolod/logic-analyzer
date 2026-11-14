@@ -109,3 +109,37 @@ impl Drop for TempDir {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
+use la_host::window::ViewSize;
+use la_host::{Activity, Command, ConfigEdit, Outcome, Shell, ShellConfig};
+
+/// A shell that has captured `length` samples on the channels of `mask` with `seed`, unpaced.
+pub fn finished_shell(dir: &TempDir, mask: u32, length: u64, seed: u64) -> Shell {
+    let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
+    for edit in [
+        ConfigEdit::Realtime(false),
+        ConfigEdit::Channels(mask),
+        ConfigEdit::SampleRate(1_000_000),
+        ConfigEdit::Length(length),
+        ConfigEdit::Seed(Some(seed)),
+        ConfigEdit::AcceptBudgetRisk(true),
+    ] {
+        shell.apply(Command::EditConfig(edit));
+    }
+    let outcome = shell.apply(Command::StartCapture);
+    assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while shell.state().activity != Activity::Idle {
+        shell.poll(std::time::Instant::now());
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the capture did not end"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    shell.apply(Command::SetViewSize(ViewSize {
+        pixels: 800,
+        scale: 1.0,
+    }));
+    shell
+}

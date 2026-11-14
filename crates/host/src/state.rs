@@ -10,6 +10,7 @@ use crate::capture::{CaptureView, ProgressView};
 use crate::command::{Changes, Guarded};
 use crate::devices::{ConfigDraft, ConfigProblem};
 use crate::notices::NoticeList;
+use crate::presentation::Presentation;
 use crate::settings::Settings;
 use crate::window::{ViewSize, ViewWindow};
 
@@ -103,6 +104,8 @@ pub struct State {
     pub capture: Option<CaptureView>,
     /// Progress of the running capture, frozen when it ends.
     pub progress: Option<ProgressView>,
+    /// How the channels of the capture are shown.
+    pub presentation: Presentation,
     /// A command waiting for the user to decide what happens to unsaved data.
     pub pending_decision: Option<Guarded>,
     /// Whether the view follows the newest data of a running capture.

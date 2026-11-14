@@ -57,3 +57,23 @@ dialog-unsaved-body = La captura no se ha guardado. ¿Qué desea hacer con ella?
 dialog-save = Guardar
 dialog-discard = Descartar
 dialog-cancel = Cancelar
+
+### Vista y canales
+
+menu-view = Vista
+menu-view-zoom-in = Acercar
+menu-view-zoom-out = Alejar
+menu-view-fit = Ver todo
+menu-view-start = Ir al inicio
+menu-view-end = Ir al final
+menu-view-pan-left = Desplazar a la izquierda
+menu-view-pan-right = Desplazar a la derecha
+menu-view-page-left = Página anterior
+menu-view-page-right = Página siguiente
+menu-capture-follow = Seguir los datos más recientes
+panel-channels = Canales
+channel-show = Mostrar
+channel-move-up = Subir
+channel-move-down = Bajar
+channel-colour = Color
+channel-reset = Restablecer canales

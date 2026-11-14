@@ -104,3 +104,40 @@ dialog-save = Save
 dialog-discard = Discard
 # Button: do not carry on.
 dialog-cancel = Cancel
+
+### View and channels
+
+# The View menu.
+menu-view = View
+# Show less time in the view.
+menu-view-zoom-in = Zoom in
+# Show more time in the view.
+menu-view-zoom-out = Zoom out
+# Show the whole capture.
+menu-view-fit = Fit all
+# Move the view to the start of the capture.
+menu-view-start = Go to start
+# Move the view to the end of the capture.
+menu-view-end = Go to end
+# Move the view a little towards the start.
+menu-view-pan-left = Pan left
+# Move the view a little towards the end.
+menu-view-pan-right = Pan right
+# Move the view by one whole window towards the start.
+menu-view-page-left = Page left
+# Move the view by one whole window towards the end.
+menu-view-page-right = Page right
+# Keep the view at the newest data of a running capture.
+menu-capture-follow = Follow latest data
+# Title of the panel that lists the channels.
+panel-channels = Channels
+# Tooltip of the checkbox that shows or hides a channel.
+channel-show = Show
+# Tooltip of the button that moves a channel up in the order.
+channel-move-up = Move up
+# Tooltip of the button that moves a channel down in the order.
+channel-move-down = Move down
+# Tooltip of the button that changes the colour of a channel.
+channel-colour = Colour
+# Button: restore the default names, colours, order and visibility.
+channel-reset = Reset channels
