@@ -56,3 +56,13 @@ error-storage-invalid_sample_rate = La frecuencia de muestreo debe ser mayor que
 error-storage-invalid_window = La parte de la captura que se debe mostrar no es válida. Seleccione un rango que empiece antes de terminar.
 error-storage-memory_limit = La captura alcanzó el límite de memoria y se detuvo. Todo lo capturado hasta ahora se conserva. Guárdela y luego aumente el límite de memoria o capture menos datos.
 error-storage-position_overflow = La captura se hizo más larga de lo que el programa puede manejar y se detuvo. Todo lo capturado hasta ahora se conserva. Guárdela y capture en partes más cortas.
+
+### Aplicación y configuración
+
+error-host-settings_unreadable = No se pudo leer el archivo de configuración, por lo que se usa la configuración predeterminada. Compruebe que tiene permiso para leer el archivo; sus opciones se guardarán de nuevo cuando las cambie.
+error-host-settings_invalid = El archivo de configuración está dañado o es de otra versión, por lo que se usa la configuración predeterminada. Vuelva a elegir sus opciones; se guardarán cuando las cambie.
+error-host-settings_write = No se pudo guardar su configuración y se perderá al cerrar el programa. Compruebe que la carpeta de configuración existe y que puede escribir en ella.
+error-host-view_invalid = No se pudo restaurar la vista guardada de esta sesión (nombres de canales, colores y marcadores), por lo que se muestran los valores predeterminados. Las señales capturadas no se ven afectadas. Vuelva a elegir los nombres y los colores si los necesita.
+error-host-render_failed = No se pudieron dibujar las señales. La captura no se ve afectada y aún puede guardarse. Cambie el zoom o el tamaño de la ventana; si sigue ocurriendo, infórmelo adjuntando el archivo de registro.
+error-host-internal = Ocurrió un problema inesperado al ejecutar su orden, que no se ejecutó. Su captura no se ve afectada. Inténtelo de nuevo; si sigue ocurriendo, infórmelo adjuntando el archivo de registro.
+error-host-invalid_command = Esa acción no es posible en este momento. Espere a que termine la operación en curso y pruebe de nuevo.

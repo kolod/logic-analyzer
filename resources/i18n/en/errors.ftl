@@ -104,3 +104,20 @@ error-storage-invalid_window = The part of the capture to show is not valid. Sel
 error-storage-memory_limit = The capture reached the memory limit and stopped. Everything captured so far is kept. Save it, then raise the memory limit or capture less data.
 # The capture grew longer than the largest position the program can address.
 error-storage-position_overflow = The capture became longer than the program can handle and was stopped. Everything captured so far is kept. Save it and capture in shorter parts.
+
+### Application and settings
+
+# The settings file exists but cannot be read; the defaults are used.
+error-host-settings_unreadable = The settings file could not be read, so the default settings are used. Check that you have permission to read the file; your choices will be saved again when you change them.
+# The settings file is damaged or from another version; the defaults are used.
+error-host-settings_invalid = The settings file is damaged or from a different version, so the default settings are used. Choose your settings again; they will be saved when you change them.
+# The settings could not be saved.
+error-host-settings_write = Your settings could not be saved and will be lost when you close the program. Check that the settings folder exists and that you can write to it.
+# The saved view (channel names, colours, markers) of an opened session is invalid.
+error-host-view_invalid = The saved view of this session (channel names, colours and markers) could not be restored, so the defaults are shown. The captured signals are not affected. Choose the names and colours again if you want them.
+# The signal view could not be drawn.
+error-host-render_failed = The signals could not be drawn. The capture is not affected and can still be saved. Resize the window or change the zoom; if it keeps happening, report it with the log file.
+# A command failed unexpectedly (a contained panic or an impossible state).
+error-host-internal = An unexpected problem occurred while carrying out your command, and it was not carried out. Your capture is not affected. Please try again; if it keeps happening, report it with the log file.
+# An action is not valid in the current state.
+error-host-invalid_command = That action is not possible right now. Wait for the current operation to finish and try again.
