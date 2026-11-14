@@ -182,7 +182,7 @@ additive interrupted-flag change in `la-storage`.
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
 | Two threads per acquisition (driver thread and ingest thread) joined by a bounded channel | A hung driver must never hold the capture hostage: the ingest thread owns the capture and can close it when the driver thread stops responding; `try_send` turns store backpressure into recorded gaps instead of making the device wait | A single worker doing both would leave a capture that can never be closed after a driver hang, and a slow store would stall the device and cause silent overruns |
-| Additive change to `la-storage` (`close_interrupted`, `CaptureStatus::interrupted`) in a feature about devices | The constitution requires a capture that lost data to a failure to be flagged incomplete; a disconnect that loses no *recorded* position would otherwise read as complete to every consumer of the capture status | Recording an invented terminal gap would invent lost positions; keeping the flag only in the acquisition outcome would mislead any consumer that reads the capture alone |
+| Additive change to `la-storage` (`close_interrupted`, `CaptureStatus::interrupted`) in a feature about devices (approved by the project owner) | The constitution requires a capture that lost data to a failure to be flagged incomplete; a disconnect that loses no *recorded* position would otherwise read as complete to every consumer of the capture status | Recording an invented terminal gap would invent lost positions; keeping the flag only in the acquisition outcome would mislead any consumer that reads the capture alone |
 
 ## Assumptions Recorded During Planning
 
