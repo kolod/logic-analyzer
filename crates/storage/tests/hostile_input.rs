@@ -278,7 +278,7 @@ fn random_call(
 #[test]
 fn ten_thousand_generated_calls_never_panic_and_failures_change_nothing() {
     const SEED: u64 = 0x5EED_0042;
-    const CALLS: usize = 12_000;
+    const CALLS: usize = 15_000;
     let mut rng = Rng::new(SEED);
     let max_chunk = Limits::default().max_chunk_samples as usize;
     let mut failures = 0_usize;
@@ -336,8 +336,8 @@ fn ten_thousand_generated_calls_never_panic_and_failures_change_nothing() {
     }
     println!("{CALLS} generated calls: {successes} succeeded, {failures} failed (seed {SEED:#x})");
     assert!(
-        failures > 2_000,
-        "the corpus must exercise many invalid inputs"
+        failures >= 10_000,
+        "SC-008 needs at least 10,000 invalid or extreme inputs"
     );
     assert!(
         successes > 2_000,
