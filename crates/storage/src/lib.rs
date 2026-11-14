@@ -7,6 +7,8 @@
 //!
 //! **Never log signal data.** Log only metadata such as sizes, counts and positions.
 
+#![deny(missing_docs)]
+
 mod block;
 mod capture;
 mod channel;

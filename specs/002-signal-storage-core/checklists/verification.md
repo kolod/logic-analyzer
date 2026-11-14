@@ -53,8 +53,33 @@ machine, release profile, chunks of 65,536 samples, million samples per second:
 
 ## Data safety, Principle I (T057)
 
-Pending.
+A search of `crates/storage/src` for `unwrap(`, `expect(`, `panic!`, `todo!`,
+`unimplemented!`, `unreachable!`, `unsafe`, `#[allow`, `#![allow` and `#[expect` finds
+matches only inside the two `#[cfg(test)]` modules (`math.rs`, `capture.rs`). Production
+code, including the `test-support` helper, contains none of them and no lint exception.
+The temporary `#[expect(dead_code)]` markers used while the feature was built phase by
+phase are all gone. `#![deny(missing_docs)]` is enabled and `cargo doc` runs clean with
+`-D warnings`.
+
+Behavioural evidence for FR-025/FR-026 and SC-008: `tests/hostile_input.rs` runs 15,000
+generated calls (3,865 succeed, 11,135 are rejected, so SC-008 is met; seed `0x5eed0042`):
+0 panic, every failure carries a `storage.*` code, and a failed call never changes
+stored data. `tests/limits.rs` shows the memory accounting is exact (after the largest
+accepted chunk less than 36 bytes of the budget remain).
 
 ## Other constitution gates (T058)
 
-Pending.
+- **Localization (Principle VII)**: no UI strings; errors carry stable `storage.*` codes
+  and an English technical `detail` for the localization layer to map later;
+  documentation and comments are English.
+- **Third-party code (Principles V and XII)**: no new third-party dependency. `Cargo.lock`
+  gains only the workspace package `la-storage` (`la-core`, `tracing`, and the
+  dev-dependencies `la-diagnostics` and itself with `test-support`); `cargo deny
+  --all-features check` passes. Nothing was reused from PulseView, sigrok or Saleae.
+- **Principle VIII (rendering)**: the achieved bound is
+  `O(log N + W·(1 + log(1 + N_w/W)))`, the literal `O(log N + W)` when zoomed in. The
+  deviation is recorded in the plan's Complexity Tracking; amending the constitution
+  wording is the project owner's decision (task T060).
+- **Platforms (Principle IV and the platform gate)**: pure `std` Rust, no OS-specific
+  code. Verified locally on Windows; Debian 13 and the MSRV 1.85 job are verified by CI
+  (task T061).

@@ -13,6 +13,8 @@ pub struct Limits { pub memory_budget_bytes: u64, pub max_chunk_samples: u32, pu
 impl Default for Limits {}
 
 pub struct CaptureConfig { pub channels: u8, pub sample_rate_hz: u64, pub limits: Limits }
+impl CaptureConfig { pub fn validate(&self) -> Result<()>; }   // also called by Capture::new
+impl Limits { pub fn validate(&self) -> Result<()>; }
 
 // ---- producer ------------------------------------------------------------------
 pub struct Capture { /* single owner */ }
@@ -57,6 +59,8 @@ pub struct PixelSummary { pub start_level: LevelState, pub end_level: LevelState
 pub struct ViewportResult { pub pixels: Vec<PixelSummary>, pub stats: QueryStats }
 pub struct QueryStats { pub probes: u64 }
 pub struct Gap { pub start: u64, pub length: u64 }
+impl Gap { pub fn end(&self) -> Option<u64>; }   // start + length, None on overflow
+pub const MAX_REPORTED_TRANSITIONS: u32 = u32::MAX;   // Activity::Many saturates here
 pub struct CaptureStatus { pub closed: bool, pub complete: bool,
                            pub lost_positions: u64, pub stopped_by_limit: bool }
 ```
@@ -75,4 +79,22 @@ pub fn synthetic_capture(channels: u8, transitions_per_channel: u64) -> Result<S
 `storage.invalid_limits`, `storage.chunk_out_of_order`, `storage.chunk_too_large`,
 `storage.chunk_empty`, `storage.position_overflow`, `storage.memory_limit`,
 `storage.closed`, `storage.invalid_window`, `storage.invalid_pixels`,
-`storage.channel_out_of_range`, `storage.invalid_gap`.
+`storage.channel_out_of_range`, `storage.invalid_gap`, `storage.internal` (a bug, never
+reachable from external input).
+
+## Behavior fixed by the implementation
+
+- `Capture::close` is idempotent: closing twice returns the same status. After closing,
+  `append` and `record_gap` fail with `storage.closed`.
+- Once an append is rejected for exceeding the memory budget, the capture is *stopped*:
+  every later `append` or `record_gap` fails with `storage.memory_limit`, stored data
+  stays readable, and `CaptureStatus::stopped_by_limit` is set. A chunk whose
+  worst-case conversion (`4 × samples × channels` bytes) alone exceeds the budget is
+  rejected with the same code but does not stop the capture.
+- `record_gap` merges adjacent gaps and, when a new gap entry would exceed the budget,
+  stops the capture with `storage.memory_limit` (it stays incomplete).
+- Bits of a sample word above the configured channel count are ignored, not an error.
+- `Snapshot::viewport` windows may extend past the capture length; those columns have
+  `beyond_end` set and `Missing` levels. `level_at` at or beyond the length returns
+  `Missing`.
+- A snapshot never changes; take a new one to see newer data.
