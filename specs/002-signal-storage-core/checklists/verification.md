@@ -82,4 +82,4 @@ accepted chunk less than 36 bytes of the budget remain).
   wording is the project owner's decision (task T060).
 - **Platforms (Principle IV and the platform gate)**: pure `std` Rust, no OS-specific
   code. Verified locally on Windows; Debian 13 and the MSRV 1.85 job are verified by CI
-  (task T061).
+  (task T061): all 10 required checks and the commit report passed on pull request #7.
