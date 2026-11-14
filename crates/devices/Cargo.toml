@@ -1,0 +1,29 @@
+[package]
+name = "la-devices"
+version = "0.1.0"
+description = "Device abstraction, acquisition engine and virtual device"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+la-core = { path = "../core" }
+la-diagnostics = { path = "../diagnostics" }
+la-storage = { path = "../storage" }
+tracing = "0.1.44"
+
+[features]
+# Test harness (scripted devices, recorded transport, conformance suite). Not part of the
+# stable API; driver crates enable it in their dev-dependencies.
+test-support = []
+
+[dev-dependencies]
+la-devices = { path = ".", features = ["test-support"] }
+
+[[bench]]
+name = "virtual_throughput"
+harness = false
+
+[lints]
+workspace = true

@@ -52,8 +52,8 @@ that a later phase of this feature uses; remove it when it becomes used).
 
 **Purpose**: the new crate and its wiring
 
-- [ ] T001 Create `crates/devices/Cargo.toml` (package `la-devices`, `edition/rust-version/license/publish` inherited from the workspace, `[lints] workspace = true`, dependencies `la-core`, `la-diagnostics`, `la-storage` as path dependencies and `tracing` with the version used by `crates/storage/Cargo.toml`, feature `test-support = []`, dev-dependency `la-devices = { path = ".", features = ["test-support"] }`, and `[[bench]] name = "virtual_throughput" harness = false`) and `crates/devices/src/lib.rs` with a crate-level English doc comment and `#![deny(missing_docs)]`; add the stub `crates/devices/benches/virtual_throughput.rs` (`fn main() {}`)
-- [ ] T002 Run `cargo build --workspace`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo deny --all-features check`; `Cargo.lock` must gain only the new workspace member (no third-party crate)
+- [X] T001 Create `crates/devices/Cargo.toml` (package `la-devices`, `edition/rust-version/license/publish` inherited from the workspace, `[lints] workspace = true`, dependencies `la-core`, `la-diagnostics`, `la-storage` as path dependencies and `tracing` with the version used by `crates/storage/Cargo.toml`, feature `test-support = []`, dev-dependency `la-devices = { path = ".", features = ["test-support"] }`, and `[[bench]] name = "virtual_throughput" harness = false`) and `crates/devices/src/lib.rs` with a crate-level English doc comment and `#![deny(missing_docs)]`; add the stub `crates/devices/benches/virtual_throughput.rs` (`fn main() {}`)
+- [X] T002 Run `cargo build --workspace`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo deny --all-features check`; `Cargo.lock` must gain only the new workspace member (no third-party crate)
 
 ---
 
