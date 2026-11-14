@@ -47,8 +47,8 @@ every phase.
 
 **Purpose**: the new crate and its wiring
 
-- [ ] T001 Create `crates/storage/Cargo.toml` (package `la-storage`, `edition/rust-version/license/publish` inherited from the workspace, `[lints] workspace = true`, dependencies `la-core = { path = "../core" }` and `tracing` with the same version as `crates/diagnostics/Cargo.toml`, feature `test-support = []`, dev-dependency `la-storage = { path = ".", features = ["test-support"] }`, and `[[bench]]` entries `viewport` and `ingest` with `harness = false`) and `crates/storage/src/lib.rs` with a crate-level English doc comment describing the crate and the "never log signal data" rule
-- [ ] T002 Run `cargo build --workspace`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo deny --all-features check` to confirm the empty crate adds no dependency problems; `Cargo.lock` gains only the new workspace member
+- [X] T001 Create `crates/storage/Cargo.toml` (package `la-storage`, `edition/rust-version/license/publish` inherited from the workspace, `[lints] workspace = true`, dependencies `la-core = { path = "../core" }` and `tracing` with the same version as `crates/diagnostics/Cargo.toml`, feature `test-support = []`, dev-dependency `la-storage = { path = ".", features = ["test-support"] }`, and `[[bench]]` entries `viewport` and `ingest` with `harness = false`) and `crates/storage/src/lib.rs` with a crate-level English doc comment describing the crate and the "never log signal data" rule
+- [X] T002 Run `cargo build --workspace`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo deny --all-features check` to confirm the empty crate adds no dependency problems; `Cargo.lock` gains only the new workspace member
 
 ---
 

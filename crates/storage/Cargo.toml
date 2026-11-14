@@ -1,0 +1,32 @@
+[package]
+name = "la-storage"
+version = "0.1.0"
+description = "Storage of captured digital signals with fast viewport queries"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+la-core = { path = "../core" }
+tracing = "0.1.44"
+
+[features]
+# Helpers for tests and benchmarks (for example a synthetic 10^9-transition capture).
+# Not part of the stable API.
+test-support = []
+
+[dev-dependencies]
+la-diagnostics = { path = "../diagnostics" }
+la-storage = { path = ".", features = ["test-support"] }
+
+[[bench]]
+name = "viewport"
+harness = false
+
+[[bench]]
+name = "ingest"
+harness = false
+
+[lints]
+workspace = true
