@@ -1,20 +1,21 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.2.0
-- Modified principles: none renamed or redefined
-- Added sections: Principles VIII (Fast Signal Rendering), IX (Protocol Decoding),
-  X (Decoded Data Export), XI (Virtual Device & Generated Signals),
-  XII (Original Design, Careful Inspiration)
+- Version change: 1.2.0 → 1.3.0
+  (MINOR: target platforms fixed and localization mechanism redefined; no code
+  existed yet, so nothing is invalidated)
+- Modified: Localization Requirements (Android strings.xml / Windows .resx replaced by
+  one shared resource format for Windows and Debian; CLDR plurals); commit-scope
+  example; Technology Constraints (target OS, device access)
+- Added sections: none (Principles VIII–XII were added in 1.1.0–1.2.0)
 - Removed sections: none
-- Templates (not updated at the author's request: no code exists yet):
-  - ⚠ .specify/templates/plan-template.md (Constitution Check lacks gates VIII–XII)
-  - ⚠ .specify/templates/tasks-template.md (no tasks for rendering benchmarks,
-    decoder tests, export, generators/round-trip tests)
+- Templates:
+  - ✅ .specify/templates/plan-template.md (gates VIII–XII, target platforms)
+  - ✅ .specify/templates/tasks-template.md (rendering, decoder, export, generator and
+    both-OS tasks; Path Conventions)
   - ✅ .specify/templates/spec-template.md, checklist-template.md (no change needed)
 - Follow-up TODOs:
-  - TODO(TARGET_PLATFORMS): the input mentions both Android (strings.xml) and Windows
-    (.resx) shells around a Rust core. Confirm the exact shipped platforms and UI
-    toolkit(s) in the first feature plan.
+  - TODO(UI_TOOLKIT_AND_L10N_FORMAT): choose the Rust UI toolkit and the shared
+    localization format/library in the first plan that needs them.
   - TODO(HOST_API_CONTRACT): define the host API contract location once the first
     feature that introduces it is planned.
 -->
@@ -242,6 +243,12 @@ the decoders get an automatic correctness check.
 
 - **Language**: Rust (stable toolchain; the minimum supported Rust version is recorded
   in the repository and changes only deliberately).
+- **Target operating systems**: Windows 10/11 and Debian 13. Every feature MUST work
+  on both; CI MUST build and test on both. OS-specific code MUST be isolated behind
+  platform-independent interfaces (Principle IV).
+- **Device access**: the documentation MUST describe how to get USB/serial device
+  access on each OS (driver installation on Windows; udev rules, so no root is needed,
+  on Debian). Missing permissions MUST produce an actionable error (Principle VI).
 - **Performance**: sample ingestion MUST keep up with the highest sample rate declared
   by each driver without dropping samples; if samples are lost the capture MUST be
   flagged as incomplete, never silently accepted as valid.
@@ -258,13 +265,18 @@ the decoders get an automatic correctness check.
 
 - The UI supports six languages: English (`en`, base and fallback), German (`de`),
   French (`fr`), Spanish (`es`), Japanese (`ja`), Ukrainian (`uk`).
-- No UI string may be hardcoded in code. Strings live in platform resources:
-  Android — `strings.xml`; Windows — `.resx`.
-- String keys MUST be identical on all platforms. The English resource file is the
-  single source of truth for keys. A missing translation MUST automatically fall back
-  to English.
-- Plural forms MUST use the platform mechanism (plurals / plural resources). Ukrainian
-  has multiple plural forms and Japanese has none; both MUST be correct.
+- No UI string may be hardcoded in code. Strings live in external resource files that
+  use ONE shared format on all supported operating systems (Windows and Debian); the
+  format and its Rust library are chosen in the first plan that introduces UI text.
+- The chosen mechanism MUST support CLDR plural rules, automatic fallback to English,
+  and selecting the language at runtime independently of the system language (see
+  below).
+- String keys are shared by all platforms by construction. The English resource file is
+  the single source of truth for keys. A missing translation MUST automatically fall
+  back to English.
+- Plural forms MUST be resolved through the localization mechanism, never by ad-hoc
+  code. Ukrainian has multiple plural forms and Japanese has none; both MUST be
+  correct.
 - Dates, numbers, frequencies and file sizes MUST be formatted according to the user's
   locale.
 - The user MUST be able to change the app language in the application settings
@@ -275,8 +287,7 @@ the decoders get an automatic correctness check.
   third-party protocol decoders and scripts) is NOT translated and is displayed as is.
 - A new language or a new UI string MUST NOT ship in a release until translations for
   all six languages exist. Machine translation is acceptable as a draft.
-- CI MUST verify key parity across languages and platforms and flag missing or
-  unused keys.
+- CI MUST verify key parity across languages and flag missing or unused keys.
 
 ## Version Control & Development Workflow
 
@@ -286,7 +297,7 @@ the decoders get an automatic correctness check.
   `NNN-short-name` (e.g., `001-logic16-driver`). Merging to `main` happens only after
   tests pass.
 - Commit messages are in English and follow Conventional Commits with a component
-  scope, e.g. `feat(android): ...`, `fix(drivers/logic16): ...`, `docs: ...`.
+  scope, e.g. `feat(ui): ...`, `fix(drivers/logic16): ...`, `docs: ...`.
 - One commit is one logical change. A change to the host API contract and its
   implementation on all platforms land in `main` together.
 - Every plan MUST pass the Constitution Check below before research and again after
@@ -309,4 +320,4 @@ conflicts with it, the constitution wins until it is formally amended.
 - **Runtime guidance**: day-to-day agent guidance lives in the repository's agent
   guidance file (e.g., `CLAUDE.md`) and MUST NOT contradict this document.
 
-**Version**: 1.2.0 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-14
+**Version**: 1.3.0 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-14

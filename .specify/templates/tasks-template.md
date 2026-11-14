@@ -21,10 +21,10 @@ description: "Task list template for feature implementation"
 
 ## Path Conventions
 
-- **Single project**: `src/`, `tests/` at repository root
-- **Web app**: `backend/src/`, `frontend/src/`
-- **Mobile**: `api/src/`, `ios/src/` or `android/src/`
-- Paths shown below assume single project - adjust based on plan.md structure
+- **Rust workspace**: `crates/<name>/src/`, `crates/<name>/tests/`, `tests/`, `benches/`,
+  `resources/i18n/`
+- Paths shown below are samples (some use `src/`, `.py`) - always use the real crate
+  paths and `.rs` files from plan.md
 
 <!--
   ============================================================================
@@ -159,6 +159,16 @@ Examples of foundational tasks (adjust based on your project):
   survives device disconnect/overrun (constitution Principle I)
 - [ ] TXXX [P] Hardware-free driver tests and manual hardware verification notes for
   each affected device (WeAct, Logic16 clone, Pico)
+- [ ] TXXX [P] Benchmark visible-range rendering/lookup on a large capture (virtual
+  device); compare with the recorded baseline, O(log N + W) (Principle VIII)
+- [ ] TXXX [P] Decoder work: recorded-signal tests incl. malformed input, fault
+  containment, signal-overlay annotations (Principle IX)
+- [ ] TXXX [P] Generator for each affected decoder + seeded round-trip test; simulated
+  data labelled in UI, captures and exports (Principle XI)
+- [ ] TXXX [P] Export: documented versioned locale-independent format, streaming,
+  atomic, cancellable (Principle X)
+- [ ] TXXX Verify build and tests on Windows 10/11 and Debian 13; update device-access
+  docs (driver / udev) if drivers changed
 - [ ] TXXX Run `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories

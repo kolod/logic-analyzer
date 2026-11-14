@@ -26,9 +26,9 @@
 
 **Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
 
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Target Platform**: Windows 10/11 and Debian 13 (both required; record CPU architectures)
 
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
+**Project Type**: desktop-app (Rust workspace: UI-independent core crates + UI shell)
 
 **Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
 
@@ -58,6 +58,20 @@ justification in Complexity Tracking) for each:
 - [ ] **VII. Localization**: all new UI strings have keys in English and translations
   for en/de/fr/es/ja/uk; plurals, locale formatting and CJK/long-German layout
   considered; docs and comments in English.
+- [ ] **VIII. Rendering**: visible-range cost stays O(log N + W); indexed storage and
+  zoomed-out summaries; dense activity visible; benchmark with recorded baseline.
+- [ ] **IX. Decoding**: decoder faults contained and cancellable; annotations support
+  lane and signal-overlay placement (points, edge markers, ranges); recorded-signal
+  tests including malformed input; overlay lookup stays indexed.
+- [ ] **X. Export**: decoded log export is documented, versioned, locale-independent,
+  streaming, atomic and cancellable; errors/incomplete regions included.
+- [ ] **XI. Virtual device**: every decoder usable with the virtual device has a
+  generator, seeded and reproducible, with a round-trip test; simulated data is
+  labelled in UI, captures and exports.
+- [ ] **XII. Original design**: no Saleae/GPL code, assets, names or exact visuals;
+  any license decision is recorded here.
+- [ ] **Platforms**: works on Windows 10/11 and Debian 13; OS-specific code is isolated;
+  device-access instructions (driver / udev) updated if drivers are touched.
 
 ## Project Structure
 
@@ -82,39 +96,26 @@ specs/[###-feature]/
 -->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+# Default: Rust workspace (adjust crate names to this feature; remove unused entries)
+Cargo.toml                 # workspace
+crates/
+├── core/                  # signal storage, indexing, sessions, file formats (no UI deps)
+├── devices/               # common device abstraction + virtual device
+│   └── drivers/           # weact/, logic16/, pico/ (one module per device)
+├── decoders/              # decoder framework, built-in decoders + generators
+├── export/                # decoded-log and raw-data export
+├── i18n/                  # localization loading, plural rules, locale formatting
+└── ui/                    # UI shell (only crate allowed to depend on the UI toolkit)
+
+resources/
+└── i18n/                  # en (source of truth), de, fr, es, ja, uk
 
 tests/
-├── contract/
+├── contract/              # host API contract tests
 ├── integration/
-└── unit/
+└── fixtures/              # recorded device transports and signals
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+benches/                   # rendering and ingestion benchmarks
 ```
 
 **Structure Decision**: [Document the selected structure and reference the real
