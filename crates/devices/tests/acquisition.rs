@@ -235,7 +235,9 @@ fn two_devices_run_independently() {
     assert_eq!(scripted.positions, 80);
     assert!(scripted.capture_status.complete);
     // The virtual acquisition keeps running independently until it is stopped.
-    assert_eq!(virtual_run.progress().state, AcquisitionState::Running);
+    assert!(wait_until(WAIT, || virtual_run.progress().state
+        == AcquisitionState::Running));
+    assert!(virtual_run.outcome().is_none());
     virtual_run.stop();
     assert_eq!(wait_outcome(&virtual_run).end, EndReason::Stopped);
 }
