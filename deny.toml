@@ -1,0 +1,38 @@
+# cargo-deny configuration. See specs/001-workspace-ci-foundation/research.md (R9).
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+unmaintained = "workspace"
+
+[licenses]
+version = 2
+# Licenses of third-party crates that are compatible with the project license (GPL-3.0).
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+  "MPL-2.0",
+  "CC0-1.0",
+]
+# Allowed licenses that no current dependency uses are not an error.
+unused-allowed-license = "allow"
+
+# The project's own crates (publish = false) are GPL-3.0-only and are not checked.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

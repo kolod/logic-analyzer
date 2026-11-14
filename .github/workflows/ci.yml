@@ -1,0 +1,163 @@
+# CI gate. See specs/001-workspace-ci-foundation/contracts/ci-checks.md.
+#
+# Every Rust job runs on both supported operating systems:
+#   windows - the hosted Windows runner (stand-in for Windows 10/11)
+#   debian  - Debian 13 ("trixie") in a container on the hosted Ubuntu runner
+# Third-party actions are pinned by full commit SHA; the Rust toolchain is pinned in
+# rust-toolchain.toml. Changing either is a deliberate, reviewed change.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly: a newly published advisory must surface even without a code change.
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  fmt:
+    name: fmt (${{ matrix.name }})
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, container: "" }
+          - { name: debian, os: ubuntu-latest, container: "debian:trixie" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Debian prerequisites
+        if: matrix.name == 'debian'
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy (${{ matrix.name }})
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, container: "" }
+          - { name: debian, os: ubuntu-latest, container: "debian:trixie" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Debian prerequisites
+        if: matrix.name == 'debian'
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  test:
+    name: test (${{ matrix.name }})
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, container: "" }
+          - { name: debian, os: ubuntu-latest, container: "debian:trixie" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Debian prerequisites
+        if: matrix.name == 'debian'
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo test --workspace --all-features
+
+  msrv:
+    name: msrv (${{ matrix.name }})
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, container: "" }
+          - { name: debian, os: ubuntu-latest, container: "debian:trixie" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Debian prerequisites
+        if: matrix.name == 'debian'
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read the minimum supported Rust version
+        id: msrv
+        shell: bash
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      # The lint-policy test runs `cargo clippy`, so the MSRV toolchain needs clippy.
+      - uses: ./.github/actions/setup-rust
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo +${{ steps.msrv.outputs.version }} build --workspace
+      - run: cargo +${{ steps.msrv.outputs.version }} test --workspace
+
+  deny:
+    name: deny (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows, os: windows-latest, container: "" }
+          - { name: debian, os: ubuntu-latest, container: "debian:trixie" }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Debian prerequisites
+        if: matrix.name == 'debian'
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+        with:
+          tool: cargo-deny@0.20.2
+      - run: cargo deny --all-features check
+
+  # Non-blocking: reports commit subjects that do not follow Conventional Commits with a
+  # component scope (see CONTRIBUTING.md). A warning only; it never blocks a merge.
+  commits:
+    name: commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    continue-on-error: true
+    steps:
+      - name: Debian prerequisites
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check commit subjects
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # The container user differs from the checkout owner; git refuses otherwise.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          bash scripts/check-commits.sh "origin/${BASE_REF}..HEAD"
