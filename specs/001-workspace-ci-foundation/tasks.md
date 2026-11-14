@@ -65,13 +65,13 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Create `.github/workflows/ci.yml` with triggers `pull_request`, `push` to `main` and a weekly `schedule`, and a two-entry OS matrix: `windows` (`windows-latest`) and `debian` (`ubuntu-latest` with `container: debian:trixie`, installing `curl`, `build-essential`, `git` and `rustup` first) per contracts/ci-checks.md
-- [ ] T011 [US1] In `.github/workflows/ci.yml` add jobs `fmt`, `clippy` and `test` per OS with the exact commands from contracts/ci-checks.md; job names `fmt (windows)`, `fmt (debian)`, etc.
-- [ ] T012 [US1] In `.github/workflows/ci.yml` add the `msrv` job per OS: install the toolchain named by `rust-version` in `Cargo.toml` (read it with `cargo metadata`) and run `cargo build --workspace` and `cargo test --workspace` with it
-- [ ] T013 [US1] In `.github/workflows/ci.yml` add the `deny` job per OS: install `cargo-deny` and run `cargo deny --all-features check`; make the scheduled run execute only `deny`
-- [ ] T014 [US1] Add dependency caching (`Swatinem/rust-cache`) to all Rust jobs in `.github/workflows/ci.yml`
-- [ ] T015 [US1] Pin every third-party action in `.github/workflows/ci.yml` by full commit SHA (resolve each with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`), keeping the version in a trailing comment (research R8, FR-006)
-- [ ] T016 [P] [US1] Create `scripts/protection.json` listing the required status check names from contracts/ci-checks.md (`fmt`, `clippy`, `test`, `msrv`, `deny` for both OSes) for `gh api -X PUT repos/<owner>/<repo>/branches/main/protection`
+- [X] T010 [US1] Create `.github/workflows/ci.yml` with triggers `pull_request`, `push` to `main` and a weekly `schedule`, and a two-entry OS matrix: `windows` (`windows-latest`) and `debian` (`ubuntu-latest` with `container: debian:trixie`, installing `curl`, `build-essential`, `git` and `rustup` first) per contracts/ci-checks.md
+- [X] T011 [US1] In `.github/workflows/ci.yml` add jobs `fmt`, `clippy` and `test` per OS with the exact commands from contracts/ci-checks.md; job names `fmt (windows)`, `fmt (debian)`, etc.
+- [X] T012 [US1] In `.github/workflows/ci.yml` add the `msrv` job per OS: install the toolchain named by `rust-version` in `Cargo.toml` (read it with `cargo metadata`) and run `cargo build --workspace` and `cargo test --workspace` with it
+- [X] T013 [US1] In `.github/workflows/ci.yml` add the `deny` job per OS: install `cargo-deny` and run `cargo deny --all-features check`; make the scheduled run execute only `deny`
+- [X] T014 [US1] Add dependency caching (`Swatinem/rust-cache`) to all Rust jobs in `.github/workflows/ci.yml`
+- [X] T015 [US1] Pin every third-party action in `.github/workflows/ci.yml` by full commit SHA (resolve each with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`), keeping the version in a trailing comment (research R8, FR-006)
+- [X] T016 [P] [US1] Create `scripts/protection.json` listing the required status check names from contracts/ci-checks.md (`fmt`, `clippy`, `test`, `msrv`, `deny` for both OSes) for `gh api -X PUT repos/<owner>/<repo>/branches/main/protection`
 - [ ] T017 [US1] Push the branch and confirm CI is green on both OSes for the clean workspace; fix workflow errors until it is
 - [ ] T018 [US1] Verify the gate with deliberate failures on throw-away branches (not merged): a formatting error, a clippy warning, a failing test, a dependency with a disallowed license (`deny`), and a change that only builds on the newest toolchain (`msrv`); record the outcome in `specs/001-workspace-ci-foundation/checklists/ci-verification.md`
 - [ ] T019 [US1] **Manual (repository owner)**: apply `scripts/protection.json` to `main` with `gh api -X PUT repos/kolod/logic-analyzer/branches/main/protection --input scripts/protection.json` and confirm a failing check blocks the merge button
@@ -185,7 +185,7 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 - [X] T049 [US6] Write `CONTRIBUTING.md` (English): build and test commands for Windows 10/11 and Debian 13, the MSRV (link to `Cargo.toml`), toolchain pinning, the English-only documentation rule (docs, code comments, commit messages), Conventional Commits with component scope and examples, `NNN-short-name` branch format, `main` merge rules, the lint policy and how to document an exception (`#[allow(..., reason = "...")]`), how to run `cargo deny`, and a link to the constitution
 - [X] T050 [US6] Implement `scripts/check-commits.sh <range>` (bash, no dependencies) validating the Conventional Commits subject format and reporting offenders; make T048 pass
-- [ ] T051 [US6] Add the non-blocking `commits` job (Debian, `continue-on-error: true`, `fetch-depth: 0`) to `.github/workflows/ci.yml` calling `scripts/check-commits.sh origin/main..HEAD`, and add it to the non-blocking table in contracts/ci-checks.md if names differ
+- [X] T051 [US6] Add the non-blocking `commits` job (Debian, `continue-on-error: true`, `fetch-depth: 0`) to `.github/workflows/ci.yml` calling `scripts/check-commits.sh origin/main..HEAD`, and add it to the non-blocking table in contracts/ci-checks.md if names differ
 - [ ] T052 [US6] Link `CONTRIBUTING.md` from `README.md` and verify, by following only the guide, that a branch name, a commit message and the local checks can be produced (quickstart step 8)
 
 **Checkpoint**: all user stories are independently functional

@@ -1,0 +1,42 @@
+name: Set up Rust
+description: >-
+  Installs rustup if it is missing (Debian container) and a Rust toolchain: the one
+  pinned in rust-toolchain.toml by default, or an explicit one (for example the MSRV).
+
+inputs:
+  toolchain:
+    description: Explicit toolchain to install. Empty means the pinned toolchain from rust-toolchain.toml.
+    required: false
+    default: ""
+  components:
+    description: Extra components for an explicit toolchain (space separated).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install rustup and the toolchain
+      shell: bash
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+        COMPONENTS: ${{ inputs.components }}
+      run: |
+        set -eu
+        if ! command -v rustup >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+        rustup set profile minimal
+        if [ -n "$TOOLCHAIN" ]; then
+          if [ -n "$COMPONENTS" ]; then
+            rustup toolchain install "$TOOLCHAIN" --component $COMPONENTS
+          else
+            rustup toolchain install "$TOOLCHAIN"
+          fi
+        else
+          # No argument: installs the toolchain and components from rust-toolchain.toml.
+          rustup toolchain install
+        fi
+        rustup toolchain list

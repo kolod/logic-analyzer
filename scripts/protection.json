@@ -1,0 +1,22 @@
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "fmt (windows)",
+      "fmt (debian)",
+      "clippy (windows)",
+      "clippy (debian)",
+      "test (windows)",
+      "test (debian)",
+      "msrv (windows)",
+      "msrv (debian)",
+      "deny (windows)",
+      "deny (debian)"
+    ]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
