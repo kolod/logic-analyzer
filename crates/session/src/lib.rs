@@ -19,6 +19,8 @@ mod capture_codec;
 mod control;
 mod crc;
 pub mod error;
+#[cfg(any(test, feature = "test-support"))]
+mod fault;
 mod format;
 mod fs;
 mod limits;
@@ -34,3 +36,13 @@ pub use limits::LoadLimits;
 pub use read::load_blocking;
 pub use session::{Section, Session, SessionData};
 pub use write::{SaveReport, save_blocking};
+
+/// Test support (feature `test-support`; not part of the stable API): the file-system seam, a
+/// fault-injecting implementation and the entry points that take a file system.
+#[cfg(feature = "test-support")]
+pub mod harness {
+    pub use crate::fault::{FaultFs, FaultPlan, Op};
+    pub use crate::fs::{DirEntryInfo, FileSystem, PathKind, RealFileSystem, WriteSink};
+    pub use crate::read::load_with;
+    pub use crate::write::save_with;
+}
