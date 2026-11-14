@@ -34,12 +34,12 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 **Purpose**: repository and workspace skeleton
 
-- [ ] T001 Create the workspace root `Cargo.toml` with `[workspace] resolver = "3"`, members `crates/*`, `[workspace.package]` (`edition = "2024"`, `rust-version = "1.85"`, `license = "GPL-3.0-only"`, `publish = false`) and `[profile.dev]`/`[profile.release]` with `panic = "unwind"` (research R1, R7, R11)
-- [ ] T002 [P] Create `rust-toolchain.toml` pinning `channel = "1.100.0"` with components `rustfmt` and `clippy` (research R2)
-- [ ] T003 [P] Create `rustfmt.toml` (`newline_style = "Unix"`), `.editorconfig` and `.gitattributes` (`* text=auto eol=lf`) (research R10)
-- [ ] T004 [P] Create empty library crates `crates/core/Cargo.toml` + `crates/core/src/lib.rs` (package `la-core`) and `crates/diagnostics/Cargo.toml` + `crates/diagnostics/src/lib.rs` (package `la-diagnostics`, depends on `la-core`), inheriting `[workspace.package]` and `[lints] workspace = true`
-- [ ] T005 [P] Create `deny.toml` with `[advisories]` (deny vulnerabilities, unmaintained, yanked), `[licenses]` allow-list (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unicode-3.0, Zlib, MPL-2.0, CC0-1.0), `[bans]` (wildcards denied) and `[sources]` (unknown registry/git denied) (research R9)
-- [ ] T006 Run `cargo build --workspace` to generate and commit `Cargo.lock`; confirm the empty workspace builds
+- [X] T001 Create the workspace root `Cargo.toml` with `[workspace] resolver = "3"`, members `crates/*`, `[workspace.package]` (`edition = "2024"`, `rust-version = "1.85"`, `license = "GPL-3.0-only"`, `publish = false`) and `[profile.dev]`/`[profile.release]` with `panic = "unwind"` (research R1, R7, R11)
+- [X] T002 [P] Create `rust-toolchain.toml` pinning `channel = "1.100.0"` with components `rustfmt` and `clippy` (research R2)
+- [X] T003 [P] Create `rustfmt.toml` (`newline_style = "Unix"`), `.editorconfig` and `.gitattributes` (`* text=auto eol=lf`) (research R10)
+- [X] T004 [P] Create empty library crates `crates/core/Cargo.toml` + `crates/core/src/lib.rs` (package `la-core`) and `crates/diagnostics/Cargo.toml` + `crates/diagnostics/src/lib.rs` (package `la-diagnostics`, depends on `la-core`), inheriting `[workspace.package]` and `[lints] workspace = true`
+- [X] T005 [P] Create `deny.toml` with `[advisories]` (deny vulnerabilities, unmaintained, yanked), `[licenses]` allow-list (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unicode-3.0, Zlib, MPL-2.0, CC0-1.0), `[bans]` (wildcards denied) and `[sources]` (unknown registry/git denied) (research R9)
+- [X] T006 Run `cargo build --workspace` to generate and commit `Cargo.lock`; confirm the empty workspace builds
 
 ---
 
@@ -49,9 +49,9 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 **⚠️ CRITICAL**: no user story work can begin until this phase is complete
 
-- [ ] T007 Add `[workspace.lints.rust]` (`unsafe_code = "deny"`, `unexpected_cfgs` with `check-cfg` listing `cfg(lint_fixture_unwrap)`, `cfg(lint_fixture_expect)`, `cfg(lint_fixture_index)`, `cfg(lint_fixture_arith)`, `cfg(lint_fixture_panic)`, `cfg(lint_fixture_unsafe)`) and `[workspace.lints.clippy]` (`unwrap_used`, `expect_used`, `indexing_slicing`, `arithmetic_side_effects`, `panic`, `unreachable`, `todo`, `unimplemented`, `undocumented_unsafe_blocks` all `deny`) to `Cargo.toml` (research R3)
-- [ ] T008 Create `clippy.toml` with `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-indexing-slicing-in-tests`, `allow-panic-in-tests` set to `true`; verify against the pinned Clippy which options exist and note any arithmetic relaxation needed (`#![cfg_attr(test, allow(clippy::arithmetic_side_effects))]` in test modules)
-- [ ] T009 Verify `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo test --workspace` pass on the empty workspace
+- [X] T007 Add `[workspace.lints.rust]` (`unsafe_code = "deny"`, `unexpected_cfgs` with `check-cfg` listing `cfg(lint_fixture_unwrap)`, `cfg(lint_fixture_expect)`, `cfg(lint_fixture_index)`, `cfg(lint_fixture_arith)`, `cfg(lint_fixture_panic)`, `cfg(lint_fixture_unsafe)`) and `[workspace.lints.clippy]` (`unwrap_used`, `expect_used`, `indexing_slicing`, `arithmetic_side_effects`, `panic`, `unreachable`, `todo`, `unimplemented`, `undocumented_unsafe_blocks` all `deny`) to `Cargo.toml` (research R3)
+- [X] T008 Create `clippy.toml` with `allow-unwrap-in-tests`, `allow-expect-in-tests`, `allow-indexing-slicing-in-tests`, `allow-panic-in-tests` set to `true`; verify against the pinned Clippy which options exist and note any arithmetic relaxation needed (`#![cfg_attr(test, allow(clippy::arithmetic_side_effects))]` in test modules)
+- [X] T009 Verify `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo test --workspace` pass on the empty workspace
 
 **Checkpoint**: foundation ready — user stories can begin
 

@@ -1,0 +1,13 @@
+[package]
+name = "la-core"
+version = "0.1.0"
+description = "Core types shared by all logic analyzer crates"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
