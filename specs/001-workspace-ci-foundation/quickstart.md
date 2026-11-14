@@ -19,8 +19,20 @@ rustup toolchain install 1.85
 cargo +1.85 test --workspace
 ```
 
-Expected: passes. With an older toolchain (for example `cargo +1.70 build`) the build
-fails with a message naming the required `rust-version`.
+Expected: passes (verified: build and the full test suite pass on 1.85.1; the MSRV job
+needs the `clippy` component because `lint_policy` runs `cargo clippy`).
+
+Older toolchains are rejected, verified with real toolchains:
+
+- Cargo 1.84 (below the first release that supports edition 2024) fails with
+  ``feature `edition2024` is required ... not stabilized in this version of Cargo
+  (1.84.1)... Consider trying a newer version of Cargo``. It does not print `1.85`, so
+  the guide states the minimum explicitly. Plain `cargo` in this repository normally
+  never hits this: `rust-toolchain.toml` makes `rustup` install the pinned toolchain.
+- A toolchain that supports the manifest but is below `rust-version` is rejected by
+  Cargo with the version named, for example (with `rust-version = "1.99"` on 1.85.1):
+  `rustc 1.85.1 is not supported by the following packages: la-core@0.1.0 requires
+  rustc 1.99`. This is the message contributors will see if the MSRV is raised.
 
 ## 3. Style, lints, dependencies (User Story 1, 3)
 

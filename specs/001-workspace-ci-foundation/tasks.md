@@ -88,10 +88,10 @@ Rust workspace: `crates/core/` (package `la-core`), `crates/diagnostics/` (packa
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Make both crates inherit the MSRV and license (`rust-version.workspace = true`, `license.workspace = true`) in `crates/core/Cargo.toml` and `crates/diagnostics/Cargo.toml`
-- [ ] T021 [US2] Install toolchain 1.85 and run `cargo +1.85 build --workspace`; if a dependency or lint requires a newer version, raise `rust-version` in `Cargo.toml` in a dedicated commit and update plan.md and research.md R1
-- [ ] T022 [US2] Verify an older toolchain (for example `cargo +1.70 build`) fails with a message naming the required `rust-version`; record the exact message in `specs/001-workspace-ci-foundation/quickstart.md` step 2
-- [ ] T023 [US2] Add the `README.md` build-and-test section (English) with the commands for Windows 10/11 and Debian 13 and the prerequisite `rustup` steps (the full guide is T049)
+- [X] T020 [US2] Make both crates inherit the MSRV and license (`rust-version.workspace = true`, `license.workspace = true`) in `crates/core/Cargo.toml` and `crates/diagnostics/Cargo.toml`
+- [X] T021 [US2] Install toolchain 1.85 and run `cargo +1.85 build --workspace`; if a dependency or lint requires a newer version, raise `rust-version` in `Cargo.toml` in a dedicated commit and update plan.md and research.md R1
+- [X] T022 [US2] Verify an older toolchain (for example `cargo +1.70 build`) fails with a message naming the required `rust-version`; record the exact message in `specs/001-workspace-ci-foundation/quickstart.md` step 2
+- [X] T023 [US2] Add the `README.md` build-and-test section (English) with the commands for Windows 10/11 and Debian 13 and the prerequisite `rustup` steps (the full guide is T049)
 
 **Checkpoint**: User Stories 1 and 2 work independently
 
