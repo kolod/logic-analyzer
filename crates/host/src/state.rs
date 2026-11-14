@@ -3,9 +3,12 @@
 //! A user interface reads it and never changes it; only [`Shell`](crate::Shell) does, by
 //! executing commands on a working copy and committing the copy when the command succeeds.
 
+use la_devices::{DeviceDescriptor, DeviceId};
 use la_i18n::Language;
 
-use crate::command::Changes;
+use crate::capture::{CaptureView, ProgressView};
+use crate::command::{Changes, Guarded};
+use crate::devices::{ConfigDraft, ConfigProblem};
 use crate::notices::NoticeList;
 use crate::settings::Settings;
 use crate::window::{ViewSize, ViewWindow};
@@ -86,6 +89,22 @@ pub struct State {
     pub view_size: ViewSize,
     /// The visible window.
     pub window: ViewWindow,
+    /// Whether the window shows the whole capture (until the user zooms or pans).
+    pub auto_fit: bool,
+    /// The devices the registry lists.
+    pub devices: Vec<DeviceDescriptor>,
+    /// The selected device.
+    pub selected_device: Option<DeviceId>,
+    /// The configuration being edited.
+    pub config: ConfigDraft,
+    /// What the device would refuse in `config` (empty: Start is possible).
+    pub config_problems: Vec<ConfigProblem>,
+    /// The capture on screen.
+    pub capture: Option<CaptureView>,
+    /// Progress of the running capture, frozen when it ends.
+    pub progress: Option<ProgressView>,
+    /// A command waiting for the user to decide what happens to unsaved data.
+    pub pending_decision: Option<Guarded>,
     /// Whether the view follows the newest data of a running capture.
     pub follow_latest: bool,
     /// The messages for the user.

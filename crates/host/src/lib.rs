@@ -12,7 +12,9 @@
 #![deny(missing_docs)]
 
 pub mod axis;
+pub mod capture;
 mod command;
+pub mod devices;
 pub mod error;
 pub mod notices;
 pub mod plan;
@@ -20,13 +22,16 @@ pub mod presentation;
 pub mod sanitize;
 pub mod settings;
 mod shell;
+pub mod shortcuts;
 mod state;
+pub mod status;
 pub mod window;
 
 pub use command::{
     Changes, Command, ConfigEdit, Decision, Guarded, Outcome, PanStep, Tick, ZoomAnchor,
     ZoomDirection, ZoomFactor,
 };
+pub use devices::SignalProfile;
 pub use shell::{Shell, ShellConfig};
 pub use state::{Activity, State, Unsaved, Versions};
 

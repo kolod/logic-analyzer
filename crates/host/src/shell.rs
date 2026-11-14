@@ -6,14 +6,26 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use la_core::Error;
+use la_devices::{AcquisitionOptions, DeviceDescriptor, DeviceId, DeviceRegistry, RegistryConfig};
 use la_i18n::{Args, Key, Language, Localizer};
+use la_storage::Limits;
 
-use crate::command::{Changes, Command, Outcome, Tick};
+use crate::capture::{
+    CaptureEnd, CaptureOrigin, CaptureView, ProgressView, Running, is_incomplete,
+};
+use crate::command::{Changes, Command, Decision, Guarded, Outcome, Tick};
+use crate::devices::{ConfigDraft, fresh_seed, problems};
 use crate::error;
-use crate::notices::{Notice, NoticeContent, NoticeId, Severity, notice_text};
+use crate::notices::{Notice, NoticeContent, NoticeId, NoticeList, Severity, notice_text};
+use crate::plan::{ChannelView, FramePlan, build_plan};
+use crate::presentation::{Colour, PALETTE_SIZE};
 use crate::settings::{RealSettingsFs, Settings, SettingsFs};
 use crate::state::{Activity, State, Unsaved, Versions};
+use crate::status::{StatusLine, status_line};
 use crate::window::{ViewSize, ViewWindow, WindowLimits};
+
+/// The widest signal area the shell plans for (the storage's default pixel limit).
+const MAX_PLAN_PIXELS: u32 = 16_384;
 
 /// How the shell is set up.
 #[derive(Debug, Clone)]
@@ -38,7 +50,7 @@ impl ShellConfig {
         Self {
             settings_path: directory.join("settings.json"),
             system_languages: Language::system_tags(),
-            log_location: Some(la_diagnostics_log_dir()),
+            log_location: Some(la_diagnostics::LogConfig::default().directory),
         }
     }
 
@@ -53,10 +65,6 @@ impl ShellConfig {
     }
 }
 
-fn la_diagnostics_log_dir() -> PathBuf {
-    la_diagnostics::LogConfig::default().directory
-}
-
 /// Why a command did not complete.
 enum Reject {
     /// Not valid now; nothing to report to the user.
@@ -65,12 +73,24 @@ enum Reject {
     Failed(Error),
 }
 
+/// What a command did.
+enum Executed {
+    /// It ran; these parts changed.
+    Changed(Changes),
+    /// Unsaved data would be lost: the command waits for a decision.
+    Needs(Guarded),
+}
+
 /// The host: state, commands and text.
 pub struct Shell {
     state: State,
     localizer: Localizer,
     config: ShellConfig,
     settings_fs: Arc<dyn SettingsFs>,
+    registry: DeviceRegistry,
+    running: Option<Running>,
+    #[cfg(feature = "test-support")]
+    test_failures: Vec<la_devices::ScriptedFailure>,
 }
 
 fn now_seconds() -> i64 {
@@ -79,42 +99,91 @@ fn now_seconds() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
+/// Adds a notice for `error` to `state` and logs it with its code and technical detail.
+fn report_into(state: &mut State, severity: Severity, error: &Error) -> NoticeId {
+    match severity {
+        Severity::Error => {
+            tracing::error!(target: "la_host", code = error.code(), detail = error.detail(), "failure");
+        }
+        _ => {
+            tracing::warn!(target: "la_host", code = error.code(), detail = error.detail(), "problem");
+        }
+    }
+    let id = state
+        .notices
+        .add(severity, NoticeContent::error(error.code()), now_seconds());
+    state.versions.bump(Changes::NOTICES);
+    id
+}
+
+/// The limits a capture is created with, from the user's memory limit.
+fn capture_limits(settings: &Settings) -> Limits {
+    Limits {
+        memory_budget_bytes: settings.memory_limit_bytes,
+        ..Limits::default()
+    }
+}
+
+fn window_limits(capture_length: u64, pixels: u32) -> WindowLimits {
+    WindowLimits {
+        capture_length,
+        pixels,
+    }
+}
+
 impl Shell {
     /// Builds the shell: loads the settings (a problem becomes a notice, never a failure), chooses
-    /// the language and starts without a capture.
+    /// the language, lists the devices and starts without a capture.
     #[must_use]
     pub fn new(config: ShellConfig) -> Self {
         let settings_fs: Arc<dyn SettingsFs> = Arc::new(RealSettingsFs);
         let loaded = Settings::load(settings_fs.as_ref(), &config.settings_path);
         let system: Vec<&str> = config.system_languages.iter().map(String::as_str).collect();
         let localizer = Localizer::from_settings(loaded.settings.language.as_deref(), &system);
+        let registry = DeviceRegistry::new(RegistryConfig::default());
         let view_size = ViewSize::default();
-        let limits = WindowLimits {
-            capture_length: 0,
-            pixels: view_size.pixels,
-        };
-        let state = State {
+        let devices = registry.list();
+        let selected = default_device(&devices);
+        let draft = selected
+            .and_then(|id| devices.iter().find(|d| d.id == *id))
+            .map_or_else(
+                || ConfigDraft::for_device(&la_devices::virtual_descriptor().capabilities),
+                |d| ConfigDraft::for_device(&d.capabilities),
+            );
+        let mut state = State {
             version: 0,
             versions: Versions::default(),
             activity: Activity::Idle,
             unsaved: Unsaved::Clean,
             view_size,
-            window: ViewWindow::fit_all(&limits),
+            window: ViewWindow::fit_all(&window_limits(0, view_size.pixels)),
+            auto_fit: true,
+            selected_device: selected.cloned(),
+            devices,
+            config: draft,
+            config_problems: Vec::new(),
+            capture: None,
+            progress: None,
+            pending_decision: None,
             follow_latest: loaded.settings.follow_latest,
-            notices: crate::notices::NoticeList::new(),
+            notices: NoticeList::new(),
             language: localizer.language(),
             settings: loaded.settings,
         };
-        let mut shell = Shell {
+        revalidate(&mut state);
+        if let Some(problem) = loaded.problem {
+            report_into(&mut state, Severity::Warning, &problem);
+        }
+        Shell {
             state,
             localizer,
             config,
             settings_fs,
-        };
-        if let Some(problem) = loaded.problem {
-            shell.report_with(Severity::Warning, &problem);
+            registry,
+            running: None,
+            #[cfg(feature = "test-support")]
+            test_failures: Vec::new(),
         }
-        shell
     }
 
     /// The current state.
@@ -141,10 +210,26 @@ impl Shell {
         notice_text(notice, &self.localizer)
     }
 
+    /// The status line in the current language.
+    #[must_use]
+    pub fn status_line(&self) -> StatusLine {
+        status_line(&self.state, &self.localizer)
+    }
+
+    /// The table of actions with their menu paths and shortcuts.
+    #[must_use]
+    pub fn shortcut_table(&self) -> Vec<crate::shortcuts::ShortcutEntry> {
+        crate::shortcuts::table()
+    }
+
     /// How often the shell wants to be polled.
     #[must_use]
     pub fn wants_ticks(&self) -> Tick {
-        Tick::Slow
+        if self.running.is_some() {
+            Tick::Fast
+        } else {
+            Tick::Slow
+        }
     }
 
     /// Where the log files are, if known.
@@ -153,10 +238,160 @@ impl Shell {
         self.config.log_location.as_deref()
     }
 
-    /// Collects what happened in the background since the last call: device events, capture and
-    /// operation progress. Reports which parts of the state changed.
-    pub fn poll(&mut self, _now: Instant) -> Changes {
-        Changes::NONE
+    /// Scripts failures into the next captures of the virtual device (tests and failure checks).
+    #[cfg(feature = "test-support")]
+    pub fn script_failures(&mut self, failures: Vec<la_devices::ScriptedFailure>) {
+        self.test_failures = failures;
+    }
+
+    /// The plan of the signal view for a signal area of `size`: a pure function of the state and
+    /// the size, with the cost bound of constitution Principle VIII.
+    #[must_use]
+    pub fn frame_plan(&self, size: ViewSize) -> FramePlan {
+        let pixels = size.pixels.clamp(1, MAX_PLAN_PIXELS);
+        let capture = self.state.capture.as_ref();
+        let length = capture.map_or(0, |c| c.snapshot.length());
+        let limits = window_limits(length, pixels);
+        let window = if self.state.auto_fit {
+            ViewWindow::fit_all(&limits)
+        } else {
+            self.state.window.clamp(&limits)
+        };
+        let channels: Vec<ChannelView> = capture
+            .map(CaptureView::enabled_channels)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|channel| ChannelView {
+                channel,
+                name: String::new(),
+                colour: Colour::Palette(channel % PALETTE_SIZE),
+            })
+            .collect();
+        build_plan(capture.map(|c| &c.snapshot), &window, pixels, &channels)
+    }
+
+    /// Collects what happened in the background since the last call: device changes, capture
+    /// progress and the end of a capture. Reports which parts of the state changed. A panic inside
+    /// is contained like one inside a command.
+    pub fn poll(&mut self, now: Instant) -> Changes {
+        let mut working = self.state.clone();
+        let result = catch_unwind(AssertUnwindSafe(|| self.poll_inner(&mut working, now)));
+        match result {
+            Ok(changes) => {
+                if !changes.is_empty() {
+                    working.version = working.version.saturating_add(1);
+                    working.versions.bump(changes);
+                    self.state = working;
+                }
+                changes
+            }
+            Err(_) => {
+                tracing::error!(target: "la_host", "polling panicked");
+                let error = error::internal("polling the background work panicked");
+                report_into(&mut self.state, Severity::Error, &error);
+                Changes::NOTICES
+            }
+        }
+    }
+
+    fn poll_inner(&mut self, state: &mut State, now: Instant) -> Changes {
+        let mut changes = self.poll_devices(state);
+        changes.insert(self.poll_capture(state, now));
+        changes
+    }
+
+    /// Brings the device list up to date; a vanished selection falls back to the default device.
+    fn poll_devices(&mut self, state: &mut State) -> Changes {
+        let list = self.registry.list();
+        if list == state.devices {
+            return Changes::NONE;
+        }
+        state.devices = list;
+        let mut changes = Changes::DEVICES;
+        let still_there = state
+            .selected_device
+            .as_ref()
+            .is_some_and(|id| state.devices.iter().any(|d| d.id == *id));
+        if !still_there && state.activity == Activity::Idle {
+            let fallback = default_device(&state.devices).cloned();
+            let name = state
+                .selected_device
+                .as_ref()
+                .map_or_else(String::new, ToString::to_string);
+            if let Some(id) = fallback {
+                select_device(state, &id);
+            } else {
+                state.selected_device = None;
+                state.config_problems.clear();
+            }
+            state.notices.add(
+                Severity::Info,
+                NoticeContent::info("notice-device-removed", Some(name)),
+                now_seconds(),
+            );
+            changes.insert(Changes::CONFIG | Changes::NOTICES);
+        }
+        changes
+    }
+
+    /// Follows the running capture and finishes it when the acquisition has an outcome.
+    fn poll_capture(&mut self, state: &mut State, now: Instant) -> Changes {
+        let Some(run) = &self.running else {
+            return Changes::NONE;
+        };
+        let mut changes = Changes::NONE;
+        let acquisition = &run.acquisition;
+        let _ = acquisition.drain_events();
+        let progress = acquisition.progress();
+        let snapshot = acquisition.capture().snapshot();
+        let outcome = acquisition.outcome();
+        let elapsed_ms = u64::try_from(now.saturating_duration_since(run.started).as_millis())
+            .unwrap_or(u64::MAX);
+        let view = ProgressView {
+            elapsed_ms,
+            samples: progress.samples_captured,
+            positions: progress.positions,
+            memory_used: snapshot.memory_used(),
+            memory_limit: run.memory_limit,
+            planned: run.planned,
+        };
+        if state.progress.as_ref() != Some(&view) {
+            state.progress = Some(view);
+            changes.insert(Changes::PROGRESS);
+        }
+        let description = acquisition.description();
+        let end = outcome.as_ref().map(CaptureEnd::from_outcome);
+        let grown = state
+            .capture
+            .as_ref()
+            .is_none_or(|c| c.snapshot.length() != snapshot.length() || c.end != end);
+        if grown || outcome.is_some() {
+            state.capture = Some(CaptureView {
+                incomplete: is_incomplete(&snapshot) || end.is_some_and(CaptureEnd::is_abnormal),
+                simulated: description.simulated(),
+                snapshot: snapshot.clone(),
+                description,
+                origin: CaptureOrigin::Acquired,
+                end,
+            });
+            changes.insert(Changes::CAPTURE);
+            if state.auto_fit {
+                state.window =
+                    ViewWindow::fit_all(&window_limits(snapshot.length(), state.view_size.pixels));
+                changes.insert(Changes::WINDOW);
+            }
+        }
+        if let Some(outcome) = outcome {
+            if let Some(error) = &outcome.error {
+                report_into(state, Severity::Error, error);
+                changes.insert(Changes::NOTICES);
+            }
+            state.activity = Activity::Idle;
+            state.unsaved = Unsaved::Dirty;
+            changes.insert(Changes::ACTIVITY);
+            self.running = None;
+        }
+        changes
     }
 
     /// Executes one command. A panic inside it is contained: the state stays as it was and the
@@ -167,7 +402,7 @@ impl Shell {
         let mut working = self.state.clone();
         let result = catch_unwind(AssertUnwindSafe(|| self.execute(&mut working, command)));
         match result {
-            Ok(Ok(changes)) => {
+            Ok(Ok(Executed::Changed(changes))) => {
                 if !changes.is_empty() {
                     working.version = working.version.saturating_add(1);
                     working.versions.bump(changes);
@@ -175,51 +410,97 @@ impl Shell {
                 self.state = working;
                 Outcome::Done(changes)
             }
+            Ok(Ok(Executed::Needs(guarded))) => {
+                working.pending_decision = Some(guarded.clone());
+                working.version = working.version.saturating_add(1);
+                working.versions.bump(Changes::DECISION);
+                self.state = working;
+                Outcome::NeedsDecision(guarded)
+            }
             Ok(Err(Reject::Ignored(code))) => {
                 tracing::debug!(target: "la_host", command = name, code, "command ignored");
                 Outcome::Ignored(code)
             }
-            Ok(Err(Reject::Failed(error))) => Outcome::Failed(self.report(&error)),
+            Ok(Err(Reject::Failed(error))) => {
+                Outcome::Failed(report_into(&mut self.state, Severity::Error, &error))
+            }
             Err(_) => {
                 tracing::error!(target: "la_host", command = name, "a command panicked");
                 let error = error::internal(format!("the command {name} panicked"));
-                Outcome::Failed(self.report(&error))
+                Outcome::Failed(report_into(&mut self.state, Severity::Error, &error))
             }
         }
-    }
-
-    /// Adds a notice for `error` and logs it with its code and technical detail.
-    fn report(&mut self, error: &Error) -> NoticeId {
-        self.report_with(Severity::Error, error)
-    }
-
-    fn report_with(&mut self, severity: Severity, error: &Error) -> NoticeId {
-        match severity {
-            Severity::Error => {
-                tracing::error!(target: "la_host", code = error.code(), detail = error.detail(), "failure");
-            }
-            _ => {
-                tracing::warn!(target: "la_host", code = error.code(), detail = error.detail(), "problem");
-            }
-        }
-        let id =
-            self.state
-                .notices
-                .add(severity, NoticeContent::error(error.code()), now_seconds());
-        self.state.versions.bump(Changes::NOTICES);
-        id
     }
 
     /// Runs `command` against the working copy `state`.
-    fn execute(&mut self, state: &mut State, command: Command) -> Result<Changes, Reject> {
+    fn execute(&mut self, state: &mut State, command: Command) -> Result<Executed, Reject> {
+        let changed = |changes: Changes| Ok(Executed::Changed(changes));
         match command {
             Command::DismissNotice(id) => {
                 state.notices.dismiss(id);
-                Ok(Changes::NOTICES)
+                changed(Changes::NOTICES)
             }
             Command::DismissAllNotices => {
                 state.notices.dismiss_all();
-                Ok(Changes::NOTICES)
+                changed(Changes::NOTICES)
+            }
+            Command::RefreshDevices => {
+                let list = self.registry.list();
+                if list == state.devices {
+                    return changed(Changes::NONE);
+                }
+                state.devices = list;
+                changed(Changes::DEVICES)
+            }
+            Command::SelectDevice(id) => {
+                if state.activity != Activity::Idle || !state.devices.iter().any(|d| d.id == id) {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                select_device(state, &id);
+                changed(Changes::DEVICES | Changes::CONFIG)
+            }
+            Command::EditConfig(edit) => {
+                if state.activity != Activity::Idle {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                state.config.apply(edit);
+                revalidate(state);
+                changed(Changes::CONFIG)
+            }
+            Command::StartCapture => self.start_capture(state),
+            Command::StopCapture => {
+                let Some(run) = &self.running else {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                };
+                run.acquisition.stop();
+                changed(Changes::NONE)
+            }
+            Command::NewCapture => {
+                if state.capture.is_none() && state.activity == Activity::Idle {
+                    return changed(Changes::NONE);
+                }
+                if state.unsaved != Unsaved::Clean || self.running.is_some() {
+                    return Ok(self.guard(Guarded::NewCapture));
+                }
+                clear_capture(state);
+                changed(Changes::CAPTURE | Changes::PROGRESS | Changes::WINDOW)
+            }
+            Command::RequestClose => self.quit_or_guard(state, Guarded::Close),
+            Command::Quit => self.quit_or_guard(state, Guarded::Quit),
+            Command::Decide(decision) => self.decide(state, decision),
+            Command::SetViewSize(size) => {
+                if size.pixels == 0 || size == state.view_size {
+                    return changed(Changes::NONE);
+                }
+                state.view_size = size;
+                let length = state.capture.as_ref().map_or(0, |c| c.snapshot.length());
+                let limits = window_limits(length, size.pixels.min(MAX_PLAN_PIXELS));
+                state.window = if state.auto_fit {
+                    ViewWindow::fit_all(&limits)
+                } else {
+                    state.window.clamp(&limits)
+                };
+                changed(Changes::WINDOW)
             }
             #[cfg(feature = "test-support")]
             #[allow(clippy::panic, reason = "provokes a contained panic for the tests")]
@@ -236,4 +517,183 @@ impl Shell {
             }
         }
     }
+
+    /// Stops a running capture (its data is kept) and asks the user what to do with unsaved data.
+    fn guard(&mut self, guarded: Guarded) -> Executed {
+        if let Some(run) = &self.running {
+            run.acquisition.stop();
+        }
+        Executed::Needs(guarded)
+    }
+
+    fn quit_or_guard(&mut self, state: &State, guarded: Guarded) -> Result<Executed, Reject> {
+        if state.unsaved != Unsaved::Clean || self.running.is_some() {
+            return Ok(self.guard(guarded));
+        }
+        Ok(Executed::Changed(Changes::QUIT))
+    }
+
+    fn decide(&mut self, state: &mut State, decision: Decision) -> Result<Executed, Reject> {
+        let Some(guarded) = state.pending_decision.clone() else {
+            return Err(Reject::Ignored(error::INVALID_COMMAND));
+        };
+        match decision {
+            Decision::Cancel => {
+                state.pending_decision = None;
+                Ok(Executed::Changed(Changes::DECISION))
+            }
+            // Saving first arrives with the session operations.
+            Decision::Save => Err(Reject::Ignored(error::INVALID_COMMAND)),
+            Decision::Discard => {
+                state.pending_decision = None;
+                // The data is thrown away: let the acquisition end unobserved.
+                if let Some(run) = self.running.take() {
+                    run.acquisition.stop();
+                }
+                let mut changes = Changes::DECISION;
+                match guarded {
+                    Guarded::NewCapture => {
+                        clear_capture(state);
+                        changes.insert(Changes::CAPTURE | Changes::PROGRESS | Changes::WINDOW);
+                    }
+                    Guarded::StartCapture => {
+                        clear_capture(state);
+                        let Executed::Changed(started) = self.begin_capture(state)? else {
+                            return Err(Reject::Ignored(error::INVALID_COMMAND));
+                        };
+                        changes.insert(started);
+                    }
+                    Guarded::Close | Guarded::Quit => changes.insert(Changes::QUIT),
+                    Guarded::OpenSession(_) => {
+                        return Err(Reject::Ignored(error::INVALID_COMMAND));
+                    }
+                }
+                Ok(Executed::Changed(changes))
+            }
+        }
+    }
+
+    fn start_capture(&mut self, state: &mut State) -> Result<Executed, Reject> {
+        if state.activity != Activity::Idle
+            || state.selected_device.is_none()
+            || !state.config_problems.is_empty()
+        {
+            return Err(Reject::Ignored(error::INVALID_COMMAND));
+        }
+        if state.capture.is_some() && state.unsaved != Unsaved::Clean {
+            return Ok(self.guard(Guarded::StartCapture));
+        }
+        self.begin_capture(state)
+    }
+
+    /// Starts the acquisition for the selected device with the validated draft.
+    fn begin_capture(&mut self, state: &mut State) -> Result<Executed, Reject> {
+        let device: DeviceDescriptor = state
+            .selected_device
+            .as_ref()
+            .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+            .cloned()
+            .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+        let seed = state.config.seed.unwrap_or_else(fresh_seed);
+        #[cfg(feature = "test-support")]
+        let failures = self.test_failures.clone();
+        #[cfg(not(feature = "test-support"))]
+        let failures = Vec::new();
+        let config = state.config.to_device_config(&device, seed, &failures);
+        let limits = capture_limits(&state.settings);
+        let options = AcquisitionOptions {
+            limits,
+            chunk_samples: chunk_samples_for(
+                limits.memory_budget_bytes,
+                device.capabilities.channels,
+            ),
+            ..AcquisitionOptions::default()
+        };
+        let acquisition = self
+            .registry
+            .start(&device.id, config, options)
+            .map_err(Reject::Failed)?;
+        let snapshot = acquisition.capture().snapshot();
+        let description = acquisition.description();
+        state.capture = Some(CaptureView::new(
+            snapshot,
+            description,
+            CaptureOrigin::Acquired,
+            None,
+        ));
+        state.progress = Some(ProgressView {
+            elapsed_ms: 0,
+            samples: 0,
+            positions: 0,
+            memory_used: 0,
+            memory_limit: limits.memory_budget_bytes,
+            planned: Some(state.config.length),
+        });
+        state.activity = Activity::Capturing;
+        state.unsaved = Unsaved::Running;
+        state.auto_fit = true;
+        state.pending_decision = None;
+        state.window = ViewWindow::fit_all(&window_limits(0, state.view_size.pixels));
+        self.running = Some(Running {
+            acquisition,
+            started: Instant::now(),
+            memory_limit: limits.memory_budget_bytes,
+            planned: Some(state.config.length),
+        });
+        Ok(Executed::Changed(
+            Changes::ACTIVITY
+                | Changes::CAPTURE
+                | Changes::PROGRESS
+                | Changes::WINDOW
+                | Changes::DECISION,
+        ))
+    }
+}
+
+/// The chunk size of an acquisition: storing a chunk needs up to `4 × samples × channels` bytes
+/// of temporary memory, which must stay well inside the memory budget (an eighth of it).
+fn chunk_samples_for(budget_bytes: u64, channels: u8) -> usize {
+    let per_sample = u64::from(channels.max(1)).saturating_mul(32);
+    let samples = budget_bytes.checked_div(per_sample).unwrap_or(0);
+    usize::try_from(samples.clamp(64, 16_384)).unwrap_or(16_384)
+}
+
+/// The device selected when nothing else is: the first simulated one, else the first.
+fn default_device(devices: &[DeviceDescriptor]) -> Option<&DeviceId> {
+    devices
+        .iter()
+        .find(|d| d.simulated)
+        .or_else(|| devices.first())
+        .map(|d| &d.id)
+}
+
+/// Selects `id` and resets the draft to the defaults of that device.
+fn select_device(state: &mut State, id: &DeviceId) {
+    state.selected_device = Some(id.clone());
+    if let Some(device) = state.devices.iter().find(|d| d.id == *id) {
+        state.config = ConfigDraft::for_device(&device.capabilities);
+    }
+    revalidate(state);
+}
+
+/// Checks the draft against the selected device and the memory limit.
+fn revalidate(state: &mut State) {
+    let limits = capture_limits(&state.settings);
+    state.config_problems = state
+        .selected_device
+        .as_ref()
+        .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+        .map(|device| problems(device, &state.config, &limits))
+        .unwrap_or_default();
+}
+
+/// Removes the capture and everything about it.
+fn clear_capture(state: &mut State) {
+    state.capture = None;
+    state.progress = None;
+    state.activity = Activity::Idle;
+    state.unsaved = Unsaved::Clean;
+    state.auto_fit = true;
+    state.pending_decision = None;
+    state.window = ViewWindow::fit_all(&window_limits(0, state.view_size.pixels));
 }

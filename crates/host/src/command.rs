@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use la_devices::{DeviceId, Trigger};
 use la_i18n::Language;
 
+use crate::devices::SignalProfile;
 use crate::notices::NoticeId;
 use crate::presentation::Colour;
 use crate::settings::Theme;
@@ -27,8 +28,13 @@ pub enum ConfigEdit {
     Trigger(Option<Trigger>),
     /// The seed of the virtual device, or none for a fresh one.
     Seed(Option<u64>),
-    /// The signal profile of the virtual device, by name.
-    Profile(String),
+    /// The signal profile of the virtual device.
+    Profile(SignalProfile),
+    /// Whether the virtual device is paced in real time (otherwise it runs as fast as it can).
+    Realtime(bool),
+    /// Whether to start a finite capture although its worst-case storage cost exceeds the
+    /// memory limit (the capture then ends cleanly if the limit is really reached).
+    AcceptBudgetRisk(bool),
 }
 
 /// How much the view zooms: the new length is `length × numerator / denominator`.
