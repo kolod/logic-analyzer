@@ -75,7 +75,7 @@ pub trait Transport: Send {
 7. **Flow control**: a device whose data arrives at its own pace and cannot wait (real
    hardware) keeps the default `Flow::Realtime`: if the store is slower, the core records
    the excess positions as lost (never silently). A device that produces data on demand
-   (the virtual device in fast mode) returns `Flow::Throttleable`: the core then holds it
+   (the virtual device, in every pacing mode) returns `Flow::Throttleable`: the core then holds it
    back while the store catches up, so a slow store never causes a loss.
 
 ## What the core guarantees

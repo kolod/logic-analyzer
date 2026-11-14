@@ -7,6 +7,7 @@
 
 use std::fmt;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use la_core::Result;
 
@@ -163,13 +164,42 @@ impl DeviceProvider for VirtualProvider {
     }
 }
 
+/// Produces the samples of one acquisition: the random generator or a custom source.
+enum Producer {
+    Random(RandomGenerator),
+    Source(Box<dyn SignalSource>),
+}
+
+impl Producer {
+    /// Fills `out` with the samples for the capture positions `start ..`.
+    fn fill(&mut self, start: u64, out: &mut [u32]) {
+        match self {
+            Self::Random(generator) => generator.fill(out),
+            Self::Source(source) => source.fill(start, out),
+        }
+    }
+}
+
 /// The virtual device.
-#[derive(Debug)]
 pub struct VirtualDevice {
     descriptor: DeviceDescriptor,
-    generator: Option<RandomGenerator>,
+    producer: Option<Producer>,
     remaining: Option<u64>,
     pacing: Pacing,
+    /// Samples produced so far (the capture position of the next sample).
+    position: u64,
+    sample_rate_hz: u64,
+    started: Option<Instant>,
+}
+
+impl fmt::Debug for VirtualDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VirtualDevice")
+            .field("pacing", &self.pacing)
+            .field("position", &self.position)
+            .field("remaining", &self.remaining)
+            .finish_non_exhaustive()
+    }
 }
 
 impl VirtualDevice {
@@ -178,10 +208,28 @@ impl VirtualDevice {
     pub fn new() -> Self {
         Self {
             descriptor: virtual_descriptor(),
-            generator: None,
+            producer: None,
             remaining: None,
             pacing: Pacing::Fast,
+            position: 0,
+            sample_rate_hz: 1,
+            started: None,
         }
+    }
+
+    /// How many samples may be released now in real time: those whose time has come.
+    fn due(&self) -> u64 {
+        let Some(started) = self.started else {
+            return 0;
+        };
+        let due = started
+            .elapsed()
+            .as_nanos()
+            .saturating_mul(u128::from(self.sample_rate_hz))
+            / 1_000_000_000;
+        u64::try_from(due)
+            .unwrap_or(u64::MAX)
+            .saturating_sub(self.position)
     }
 }
 
@@ -197,12 +245,10 @@ impl Device for VirtualDevice {
     }
 
     fn flow(&self) -> Flow {
-        // As fast as the store accepts: the device waits for the store and never loses data.
-        // In real time it cannot wait, like real hardware.
-        match self.pacing {
-            Pacing::Fast => Flow::Throttleable,
-            Pacing::Realtime => Flow::Realtime,
-        }
+        // The virtual device can always wait for the store, also when paced in real time:
+        // pacing only decides when samples are released, and the device never loses samples
+        // on its own (losses are simulated only when a failure script asks for them).
+        Flow::Throttleable
     }
 
     fn start(&mut self, config: &ResolvedConfig) -> Result<AppliedConfig> {
@@ -211,35 +257,58 @@ impl Device for VirtualDevice {
             _ => VirtualOptions::default(),
         };
         options.validate()?;
-        self.generator = Some(RandomGenerator::new(
-            config.enabled_channels(),
-            options.seed,
-            options.mean_gap,
-        ));
+        self.producer = Some(match &options.source {
+            Some(factory) => Producer::Source(factory.create(
+                config.enabled_channels(),
+                config.sample_rate_hz(),
+                options.seed,
+            )),
+            None => Producer::Random(RandomGenerator::new(
+                config.enabled_channels(),
+                options.seed,
+                options.mean_gap,
+            )),
+        });
         self.remaining = config.capture_length();
         self.pacing = options.pacing;
+        self.sample_rate_hz = config.sample_rate_hz();
+        self.position = 0;
+        self.started = Some(Instant::now());
         Ok(AppliedConfig::new(config.sample_rate_hz()))
     }
 
     fn read(&mut self, max_samples: usize, out: &mut Vec<u32>) -> Result<ReadOutcome> {
-        let Some(generator) = self.generator.as_mut() else {
-            return Err(error::invalid_state(
-                "the virtual device was read before it was started".to_owned(),
-            ));
-        };
         let wanted = match self.remaining {
             Some(0) => return Ok(ReadOutcome::Finished),
             Some(left) => usize::try_from(left).unwrap_or(usize::MAX).min(max_samples),
             None => max_samples,
         };
+        let wanted = if self.pacing == Pacing::Realtime {
+            let due = usize::try_from(self.due()).unwrap_or(usize::MAX);
+            if due == 0 {
+                // Nothing is due yet: wait a little (short slices keep stop responsive).
+                std::thread::sleep(Duration::from_millis(1));
+                return Ok(ReadOutcome::Idle);
+            }
+            wanted.min(due)
+        } else {
+            wanted
+        };
         if wanted == 0 {
             return Ok(ReadOutcome::Idle);
         }
+        let Some(producer) = self.producer.as_mut() else {
+            return Err(error::invalid_state(
+                "the virtual device was read before it was started".to_owned(),
+            ));
+        };
         out.clear();
         out.resize(wanted, 0);
-        generator.fill(out);
+        producer.fill(self.position, out);
+        let produced = u64::try_from(wanted).unwrap_or(u64::MAX);
+        self.position = self.position.saturating_add(produced);
         if let Some(left) = self.remaining.as_mut() {
-            *left = left.saturating_sub(u64::try_from(wanted).unwrap_or(u64::MAX));
+            *left = left.saturating_sub(produced);
         }
         Ok(ReadOutcome::Samples)
     }
