@@ -256,6 +256,9 @@ impl Capture {
         let ingested = ingest_chunk(samples, self.last_word, self.config.channels);
 
         // Prepare the new state of every channel without touching shared state.
+        // Bounded by the validated channel count (at most 32); no allocation below is sized
+        // from an unvalidated caller value (FR-018): the chunk length was checked against
+        // `max_chunk_samples` and the memory budget above.
         let mut prepared = Vec::with_capacity(self.channels.len());
         for (state, relative) in self.channels.iter().zip(&ingested.per_channel) {
             let mut open = state.open.clone();
