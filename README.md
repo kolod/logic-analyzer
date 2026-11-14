@@ -5,8 +5,10 @@ The main goal is a program that is stable: it does not crash and does not lose d
 
 **Status**: early development. The foundation (workspace, CI, error model, logging,
 worker panic containment) and the signal storage core (`la-storage`: transition-based
-storage, fast viewport queries, bounded memory, gaps) exist so far; there is no UI or
-device support yet. See [roadmap.md](roadmap.md).
+storage, fast viewport queries, bounded memory, gaps) and the device layer
+(`la-devices`: device abstraction, background acquisition into the store, failure handling
+that keeps captured data, an always-available seeded virtual device, and a hardware-free
+test harness) exist so far; there is no UI and there are no real hardware drivers yet. See [roadmap.md](roadmap.md).
 
 Supported operating systems: Windows 10/11 and Debian 13.
 

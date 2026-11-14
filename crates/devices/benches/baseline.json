@@ -1,0 +1,13 @@
+{
+  "machine": {"os":"windows","arch":"x86_64","cpu":"Intel64 Family 6 Model 183 Stepping 1, GenuineIntel","cores":32},
+  "virtual": {
+    "1ch_sparse": {"msps": 975.5, "lost": 0},
+    "1ch_typical": {"msps": 760.6, "lost": 0},
+    "8ch_sparse": {"msps": 813.5, "lost": 0},
+    "8ch_typical": {"msps": 286.6, "lost": 0},
+    "16ch_sparse": {"msps": 625.0, "lost": 0},
+    "16ch_typical": {"msps": 154.4, "lost": 0},
+    "32ch_sparse": {"msps": 478.7, "lost": 0},
+    "32ch_typical": {"msps": 79.9, "lost": 0}
+  }
+}

@@ -54,9 +54,10 @@ closed: append() and record_gap() fail with storage.closed
 | Field | Type | Meaning |
 |-------|------|---------|
 | `state` | `InProgress` / `Closed` | the producer has called `close()` or not |
-| `complete` | `bool` | `Closed` AND no lost positions AND not stopped by limit |
+| `complete` | `bool` | `Closed` AND no lost positions AND not stopped by limit AND not interrupted |
 | `lost_positions` | `u64` | sum of all gap lengths |
 | `stopped_by_limit` | `bool` | an append was rejected because of the memory budget |
+| `interrupted` | `bool` | the capture was ended by a failure outside it via `close_interrupted()` (added by feature 004) |
 
 `complete` is false for every capture that is not closed, so a capture is never
 presented as complete before it is finished (FR-024).

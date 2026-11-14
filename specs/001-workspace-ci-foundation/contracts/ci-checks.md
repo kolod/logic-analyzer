@@ -21,7 +21,7 @@ running in a `debian:trixie` container).
 | Check name | OS | Command | Behavior |
 |------------|----|---------|----------|
 | `commits` | debian | `scripts/check-commits.sh <base>..<head>` | Reports commit messages that do not match Conventional Commits with a scope; `continue-on-error`, warning only. |
-| `bench (windows)` / `bench (debian)` | both | `cargo bench -p la-storage --bench viewport` and `--bench ingest` (workflow `bench.yml`, manual and weekly) | Records timing numbers as artifacts to compare with `crates/storage/benches/baseline.json`; never blocks. The merge-blocking complexity check is the deterministic probe-count test `crates/storage/tests/complexity.rs`, part of `cargo test`. |
+| `bench (windows)` / `bench (debian)` | both | `cargo bench -p la-storage --bench viewport`, `--bench ingest` and `cargo bench -p la-devices --bench virtual_throughput` (workflow `bench.yml`, manual and weekly) | Records timing numbers as artifacts to compare with `crates/storage/benches/baseline.json` and `crates/devices/benches/baseline.json`; never blocks. The merge-blocking complexity check is the deterministic probe-count test `crates/storage/tests/complexity.rs`, part of `cargo test`. |
 
 ## Rules
 

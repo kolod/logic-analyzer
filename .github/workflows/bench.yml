@@ -5,6 +5,8 @@
 # test in crates/storage/tests/complexity.rs, which runs in the normal CI. This workflow
 # records the numbers as artifacts so trends can be compared with
 # crates/storage/benches/baseline.json (recorded on the maintainer machine).
+# The virtual device throughput benchmark (specs/004-device-abstraction-virtual-device, SC-010)
+# is recorded the same way against crates/devices/benches/baseline.json.
 
 name: Benchmarks
 
@@ -46,9 +48,14 @@ jobs:
       - name: Ingestion benchmark
         run: cargo bench -p la-storage --bench ingest
         continue-on-error: true
+      - name: Virtual device throughput benchmark
+        run: cargo bench -p la-devices --bench virtual_throughput
+        continue-on-error: true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: bench-${{ matrix.name }}
-          path: target/la-storage-bench/*.json
+          path: |
+            target/la-storage-bench/*.json
+            target/la-devices-bench/*.json
           if-no-files-found: warn

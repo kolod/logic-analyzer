@@ -101,10 +101,14 @@ impl Gap {
 pub struct CaptureStatus {
     /// The producer closed the capture.
     pub closed: bool,
-    /// Closed, with no lost positions and not stopped by the memory limit.
+    /// Closed, with no lost positions, not stopped by the memory limit and not
+    /// interrupted by a failure.
     pub complete: bool,
     /// Sum of all gap lengths.
     pub lost_positions: u64,
     /// An append was rejected because of the memory budget.
     pub stopped_by_limit: bool,
+    /// The capture was ended by a failure outside it (for example a device was
+    /// unplugged); data that should have followed is missing even if no gap was recorded.
+    pub interrupted: bool,
 }
