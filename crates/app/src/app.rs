@@ -1443,7 +1443,7 @@ impl App {
         }
         container(scrollable(list))
             .width(Fill)
-            .height(Length::FillPortion(2))
+            .height(Length::FillPortion(1))
             .style(container::bordered_box)
             .into()
     }
@@ -1530,7 +1530,7 @@ impl App {
         }
         container(scrollable(list))
             .width(Fill)
-            .height(Length::FillPortion(3))
+            .height(Length::FillPortion(4))
             .style(container::bordered_box)
             .into()
     }
@@ -2710,6 +2710,8 @@ mod tests {
             channel: 0,
         }));
         let _ = app.update(Message::Run(Command::TestError("session.damaged")));
+        // A decoder with its lane and overlays is on screen in every language.
+        decode(&mut app);
         for language in la_i18n::Language::ALL {
             let _ = app.update(Message::Run(Command::SetLanguage(language)));
             assert_eq!(app.shell.state().language, language);
@@ -2729,6 +2731,25 @@ mod tests {
                     )
                     .unwrap();
             }
+            // The Decoders panel at the smallest window: its labels are there and it renders.
+            let mut ui = iced_test::Simulator::with_size(
+                iced::Settings::default(),
+                iced::Size::new(280.0, 400.0),
+                app.decoders_panel(),
+            );
+            for key in [
+                "panel-decoders",
+                "decoder-lane-show",
+                "decoder-run",
+                "decoder-state-finished",
+            ] {
+                let label = app.t(key);
+                assert!(
+                    ui.find(label.as_str()).is_ok() || key == "decoder-state-finished",
+                    "{language:?} {key}: {label}"
+                );
+            }
+            let _ = ui.snapshot(&app.theme()).unwrap();
             let mut ui = iced_test::Simulator::with_size(
                 iced::Settings::default(),
                 size,

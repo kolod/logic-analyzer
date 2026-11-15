@@ -93,6 +93,8 @@ pub struct SpanCell {
     pub id: u64,
     /// Its first position (with the id it finds the annotation again).
     pub start: u64,
+    /// Its end position.
+    pub end: u64,
     /// The left edge in columns (clamped to the window).
     pub x0: f64,
     /// The right edge in columns (clamped to the window).
@@ -112,6 +114,10 @@ pub struct MarkCell {
     pub id: u64,
     /// Its position (with the id it finds the annotation again).
     pub start: u64,
+    /// Its end position (equal to `start` unless it is a range narrower than a column).
+    pub end: u64,
+    /// The text.
+    pub text: Text,
     /// The position in columns.
     pub x: f64,
     /// Colour and shape.
@@ -210,6 +216,7 @@ fn piece(entry: &Entry, window: &Window) -> Piece {
                 cell: Cell::Span(SpanCell {
                     id: entry.id,
                     start,
+                    end,
                     x0,
                     x1,
                     style: annotation.style,
@@ -233,6 +240,8 @@ fn piece(entry: &Entry, window: &Window) -> Piece {
         cell: Cell::Mark(MarkCell {
             id: entry.id,
             start,
+            end,
+            text: annotation.text.clone(),
             x,
             style: annotation.style,
             edge,

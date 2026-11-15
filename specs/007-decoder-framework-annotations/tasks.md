@@ -273,15 +273,15 @@ and newer files (spec US5, SC-008)
 
 ### Tests first
 
-- [ ] T073 [P] [US7] Write `crates/host/tests/decoder_language.rs`: after `SetLanguage` the decoder names, descriptions, signal and option labels, state names and the standard annotation texts of built-in decoders change at once (in the catalogue, the instances and the lane plan), literal annotation text and instance names are unchanged, and notices follow the language
-- [ ] T074 [P] [US7] Extend `every_screen_renders_in_every_language_at_the_minimum_window_size` in `crates/app/src/app.rs` with the add dialog, the configuration form (including the generator options and an option with a long label), the Decoders panel with every state, and a lane with long annotation text and overlays; add unit tests of the drawing rules of `decoder-ui.md` (ellipsis, no text under three characters, no overlap with a neighbour, the later cell shortened); confirm that `crates/host/tests/string_budget.rs` still catches an over-long fixture and now covers the new keys
+- [X] T073 [P] [US7] Write `crates/host/tests/decoder_language.rs`: after `SetLanguage` the decoder names, descriptions, signal and option labels, state names and the standard annotation texts of built-in decoders change at once (in the catalogue, the instances and the lane plan), literal annotation text and instance names are unchanged, and notices follow the language
+- [X] T074 [P] [US7] Extend `every_screen_renders_in_every_language_at_the_minimum_window_size` in `crates/app/src/app.rs` with the add dialog, the configuration form (including the generator options and an option with a long label), the Decoders panel with every state, and a lane with long annotation text and overlays; add unit tests of the drawing rules of `decoder-ui.md` (ellipsis, no text under three characters, no overlap with a neighbour, the later cell shortened); confirm that `crates/host/tests/string_budget.rs` still catches an over-long fixture and now covers the new keys
 
 ### Implementation
 
-- [ ] T075 [US7] Implement the text rules of the UI contract in `crates/app/src/signal_view.rs`: ranges clipped with an ellipsis, a bar when too narrow, the readout with the full text and the length in time formatted for the language
-- [ ] T076 [US7] Extend `crates/app/src/theme.rs`: the 8 annotation colours in the light, dark and high-contrast variants with a unit test of the contrast ratio against the background and the waveform colours, and distinct shapes so nothing depends on colour alone
-- [ ] T077 [US7] Make everything reachable from the keyboard: the accelerators for next, previous and go to selected annotation in `crates/host/src/shortcuts.rs`, the tab order of the dialog and the panel in `crates/app/src/decoders.rs`; `crates/host/tests/shortcut_coverage.rs` must stay green
-- [ ] T078 [US7] Manual check from the quickstart (steps 8.6 and 8.7: language switch with decoders, the smallest window, a Japanese IME entry of an instance name, high contrast); record; run fmt, clippy, tests; commit the phase
+- [X] T075 [US7] Implement the text rules of the UI contract in `crates/app/src/signal_view.rs`: ranges clipped with an ellipsis, a bar when too narrow, the readout with the full text and the length in time formatted for the language
+- [X] T076 [US7] Extend `crates/app/src/theme.rs`: the 8 annotation colours in the light, dark and high-contrast variants with a unit test of the contrast ratio against the background and the waveform colours, and distinct shapes so nothing depends on colour alone
+- [X] T077 [US7] Make everything reachable from the keyboard: the accelerators for next, previous and go to selected annotation in `crates/host/src/shortcuts.rs`, the tab order of the dialog and the panel in `crates/app/src/decoders.rs`; `crates/host/tests/shortcut_coverage.rs` must stay green
+- [X] T078 [US7] Manual check from the quickstart (steps 8.6 and 8.7: language switch with decoders, the smallest window, a Japanese IME entry of an instance name, high contrast); record; run fmt, clippy, tests; commit the phase
 
 **Checkpoint**: the decoder features are usable in all six languages
 

@@ -477,7 +477,11 @@ impl canvas::Program<Message> for SignalView<'_> {
                             .saturating_add(self.plan.lanes.len()),
                     );
                     let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
-                    if let Some((instance, annotation)) = decoder_view::hit_test(
+                    if let Some(decoder_view::Hit {
+                        instance,
+                        annotation,
+                        ..
+                    }) = decoder_view::hit_test(
                         self.plan,
                         position,
                         self.plan.channels.len(),
@@ -619,6 +623,66 @@ impl SignalView<'_> {
             color: colour,
             size: Pixels(TEXT_SIZE),
             align_x: iced::alignment::Horizontal::Right.into(),
+            ..Text::default()
+        });
+        self.draw_annotation_readout(frame, size, position, theme);
+    }
+
+    /// The full text of the annotation under the pointer and its length in time, in a box next to
+    /// the pointer (a span's text may be cut in the lane).
+    fn draw_annotation_readout(
+        &self,
+        frame: &mut Frame,
+        size: Size,
+        position: Point,
+        theme: &Theme,
+    ) {
+        let plan = self.plan;
+        let lane = lane_height(
+            size.height,
+            plan.channels.len().saturating_add(plan.lanes.len()),
+        );
+        let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
+        let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
+        let Some(hit) =
+            decoder_view::hit_test(plan, position, plan.channels.len(), &lane_top, lane, scale)
+        else {
+            return;
+        };
+        let seconds = hit.end.saturating_sub(hit.start) as f64 / plan.sample_rate_hz.max(1) as f64;
+        let content = format!(
+            "{}  \u{b7}  {}",
+            la_host::decoders::annotation_text(self.localizer, &hit.text),
+            self.localizer.format_duration(seconds)
+        );
+        let width = content.chars().count() as f32 * 7.0 + 12.0;
+        let x = (position.x + 12.0).min((size.width - width - 4.0).max(0.0));
+        let y = (position.y + 14.0).min((size.height - 24.0).max(0.0));
+        let palette = theme.palette();
+        frame.fill_rectangle(
+            Point::new(x, y),
+            Size::new(width, 20.0),
+            Color {
+                a: 0.92,
+                ..palette.background
+            },
+        );
+        frame.stroke(
+            &Path::rectangle(Point::new(x, y), Size::new(width, 20.0)),
+            Stroke::default()
+                .with_color(if hit.error {
+                    palette.danger
+                } else {
+                    palette.text
+                })
+                .with_width(1.0),
+        );
+        frame.fill_text(Text {
+            content,
+            position: Point::new(x + 6.0, y + 10.0),
+            color: palette.text,
+            size: Pixels(TEXT_SIZE),
+            align_y: Vertical::Center,
             ..Text::default()
         });
     }

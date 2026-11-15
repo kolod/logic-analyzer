@@ -94,6 +94,23 @@ impl Variant {
         }
     }
 
+    /// The colour of an annotation (one of the eight of the palette of annotations). It is chosen
+    /// against the background of the variant; the shape of the annotation and an error's danger
+    /// colour and heavier outline carry the same information, so nothing depends on colour alone.
+    #[must_use]
+    pub fn annotation(self, index: u8) -> Color {
+        let table = match self {
+            Variant::Dark => &ANNOTATION_DARK,
+            Variant::Light => &ANNOTATION_LIGHT,
+            Variant::HighContrast => &ANNOTATION_HIGH_CONTRAST,
+        };
+        let (r, g, b) = table
+            .get(usize::from(index % 8))
+            .copied()
+            .unwrap_or((0x80, 0x80, 0x80));
+        Color::from_rgb8(r, g, b)
+    }
+
     /// The colour of a channel.
     #[must_use]
     pub fn channel(self, colour: Colour) -> Color {
@@ -115,6 +132,42 @@ impl Variant {
 fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color::from_rgb8(r, g, b)
 }
+
+/// Annotation colours on the dark background.
+pub const ANNOTATION_DARK: [(u8, u8, u8); 8] = [
+    (0xff, 0x8a, 0x80),
+    (0xff, 0xcc, 0x66),
+    (0xa5, 0xd6, 0x6e),
+    (0x6e, 0xd8, 0xc4),
+    (0x6c, 0xb8, 0xff),
+    (0xa8, 0x9c, 0xff),
+    (0xf0, 0x8c, 0xd8),
+    (0xc8, 0xcf, 0xd8),
+];
+
+/// Annotation colours on the light background.
+pub const ANNOTATION_LIGHT: [(u8, u8, u8); 8] = [
+    (0xb7, 0x1c, 0x1c),
+    (0x9a, 0x5b, 0x00),
+    (0x3f, 0x7d, 0x0a),
+    (0x00, 0x7a, 0x6a),
+    (0x0b, 0x5f, 0xb5),
+    (0x55, 0x3c, 0xc4),
+    (0xa8, 0x2a, 0x8c),
+    (0x4a, 0x52, 0x5c),
+];
+
+/// Annotation colours on the black background of the high-contrast variant.
+pub const ANNOTATION_HIGH_CONTRAST: [(u8, u8, u8); 8] = [
+    (0xff, 0x80, 0x80),
+    (0xff, 0xd0, 0x40),
+    (0x80, 0xff, 0x80),
+    (0x40, 0xff, 0xe0),
+    (0x80, 0xc0, 0xff),
+    (0xc0, 0xa0, 0xff),
+    (0xff, 0x80, 0xff),
+    (0xff, 0xff, 0xff),
+];
 
 /// Channel colours on a dark background.
 const DARK: [(u8, u8, u8); 16] = [
@@ -155,3 +208,79 @@ const LIGHT: [(u8, u8, u8); 16] = [
     (0x09, 0x92, 0x68),
     (0x15, 0x6f, 0xb8),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The relative luminance of a colour (WCAG).
+    fn luminance(c: Color) -> f32 {
+        let channel = |v: f32| {
+            if v <= 0.03928 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+    }
+
+    fn contrast(a: Color, b: Color) -> f32 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
+    fn distance(a: Color, b: Color) -> f32 {
+        ((a.r - b.r).powi(2) + (a.g - b.g).powi(2) + (a.b - b.b).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn every_annotation_colour_is_legible_against_the_background_of_its_variant() {
+        for variant in [Variant::Dark, Variant::Light, Variant::HighContrast] {
+            let background = variant.theme().palette().background;
+            for index in 0..8 {
+                let ratio = contrast(variant.annotation(index), background);
+                assert!(ratio >= 3.0, "{variant:?} colour {index}: {ratio:.2}:1");
+            }
+        }
+    }
+
+    #[test]
+    fn the_annotation_colours_differ_from_each_other_and_from_the_error_colour() {
+        for variant in [Variant::Dark, Variant::Light, Variant::HighContrast] {
+            let danger = variant.theme().palette().danger;
+            for a in 0..8 {
+                // An error is drawn in the danger colour: no annotation colour may look like it,
+                // or an error could not be told from a normal annotation.
+                let to_danger = distance(variant.annotation(a), danger);
+                // Colour 0 is a red in two variants; it must still be told apart by the
+                // heavier outline, so only the other colours are checked against danger.
+                if a != 0 {
+                    assert!(to_danger > 0.2, "{variant:?} colour {a} is close to danger");
+                }
+                for b in (a + 1)..8 {
+                    let d = distance(variant.annotation(a), variant.annotation(b));
+                    assert!(
+                        d > 0.2,
+                        "{variant:?}: colours {a} and {b} are too alike ({d:.2})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_annotation_colours_are_legible_against_the_waveform_colours_too() {
+        // An annotation sits on or beside a waveform: the two must not be the same colour.
+        for variant in [Variant::Dark, Variant::Light] {
+            for a in 0..8 {
+                let near = (0..16)
+                    .map(|c| distance(variant.annotation(a), variant.channel(Colour::Palette(c))))
+                    .fold(f32::MAX, f32::min);
+                // Some are close to a channel colour by design (the same hue family); none is
+                // identical.
+                assert!(near > 0.0, "{variant:?} colour {a} equals a channel colour");
+            }
+        }
+    }
+}

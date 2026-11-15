@@ -13,7 +13,6 @@ use la_decoders::lanes::{Cell, DenseCell, MarkCell, Plan, SpanCell};
 use la_decoders::model::{Shape, Style, Target};
 use la_host::decoders::{AnnotationRef, annotation_text};
 use la_host::plan::FramePlan;
-use la_host::presentation::Colour;
 use la_i18n::Localizer;
 
 use crate::signal_view::GUTTER;
@@ -43,7 +42,7 @@ fn colour_of(style: Style, error: bool, look: &Look<'_>) -> Color {
     if error {
         look.theme.palette().danger
     } else {
-        look.variant.channel(Colour::Palette(style.colour))
+        look.variant.annotation(style.colour)
     }
 }
 
@@ -101,6 +100,33 @@ fn draw_shape(frame: &mut Frame, shape: Shape, edge: Option<bool>, x: f32, y: f3
     }
 }
 
+/// The fewest characters of a text worth drawing in a span: under this, the span is a plain bar.
+pub const MIN_LABEL_CHARS: usize = 3;
+/// The width of a character of the label, in logical pixels, and the room kept at the left.
+const CHAR_WIDTH: f32 = 6.5;
+const LABEL_PADDING: f32 = 6.0;
+
+/// The text drawn in a span `width` pixels wide: the whole text if it fits, else cut with an
+/// ellipsis, and nothing when fewer than [`MIN_LABEL_CHARS`] characters would show.
+#[must_use]
+pub fn span_label(text: &str, width: f32) -> Option<String> {
+    let room = ((width - LABEL_PADDING) / CHAR_WIDTH).floor();
+    if room < MIN_LABEL_CHARS as f32 {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let room = room as usize;
+    Some(fit(text, room))
+}
+
+/// The left edge of a cell in pixels.
+fn left_of(cell: &Cell, scale: f32) -> f32 {
+    match cell {
+        Cell::Span(span) => GUTTER + span.x0 as f32 * scale,
+        Cell::Mark(mark) => GUTTER + mark.x as f32 * scale,
+    }
+}
+
 fn fit(text: &str, max_chars: usize) -> String {
     if text.chars().count() <= max_chars {
         return text.to_owned();
@@ -114,17 +140,34 @@ fn is_selected(look: &Look<'_>, instance: u32, target: Target, id: u64, start: u
         .is_some_and(|(i, r)| i == instance && r.target == target && r.id == id && r.start == start)
 }
 
+/// How a span is placed among its neighbours.
+#[derive(Clone, Copy)]
+struct Placement {
+    /// Whether it is the selected annotation.
+    selected: bool,
+    /// The left edge of the cell after it, which it must not reach into.
+    right_limit: Option<f32>,
+}
+
 fn draw_span(
     frame: &mut Frame,
     cell: &SpanCell,
     top: f32,
     height: f32,
     scale: f32,
-    selected: bool,
+    placement: Placement,
     look: &Look<'_>,
 ) {
+    let Placement {
+        selected,
+        right_limit,
+    } = placement;
     let x0 = GUTTER + cell.x0 as f32 * scale;
-    let width = ((cell.x1 - cell.x0) as f32 * scale).max(1.0);
+    // A span never reaches into the cell after it in its row: the later cell wins, this one is
+    // shortened.
+    let x1 = GUTTER + cell.x1 as f32 * scale;
+    let x1 = right_limit.map_or(x1, |limit| x1.min(limit.max(x0)));
+    let width = (x1 - x0).max(1.0);
     let colour = colour_of(cell.style, cell.error, look);
     frame.fill_rectangle(
         Point::new(x0, top),
@@ -146,9 +189,7 @@ fn draw_span(
                 .with_width(2.0),
         );
     }
-    let room = ((width - 6.0) / 6.5).floor();
-    if room >= 2.0 {
-        let content = fit(&annotation_text(look.localizer, &cell.text), room as usize);
+    if let Some(content) = span_label(&annotation_text(look.localizer, &cell.text), width) {
         frame.fill_text(Text {
             content,
             position: Point::new(x0 + 3.0, top + height / 2.0),
@@ -218,7 +259,10 @@ pub fn draw_lanes(
         let row_height = (usable / rows as f32).min(24.0);
         for (r, row) in decoder.plan.rows.iter().enumerate() {
             let row_top = top + 3.0 + r as f32 * row_height;
-            for cell in row {
+            for (at, cell) in row.iter().enumerate() {
+                let right_limit = row
+                    .get(at.saturating_add(1))
+                    .map(|next| left_of(next, scale));
                 match cell {
                     Cell::Span(span) => draw_span(
                         frame,
@@ -226,7 +270,16 @@ pub fn draw_lanes(
                         row_top + 1.0,
                         row_height - 2.0,
                         scale,
-                        is_selected(look, decoder.instance, Target::Lane, span.id, span.start),
+                        Placement {
+                            selected: is_selected(
+                                look,
+                                decoder.instance,
+                                Target::Lane,
+                                span.id,
+                                span.start,
+                            ),
+                            right_limit,
+                        },
                         look,
                     ),
                     Cell::Mark(mark) => draw_mark(
@@ -299,7 +352,10 @@ pub fn draw_overlays(
                     top + 1.0,
                     OVERLAY_BAND - 2.0,
                     scale,
-                    is_selected(look, overlay.instance, target, span.id, span.start),
+                    Placement {
+                        selected: is_selected(look, overlay.instance, target, span.id, span.start),
+                        right_limit: None,
+                    },
                     look,
                 ),
             }
@@ -310,8 +366,30 @@ pub fn draw_overlays(
     }
 }
 
+/// An annotation found under the pointer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hit {
+    /// The instance it belongs to.
+    pub instance: u32,
+    /// How to find it again.
+    pub annotation: AnnotationRef,
+    /// Its text.
+    pub text: la_decoders::model::Text,
+    /// Its first position.
+    pub start: u64,
+    /// Its end position.
+    pub end: u64,
+    /// Whether it reports a problem in the signal.
+    pub error: bool,
+}
+
 /// What a plan shows at a point: a mark within [`PICK`] pixels, or the span the point is in.
-fn pick_in(plan: &Plan, x: f32, scale: f32, rows: Option<(f32, f32)>) -> Option<(u64, u64)> {
+fn pick_in(
+    plan: &Plan,
+    x: f32,
+    scale: f32,
+    rows: Option<(f32, f32)>,
+) -> Option<(u64, u64, u64, la_decoders::model::Text, bool)> {
     let column = (x - GUTTER) / scale;
     for (r, row) in plan.rows.iter().enumerate() {
         if let Some((y, row_height)) = rows {
@@ -323,10 +401,10 @@ fn pick_in(plan: &Plan, x: f32, scale: f32, rows: Option<(f32, f32)>) -> Option<
         for cell in row {
             match cell {
                 Cell::Mark(m) if (m.x as f32 - column).abs() * scale <= PICK => {
-                    return Some((m.id, m.start));
+                    return Some((m.id, m.start, m.end, m.text.clone(), m.error));
                 }
                 Cell::Span(s) if column >= s.x0 as f32 && column <= s.x1 as f32 => {
-                    return Some((s.id, s.start));
+                    return Some((s.id, s.start, s.end, s.text.clone(), s.error));
                 }
                 _ => {}
             }
@@ -344,7 +422,7 @@ pub fn hit_test(
     lane_top: &dyn Fn(usize) -> f32,
     lane: f32,
     scale: f32,
-) -> Option<(u32, AnnotationRef)> {
+) -> Option<Hit> {
     if position.x < GUTTER {
         return None;
     }
@@ -354,17 +432,21 @@ pub fn hit_test(
             let rows = decoder.plan.rows.len().max(1);
             let row_height = ((lane - STRIP - 6.0) / rows as f32).min(24.0);
             let y = position.y - top - 3.0;
-            if let Some((id, start)) =
+            if let Some((id, start, end, text, error)) =
                 pick_in(&decoder.plan, position.x, scale, Some((y, row_height)))
             {
-                return Some((
-                    decoder.instance,
-                    AnnotationRef {
+                return Some(Hit {
+                    instance: decoder.instance,
+                    annotation: AnnotationRef {
                         target: Target::Lane,
                         id,
                         start,
                     },
-                ));
+                    text,
+                    start,
+                    end,
+                    error,
+                });
             }
         }
     }
@@ -380,16 +462,70 @@ pub fn hit_test(
         if position.y < top || position.y >= top + OVERLAY_BAND + 4.0 {
             continue;
         }
-        if let Some((id, start)) = pick_in(&overlay.plan, position.x, scale, None) {
-            return Some((
-                overlay.instance,
-                AnnotationRef {
+        if let Some((id, start, end, text, error)) = pick_in(&overlay.plan, position.x, scale, None)
+        {
+            return Some(Hit {
+                instance: overlay.instance,
+                annotation: AnnotationRef {
                     target: Target::Channel(overlay.channel),
                     id,
                     start,
                 },
-            ));
+                text,
+                start,
+                end,
+                error,
+            });
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_text_that_fits_is_drawn_whole() {
+        // 6 pixels of padding and 6.5 per character: 11 characters need 77.5 pixels.
+        assert_eq!(span_label("Byte 0x5A", 100.0).as_deref(), Some("Byte 0x5A"));
+        assert_eq!(span_label("abc", 26.0).as_deref(), Some("abc"));
+    }
+
+    #[test]
+    fn a_text_that_does_not_fit_is_cut_with_an_ellipsis() {
+        let label = span_label("Incomplete byte: 4 bits", 60.0).unwrap();
+        assert!(label.ends_with('\u{2026}'), "{label}");
+        assert!(label.chars().count() <= 8, "{label}");
+        assert!("Incomplete byte: 4 bits".starts_with(label.trim_end_matches('\u{2026}')));
+    }
+
+    #[test]
+    fn under_three_characters_nothing_is_drawn_and_the_span_is_a_bar() {
+        assert_eq!(span_label("Byte", 20.0), None);
+        assert_eq!(span_label("Byte", 6.0 + 6.5 * 2.9), None);
+        assert!(span_label("Byte", 6.0 + 6.5 * 3.0).is_some());
+        assert_eq!(span_label("Byte", 0.0), None);
+    }
+
+    #[test]
+    fn a_cut_label_never_has_more_characters_than_there_is_room_for() {
+        for width in [26.0_f32, 40.0, 61.0, 130.0, 400.0] {
+            let room = ((width - 6.0) / 6.5).floor() as usize;
+            if let Some(label) = span_label("A text that is quite a bit longer than most", width) {
+                assert!(label.chars().count() <= room, "{width}: {label}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_wide_script_is_cut_by_characters_not_bytes() {
+        let label = span_label(
+            "\u{30d0}\u{30a4}\u{30c8}\u{30c7}\u{30fc}\u{30bf}\u{3067}\u{3059}",
+            40.0,
+        )
+        .unwrap();
+        assert!(label.chars().count() <= 5);
+        assert!(label.ends_with('\u{2026}'));
+    }
 }

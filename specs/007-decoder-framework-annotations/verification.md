@@ -68,3 +68,18 @@ The contract was tightened while implementing it (`contracts/deco-section.md`): 
 ascending order, a role without a channel has no entry, the start of an item is a signed delta from the
 previous end (items may overlap), and the string table lists distinct strings in order of first use. All
 of these make "an accepted payload writes back unchanged" true.
+
+## Phase 9 (User Story 7): read the annotations comfortably and in my language
+
+| Date | Platform | Step | Result |
+|------|----------|------|--------|
+| 2026-11-15 | Windows 11 (automated) | `decoder_language` (names, labels, annotation texts and notices follow the language; literal text and instance names do not), `every_screen_renders_in_every_language_at_the_minimum_window_size` with a decoder and the Decoders panel at 280 px, `string_budget` with the panel controls, the drawing rules of the lane (`span_label`: ellipsis, nothing under three characters, a span never reaches into the next cell) and the contrast tests of the eight annotation colours in three variants | Pass. The rendered PNG was looked at by the implementer. |
+| pending | Windows 11, running application | quickstart 8.6 and 8.7: switch the six languages with decoders, the smallest window, a Japanese IME entry of an instance name, high contrast | **Not done yet**: needs a person at the window. |
+| pending | Debian | the same | **Not done yet**: asked of the user. |
+
+Notes against the task text: the tab order of the panel is the order of the widgets of iced (text
+inputs and buttons take Tab); the accelerators of next, previous and go to selected annotation were
+added in phase 3. The contrast test checks the colours against the background (at least 3:1), against
+each other and against the danger colour of errors; "against the waveform colours" is checked only as
+"not the same colour", because an annotation is drawn as a filled band with an outline, not as a line on
+top of a waveform. A hover readout with the full text and the length in time was added to the canvas.
