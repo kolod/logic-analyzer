@@ -356,6 +356,33 @@ fn cancelling_the_question_while_the_save_runs_does_not_run_the_command() {
     );
 }
 
+#[test]
+fn discarding_a_running_capture_leaves_the_shell_idle_and_able_to_open_a_file() {
+    let dir = TempDir::new("guard-discard-running");
+    let file = good_file(&dir);
+    for command in ["open", "quit"] {
+        let work = TempDir::new("guard-discard-running-s");
+        let mut shell = running_shell(&work);
+        let outcome = match command {
+            "open" => shell.apply(Command::OpenSession(file.clone())),
+            _ => shell.apply(Command::Quit),
+        };
+        assert!(matches!(outcome, Outcome::NeedsDecision(_)), "{command}");
+        done(&mut shell, Command::Decide(Decision::Discard));
+        // Not stuck in "capturing", whatever the command was.
+        assert_eq!(shell.state().activity, Activity::Idle, "{command}");
+        wait_operation(&mut shell);
+        if command == "open" {
+            assert_eq!(shell.state().unsaved, Unsaved::Clean);
+            assert!(shell.state().session_path.is_some());
+        } else {
+            // Quitting keeps the data on screen, now unsaved and no longer running.
+            assert_eq!(shell.state().unsaved, Unsaved::Dirty);
+            assert!(shell.state().capture.is_some());
+        }
+    }
+}
+
 // ---- a random walk -----------------------------------------------------------------------
 
 #[test]
@@ -375,13 +402,22 @@ fn no_sequence_of_commands_discards_unsaved_data_without_a_decision() {
     let save_paths: Vec<PathBuf> = (0..3)
         .map(|i| dir.path().join(format!("walk{i}.lasession")))
         .collect();
-    let mut rng = Lcg(2026);
+    let seed = std::env::var("LA_WALK_SEED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2026);
+    let mut rng = Lcg(seed);
+    let mut history: Vec<String> = Vec::new();
     let mut discard_open = false;
     let mut steps_with_risk = 0_u32;
     for step in 0..20_000_u32 {
         let before = started_at(&shell);
         let at_risk = before.is_some() && shell.state().unsaved != Unsaved::Clean;
-        let recent_before = shell.state().settings.recent_files.first().cloned();
+        let saving_before = shell
+            .state()
+            .operation
+            .is_some_and(|o| o.kind == la_host::OperationKind::Save);
+        let errors_before = error_codes(&shell).len();
         let was_operating = shell.operation_running();
         if !was_operating {
             discard_open = false;
@@ -412,7 +448,14 @@ fn no_sequence_of_commands_discards_unsaved_data_without_a_decision() {
             _ => Command::RefreshDevices,
         };
         let discarding = matches!(command, Command::Decide(Decision::Discard));
+        let described = format!("{step}: {command:?}");
         let outcome = shell.apply(command);
+        history.push(format!(
+            "{described} -> {outcome:?}; activity {:?}, unsaved {:?}, pending {:?}",
+            shell.state().activity,
+            shell.state().unsaved,
+            shell.state().pending_decision
+        ));
         if discarding && matches!(outcome, Outcome::Done(_)) {
             if let Some(Guarded::OpenSession(_)) = pending_before {
                 discard_open = true;
@@ -428,13 +471,18 @@ fn no_sequence_of_commands_discards_unsaved_data_without_a_decision() {
 
         let after = started_at(&shell);
         let discarded_now = discarding && matches!(outcome, Outcome::Done(_));
-        let saved_now = shell.state().settings.recent_files.first().cloned() != recent_before;
+        // A save that ended without a failure (a save to the same path leaves the list of
+        // recent files as it was, so that list cannot tell).
+        let saved_now = saving_before
+            && !shell.operation_running()
+            && error_codes(&shell).len() <= errors_before;
         if at_risk {
             steps_with_risk += 1;
             let replaced = after != before;
             assert!(
                 !replaced || discarded_now || discard_open || saved_now,
-                "step {step}: unsaved data was replaced without a decision or a save"
+                "step {step}: unsaved data was replaced without a decision or a save; last steps: {:#?}",
+                &history[history.len().saturating_sub(8)..]
             );
         }
     }

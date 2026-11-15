@@ -825,12 +825,25 @@ impl Shell {
             }
             Decision::Discard => {
                 state.pending_decision = None;
-                // The data is thrown away: let the acquisition end unobserved.
-                if let Some(run) = self.running.take() {
+                // The data is thrown away: let the acquisition end unobserved. The shell is idle
+                // from now on, with the data so far still on screen (and unsaved) until the
+                // command that waited replaces it.
+                let stopped = self.running.take();
+                if let Some(run) = &stopped {
                     run.acquisition.stop();
+                    state.activity = Activity::Idle;
+                    state.unsaved = Unsaved::Dirty;
                 }
                 let mut changes = Changes::DECISION;
-                changes.insert(self.continue_guarded(state, guarded)?);
+                match self.continue_guarded(state, guarded) {
+                    Ok(more) => changes.insert(more),
+                    Err(rejected) => {
+                        // The command did not run and the state is rolled back: the capture
+                        // that was stopped is watched again (it ends by itself).
+                        self.running = stopped;
+                        return Err(rejected);
+                    }
+                }
                 Ok(Executed::Changed(changes))
             }
         }
