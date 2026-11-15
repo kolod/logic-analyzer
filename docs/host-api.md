@@ -1,6 +1,6 @@
 # Host API
 
-Version: 1.0
+Version: 1.1
 
 This is the authoritative description of the API between a user interface and the core. The crate
 is `la-host`; its constant `la_host::HOST_API_VERSION` and the version line above must agree (a test
@@ -110,11 +110,22 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetWindowGeometry(WindowGeometry)` | kept in memory; written by `save_settings` |
 | Notices | `DismissNotice(NoticeId)` | |
 | | `DismissAllNotices` | |
+| Decoders | `AddDecoder { decoder }` | needs a capture on screen; creates an instance of the registered decoder with default options and no channels yet; refused with `decoder.too_many_instances` at eight instances |
+| | `ConfigureDecoder { id, setup }` | replaces channels, options, name, lane visibility and generator options in one step; validated as a whole (`decoder.invalid_setup` names the setting in `decoders.refusal`); a valid change that alters results starts a new pass |
+| | `SetDecoderChannel { id, role, channel }` | one channel assignment (or none); same validation and effect |
+| | `SetDecoderOption { id, option, value }` | one option value; same validation and effect |
+| | `RenameDecoder { id, name }` | sanitized, at most 64 characters |
+| | `ShowDecoderLane { id, visible }` | shows or hides the lane and its overlays |
+| | `RemoveDecoder(id)` | removes the instance, its pass and its results |
+| Annotations | `SelectAnnotation { instance, annotation }` | selects it and fills `decoders.selection` with its details |
+| | `GoToAnnotation(AnnotationTarget)` | `Selected`, `Next` or `Previous` by start in the store of the selected annotation; moves the window so that it is shown whole and centred; costs O(log n) |
+| | `ClearAnnotationSelection` | |
 | App | `RequestClose` | the window close button; guarded |
 | | `Quit` | guarded; the shell closes only when `Done` carries `QUIT` |
 
 While a save or load runs, the commands that change what is being saved or replace what is being
 loaded (starting or clearing a capture, edits of names, colours, order, visibility and markers,
+adding, changing and removing decoders,
 opening and saving again, `Decide(Save)` and `Decide(Discard)`) are ignored; `CancelOperation`,
 `Decide(Cancel)` and everything about the view still work.
 
@@ -159,6 +170,25 @@ every zoom level (a test sweeps the zoom). A failure returns a plan whose `state
 `CannotDraw(host.render_failed)` instead of panicking. The plan includes the markers inside the
 window.
 
+Since 1.1 it also carries `lanes` (one lane plan per visible decoder instance: rows of spans and marks
+and a row of dense cells, at most `4·W` cells) and `overlays` (per shown channel and instance, the marks,
+edges and dense cells that instance draws on the channel, at most `2·W`), built with one window query per
+store (`la_decoders::lanes`). Every annotation intersecting the window is represented exactly once; an
+error is never hidden in a dense cell without its error count. The plan never reads samples and never
+fails.
+
+## Decoders
+
+`State.decoders` holds the catalogue of registered decoders in the current language (name, description,
+signals, options with their types and defaults), the instances (setup, state `Waiting`, `Running`,
+`Finished`, `Cancelled` or `Failed`, whether the setup is complete, progress, the flags `incomplete`,
+`outdated` and `loaded`, the stable code of the last fault, and the counts of annotations and refused
+records), the reason the last command was refused (`refusal`: code and the setting), the selected
+annotation with its details, and the limits in force. `Versions.decoders` and the change flag
+`DECODERS` tell a shell what to redraw; results growing during a pass bump them. A pass runs on a
+supervised worker and never blocks `apply` or `poll`; closing the capture, opening a file or starting a
+capture removes every instance. The decoder side of the contract is `docs/decoder-api.md`.
+
 ## Text and localization
 
 `text` and `notice_text` go through `la-i18n` with the current language and the English fallback.
@@ -183,6 +213,6 @@ signal data, channel names or marker names.
 
 ## Compatibility
 
-Version 1.0 is the first. Additions of commands or `State` fields that existing shells can ignore
+Version 1.0 is the first; 1.1 adds the decoder commands, state and plan parts. Additions of commands or `State` fields that existing shells can ignore
 are minor versions. Removing or changing the meaning of a command, a state field or an invariant is
 a major version and requires every shell in the repository to be updated in the same merge.

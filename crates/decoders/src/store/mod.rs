@@ -498,6 +498,21 @@ impl Snapshot {
         Rank { count, errors }
     }
 
+    /// The annotation with this id that starts at `start`.
+    #[must_use]
+    pub fn find(&self, start: u64, id: u64) -> Option<&Entry> {
+        let mut probes = 0;
+        let in_tail = self
+            .tail
+            .binary_search_by_key(&(start, id), |e| (e.start(), e.id))
+            .ok()
+            .and_then(|i| self.tail.get(i));
+        self.runs
+            .iter()
+            .find_map(|r| r.find(start, id, &mut probes))
+            .or(in_tail)
+    }
+
     /// The annotation with the smallest start at or after `position` (ties by id).
     #[must_use]
     pub fn first_from(&self, position: u64, probes: &mut u64) -> Option<&Entry> {

@@ -1668,6 +1668,7 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "iced_test",
+ "la-decoders",
  "la-devices",
  "la-diagnostics",
  "la-host",

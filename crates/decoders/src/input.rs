@@ -6,7 +6,7 @@
 
 use std::iter::Peekable;
 
-use la_storage::{Gap, LevelState, Snapshot, TransitionIter};
+use la_storage::{CaptureReader, Gap, LevelState, Snapshot, TransitionIter};
 
 use crate::descriptor::Descriptor;
 use crate::model::Item;
@@ -175,5 +175,24 @@ impl Iterator for Edges<'_> {
                 rising: edge.rising,
             });
         }
+    }
+}
+
+/// Where a pass takes its snapshots from: a capture that may still be growing (a new snapshot every
+/// round) or a finished one (always the same).
+pub trait SnapshotSource: Send + Sync {
+    /// A snapshot of everything published so far.
+    fn snapshot(&self) -> Snapshot;
+}
+
+impl SnapshotSource for CaptureReader {
+    fn snapshot(&self) -> Snapshot {
+        CaptureReader::snapshot(self)
+    }
+}
+
+impl SnapshotSource for Snapshot {
+    fn snapshot(&self) -> Snapshot {
+        self.clone()
     }
 }

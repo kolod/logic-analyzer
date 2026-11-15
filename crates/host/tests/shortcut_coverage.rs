@@ -62,6 +62,7 @@ fn table_commands() -> BTreeSet<String> {
             Action::PreviousMarker | Action::NextMarker => &["GoToMarker"],
             Action::RemoveSelectedMarker => &["RemoveMarker"],
             Action::ToggleSnap => &["SetSnap"],
+            Action::AddDecoder => &["AddDecoder"],
             Action::UiScaleUp | Action::UiScaleDown => &["SetUiScale"],
             // The dialogs reach the settings commands; see `SETTINGS_DIALOG`.
             Action::Settings | Action::About | Action::ShowLog => &[],
@@ -75,7 +76,7 @@ fn table_commands() -> BTreeSet<String> {
 const SETTINGS_DIALOG: [&str; 3] = ["SetLanguage", "SetTheme", "SetMemoryLimit"];
 
 /// Controls of the side panels and the toolbar: reachable with Tab and the keyboard in them.
-const FOCUSABLE_CONTROLS: [&str; 13] = [
+const FOCUSABLE_CONTROLS: [&str; 21] = [
     "RefreshDevices",
     "SelectDevice",
     "EditConfig",
@@ -89,6 +90,14 @@ const FOCUSABLE_CONTROLS: [&str; 13] = [
     "DismissNotice",
     "DismissAllNotices",
     "CancelOperation",
+    "ConfigureDecoder",
+    "SetDecoderChannel",
+    "SetDecoderOption",
+    "RenameDecoder",
+    "ShowDecoderLane",
+    "RemoveDecoder",
+    "SelectAnnotation",
+    "ClearAnnotationSelection",
 ];
 
 /// The answer buttons of a question: Enter and Tab in the dialog.

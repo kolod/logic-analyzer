@@ -9,6 +9,7 @@
 
 mod common;
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use common::{Lcg, Part, capture_from_parts};
@@ -50,7 +51,7 @@ fn spec(run: Box<dyn Run>, capture: &la_storage::Capture, chunk: ChunkLimits) ->
         descriptor: &DESCRIPTOR,
         setup: setup(),
         run,
-        capture: capture.reader(),
+        capture: Arc::new(capture.reader()),
         chunk_limits: chunk,
         limits: Limits::default(),
         budget: Budget::new(1 << 30),

@@ -16,6 +16,7 @@ use crate::capture::{
 use crate::command::{
     Changes, Command, Decision, Guarded, Outcome, PanStep, Tick, ZoomAnchor, ZoomDirection,
 };
+use crate::decoders::{DecoderRuntime, DecoderState, catalogue};
 use crate::devices::{ConfigDraft, fresh_seed, problems};
 use crate::error;
 use crate::markers::{Markers, MeasurementText, measurement, measurement_text, nearest_transition};
@@ -95,6 +96,7 @@ pub struct Shell {
     registry: DeviceRegistry,
     pub(crate) running: Option<Running>,
     pub(crate) operation: Option<Operation>,
+    pub(crate) decoders: DecoderRuntime,
     #[cfg(feature = "test-support")]
     pub(crate) session_fs: Arc<dyn la_session::harness::FileSystem>,
     #[cfg(feature = "test-support")]
@@ -160,6 +162,8 @@ impl Shell {
                 || ConfigDraft::for_device(&la_devices::virtual_descriptor().capabilities),
                 |d| ConfigDraft::for_device(&d.capabilities),
             );
+        let decoders = DecoderRuntime::new();
+        let decoder_state = DecoderState::new(catalogue(&decoders.registry, &localizer));
         let mut state = State {
             version: 0,
             versions: Versions::default(),
@@ -185,6 +189,7 @@ impl Shell {
             notices: NoticeList::new(),
             language: localizer.language(),
             settings: loaded.settings,
+            decoders: decoder_state,
         };
         revalidate(&mut state);
         sync_presentation(&mut state);
@@ -199,6 +204,7 @@ impl Shell {
             registry,
             running: None,
             operation: None,
+            decoders,
             #[cfg(feature = "test-support")]
             session_fs: Arc::new(la_session::harness::RealFileSystem),
             #[cfg(feature = "test-support")]
@@ -245,7 +251,7 @@ impl Shell {
     /// How often the shell wants to be polled.
     #[must_use]
     pub fn wants_ticks(&self) -> Tick {
-        if self.running.is_some() || self.operation.is_some() {
+        if self.running.is_some() || self.operation.is_some() || self.decoders_running() {
             Tick::Fast
         } else {
             Tick::Slow
@@ -324,6 +330,12 @@ impl Shell {
         };
         let mut plan = build_plan(capture.map(|c| &c.snapshot), &window, pixels, &channels);
         if capture.is_some() && window.length > 0 {
+            let shown: Vec<u8> = channels.iter().map(|c| c.channel).collect();
+            let (lanes, overlays) = self.decoder_plans(&window, pixels, &shown);
+            plan.lanes = lanes;
+            plan.overlays = overlays;
+        }
+        if capture.is_some() && window.length > 0 {
             let scale = f64::from(pixels) / window.length as f64;
             plan.markers = self
                 .state
@@ -379,6 +391,7 @@ impl Shell {
         let mut changes = self.poll_devices(state);
         changes.insert(self.poll_operation(state));
         changes.insert(self.poll_capture(state, now));
+        changes.insert(self.poll_decoders(state));
         changes
     }
 
@@ -515,6 +528,7 @@ impl Shell {
                     working.versions.bump(changes);
                 }
                 self.state = working;
+                self.sync_decoders();
                 Outcome::Done(changes)
             }
             Ok(Ok(Executed::Needs(guarded))) => {
@@ -603,9 +617,10 @@ impl Shell {
             Command::SetLanguage(language) => {
                 self.localizer.set_language(language);
                 state.language = language;
+                state.decoders.catalogue = catalogue(&self.decoders.registry, &self.localizer);
                 state.settings.language = Some(language.tag().to_owned());
                 let saved = self.persist_settings(state);
-                changed(Changes::LANGUAGE | Changes::SETTINGS | saved)
+                changed(Changes::LANGUAGE | Changes::SETTINGS | Changes::DECODERS | saved)
             }
             Command::SetTheme(theme) => {
                 state.settings.theme = theme;
@@ -633,6 +648,39 @@ impl Shell {
                 }
                 state.settings.window = Some(geometry);
                 changed(Changes::SETTINGS)
+            }
+            Command::AddDecoder { decoder } => self.add_decoder(state, &decoder),
+            Command::ConfigureDecoder { id, setup } => self.configure_decoder(state, id, setup),
+            Command::SetDecoderChannel { id, role, channel } => {
+                self.edit_decoder(state, id, |setup| match channel {
+                    Some(channel) => {
+                        setup.channels.insert(role, channel);
+                    }
+                    None => {
+                        setup.channels.remove(&role);
+                    }
+                })
+            }
+            Command::SetDecoderOption { id, option, value } => {
+                self.edit_decoder(state, id, |setup| {
+                    setup.options.insert(option, value);
+                })
+            }
+            Command::RenameDecoder { id, name } => {
+                self.edit_decoder(state, id, |setup| setup.name = name)
+            }
+            Command::ShowDecoderLane { id, visible } => {
+                self.edit_decoder(state, id, |setup| setup.lane_visible = visible)
+            }
+            Command::RemoveDecoder(id) => self.remove_decoder(state, id),
+            Command::SelectAnnotation {
+                instance,
+                annotation,
+            } => self.select_annotation(state, instance, annotation),
+            Command::GoToAnnotation(which) => self.go_to_annotation(state, which),
+            Command::ClearAnnotationSelection => {
+                state.decoders.selection = None;
+                changed(Changes::DECODERS)
             }
             Command::SaveSession => {
                 let path = state
@@ -985,6 +1033,7 @@ impl Shell {
             .map_err(Reject::Failed)?;
         let snapshot = acquisition.capture().snapshot();
         let description = acquisition.description();
+        state.decoders.reset();
         state.capture = Some(CaptureView::new(
             snapshot,
             description,
@@ -1151,7 +1200,7 @@ fn plan_pixels(state: &State) -> u32 {
 }
 
 /// The limits of the view of the capture on screen; `None` without a capture.
-fn capture_limits_of(state: &State) -> Option<WindowLimits> {
+pub(crate) fn capture_limits_of(state: &State) -> Option<WindowLimits> {
     state
         .capture
         .as_ref()
@@ -1159,7 +1208,7 @@ fn capture_limits_of(state: &State) -> Option<WindowLimits> {
 }
 
 /// The window now shown (the whole capture while it follows "fit all").
-fn current_window(state: &State, limits: &WindowLimits) -> ViewWindow {
+pub(crate) fn current_window(state: &State, limits: &WindowLimits) -> ViewWindow {
     if state.auto_fit {
         ViewWindow::fit_all(limits)
     } else {
@@ -1168,7 +1217,7 @@ fn current_window(state: &State, limits: &WindowLimits) -> ViewWindow {
 }
 
 /// An unsaved capture stays unsaved; a saved one becomes unsaved when its presentation changes.
-fn mark_dirty(state: &mut State) {
+pub(crate) fn mark_dirty(state: &mut State) {
     if state.capture.is_some() && state.unsaved == Unsaved::Clean {
         state.unsaved = Unsaved::Dirty;
     }
@@ -1192,6 +1241,7 @@ pub(crate) fn clear_capture(state: &mut State) {
     state.session_path = None;
     state.session_extras.clear();
     state.capture = None;
+    state.decoders.reset();
     state.progress = None;
     state.activity = Activity::Idle;
     state.unsaved = Unsaved::Clean;

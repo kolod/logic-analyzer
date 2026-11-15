@@ -11,7 +11,9 @@ use iced::widget::{
     scrollable, stack, text, text_input, tooltip,
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
+use la_decoders::setup::Value;
 use la_devices::DeviceId;
+use la_host::decoders::{CatalogueOptionKind, InstanceState};
 use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::shortcuts::{Accelerator, Action, ShortcutEntry};
 use la_host::window::ViewSize;
@@ -102,6 +104,20 @@ pub enum Message {
     MarkerName(u32, String),
     /// A marker becomes the first (0) or second (1) of the measurement.
     MarkerMeasure(usize, u32),
+    /// The menu entry that adds a decoder.
+    AddDecoderMenu,
+    /// A decoder was chosen in the list of decoders to add.
+    AddDecoderPicked(Choice<String>),
+    /// A decoder instance was renamed in the panel.
+    DecoderName(u32, String),
+    /// A channel was chosen for a signal of a decoder instance.
+    DecoderChannelPicked(u32, String, Choice<Option<u8>>),
+    /// A choice option of a decoder instance was changed.
+    DecoderOptionPicked(u32, String, Choice<String>),
+    /// The text of a number option of a decoder instance changed.
+    DecoderOptionText(u32, String, String),
+    /// A switch option of a decoder instance was changed.
+    DecoderOptionFlag(u32, String, bool),
     /// Nothing to do.
     Noop,
 }
@@ -285,7 +301,7 @@ pub struct App {
     variant: Variant,
     system_mode: theme::Mode,
     plan: la_host::plan::FramePlan,
-    plan_key: (u64, u64, u64, u64, u32, bool),
+    plan_key: (u64, u64, u64, u64, u64, u32, bool),
     cache: canvas::Cache,
     cache_key: (u64, Variant, la_i18n::Language),
     open_menu: Option<usize>,
@@ -294,6 +310,8 @@ pub struct App {
     seed_text: String,
     names: std::collections::BTreeMap<u8, String>,
     marker_names: std::collections::BTreeMap<u32, String>,
+    decoder_names: std::collections::BTreeMap<u32, String>,
+    option_texts: std::collections::BTreeMap<(u32, String), String>,
     messages_open: bool,
     settings_open: bool,
     about_open: bool,
@@ -319,7 +337,7 @@ impl App {
             table,
             variant,
             system_mode: theme::Mode::Dark,
-            plan_key: (0, 0, 0, 0, 0, false),
+            plan_key: (0, 0, 0, 0, 0, 0, false),
             cache: canvas::Cache::new(),
             cache_key: (0, variant, la_i18n::Language::En),
             open_menu: None,
@@ -328,6 +346,8 @@ impl App {
             seed_text: String::new(),
             names: std::collections::BTreeMap::new(),
             marker_names: std::collections::BTreeMap::new(),
+            decoder_names: std::collections::BTreeMap::new(),
+            option_texts: std::collections::BTreeMap::new(),
             messages_open: false,
             settings_open: false,
             about_open: false,
@@ -613,6 +633,7 @@ impl App {
             state.versions.window,
             state.versions.presentation,
             state.versions.markers,
+            state.versions.decoders,
             state.view_size.pixels,
             state.auto_fit,
         );
@@ -772,6 +793,7 @@ impl App {
                     Some(Action::RemoveSelectedMarker) => {
                         self.update(Message::MarkerAction(MarkerAction::RemoveSelected))
                     }
+                    Some(Action::AddDecoder) => self.update(Message::AddDecoderMenu),
                     Some(Action::ToggleSnap) => {
                         self.update(Message::MarkerAction(MarkerAction::ToggleSnap))
                     }
@@ -948,6 +970,55 @@ impl App {
                 self.open_menu = None;
                 self.run(command)
             }
+            Message::AddDecoderMenu => {
+                self.open_menu = None;
+                let catalogue = &self.shell.state().decoders.catalogue;
+                match catalogue.as_slice() {
+                    [only] => {
+                        let decoder = only.id.clone();
+                        self.run(Command::AddDecoder { decoder })
+                    }
+                    _ => Task::none(),
+                }
+            }
+            Message::AddDecoderPicked(choice) => self.run(Command::AddDecoder {
+                decoder: choice.value,
+            }),
+            Message::DecoderName(id, name) => {
+                self.decoder_names.insert(id, name.clone());
+                self.run(Command::RenameDecoder { id, name })
+            }
+            Message::DecoderChannelPicked(id, role, choice) => {
+                self.run(Command::SetDecoderChannel {
+                    id,
+                    role,
+                    channel: choice.value,
+                })
+            }
+            Message::DecoderOptionPicked(id, option, choice) => {
+                self.run(Command::SetDecoderOption {
+                    id,
+                    option,
+                    value: Value::Choice(choice.value),
+                })
+            }
+            Message::DecoderOptionText(id, option, text) => {
+                let parsed = text.trim().parse::<i64>().ok();
+                self.option_texts.insert((id, option.clone()), text);
+                match parsed {
+                    Some(number) => self.run(Command::SetDecoderOption {
+                        id,
+                        option,
+                        value: Value::Integer(number),
+                    }),
+                    None => Task::none(),
+                }
+            }
+            Message::DecoderOptionFlag(id, option, on) => self.run(Command::SetDecoderOption {
+                id,
+                option,
+                value: Value::Boolean(on),
+            }),
             Message::MenuToggled(index) => {
                 self.open_menu = if self.open_menu == Some(index) {
                     None
@@ -1072,6 +1143,7 @@ impl App {
                     Action::ToggleSnap => {
                         item = item.on_press(Message::MarkerAction(MarkerAction::ToggleSnap));
                     }
+                    Action::AddDecoder => item = item.on_press(Message::AddDecoderMenu),
                 }
             }
             items = items.push(item);
@@ -1288,6 +1360,266 @@ impl App {
             .width(Fill)
             .height(Length::FillPortion(2))
             .style(container::bordered_box)
+            .into()
+    }
+
+    /// The panel of the decoders: the instances, their channels and options, the state of each
+    /// pass and the selected annotation.
+    fn decoders_panel(&self) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let mut list = column![].spacing(6).padding(iced::Padding {
+            top: 6.0,
+            right: 18.0,
+            bottom: 6.0,
+            left: 6.0,
+        });
+        list = list.push(text(self.t("panel-decoders")).size(14));
+        if state.capture.is_none() {
+            list = list.push(text(self.t("decoders-need-capture")).size(12));
+        } else {
+            let catalogue = &state.decoders.catalogue;
+            if catalogue.len() == 1 {
+                list = list.push(
+                    button(text(self.t("decoders-add")).size(13))
+                        .padding([3, 8])
+                        .on_press(Message::AddDecoderMenu),
+                );
+            } else {
+                let choices: Vec<Choice<String>> = catalogue
+                    .iter()
+                    .map(|entry| Choice {
+                        value: entry.id.clone(),
+                        label: entry.name.clone(),
+                    })
+                    .collect();
+                list = list.push(
+                    pick_list(choices, None::<Choice<String>>, Message::AddDecoderPicked)
+                        .placeholder(self.t("decoders-add"))
+                        .text_size(13),
+                );
+            }
+            if state.decoders.instances.is_empty() {
+                list = list.push(text(self.t("decoders-empty")).size(12));
+            }
+        }
+        for instance in &state.decoders.instances {
+            list = list.push(self.decoder_block(instance));
+        }
+        if let Some(refusal) = &state.decoders.refusal {
+            list = list.push(
+                text(localizer.error_message_for_code(refusal.code))
+                    .size(12)
+                    .style(text::danger),
+            );
+        }
+        if let Some(selection) = &state.decoders.selection {
+            let details = &selection.details;
+            list = list.push(text(self.t("decoder-selected")).size(13));
+            list = list.push(text(details.text.clone()).size(13));
+            list = list.push(
+                text(
+                    localizer.message(
+                        &Key::from_static("decoder-detail-position"),
+                        &Args::new()
+                            .uint("first", details.start)
+                            .uint("second", details.end),
+                    ),
+                )
+                .size(12),
+            );
+            list = list.push(
+                text(localizer.message(
+                    &Key::from_static("decoder-detail-length"),
+                    &Args::new().text("value", &details.duration),
+                ))
+                .size(12),
+            );
+            if details.error {
+                list = list.push(
+                    text(self.t("decoder-detail-error"))
+                        .size(12)
+                        .style(text::danger),
+                );
+            }
+        }
+        container(scrollable(list))
+            .width(Fill)
+            .height(Length::FillPortion(3))
+            .style(container::bordered_box)
+            .into()
+    }
+
+    /// One decoder instance: name, lane flag, state, channels and options.
+    fn decoder_block(&self, instance: &la_host::decoders::InstanceView) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let id = instance.id;
+        let entry = state
+            .decoders
+            .catalogue
+            .iter()
+            .find(|c| c.id == instance.setup.decoder);
+        let default_name = entry.map_or_else(String::new, |e| e.name.clone());
+        let name = self
+            .decoder_names
+            .get(&id)
+            .map_or(instance.setup.name.as_str(), String::as_str);
+        let state_key = match instance.state {
+            InstanceState::Waiting => "decoder-state-waiting",
+            InstanceState::Running => "decoder-state-running",
+            InstanceState::Finished => "decoder-state-finished",
+            InstanceState::Cancelled => "decoder-state-cancelled",
+            InstanceState::Failed => "decoder-state-failed",
+        };
+        let mut block = column![
+            row![
+                text_input(&default_name, name)
+                    .size(13)
+                    .width(Fill)
+                    .on_input(move |t| Message::DecoderName(id, t)),
+                tooltip(
+                    button(text("\u{d7}").size(12))
+                        .style(button::text)
+                        .padding(3)
+                        .on_press(Message::Run(Command::RemoveDecoder(id))),
+                    text(self.t("decoder-remove")),
+                    tooltip::Position::Bottom,
+                ),
+            ]
+            .spacing(4)
+            .align_y(iced::Alignment::Center)
+        ]
+        .spacing(3);
+        block = block.push(
+            checkbox(instance.setup.lane_visible)
+                .label(self.t("decoder-lane-show"))
+                .size(14)
+                .on_toggle(move |visible| Message::Run(Command::ShowDecoderLane { id, visible })),
+        );
+        let mut status = self.t(state_key);
+        if instance.state == InstanceState::Running && instance.length > 0 {
+            let percent = instance
+                .covered
+                .saturating_mul(100)
+                .checked_div(instance.length)
+                .unwrap_or(0);
+            status = format!("{status} {percent}%");
+        }
+        block = block.push(
+            text(format!(
+                "{status}  \u{b7}  {}",
+                localizer.message(
+                    &Key::from_static("decoder-annotations"),
+                    &Args::new().uint("number", instance.annotations),
+                )
+            ))
+            .size(12),
+        );
+        if !instance.ready {
+            block = block.push(text(self.t("decoder-needs-channels")).size(12));
+        }
+        if let Some(code) = instance.fault {
+            block = block.push(
+                text(localizer.error_message_for_code(code))
+                    .size(12)
+                    .style(text::danger),
+            );
+        } else if instance.incomplete {
+            block = block.push(text(self.t("decoder-incomplete")).size(12));
+        }
+        if let Some(entry) = entry {
+            let mut channel_choices: Vec<Choice<Option<u8>>> = vec![Choice {
+                value: None,
+                label: self.t("decoder-channel-none"),
+            }];
+            for style in &state.presentation.channels {
+                let label = if style.name.is_empty() {
+                    localizer.message(
+                        &Key::from_static("channel-default"),
+                        &Args::new().uint("number", u64::from(style.index)),
+                    )
+                } else {
+                    style.name.clone()
+                };
+                channel_choices.push(Choice {
+                    value: Some(style.index),
+                    label,
+                });
+            }
+            for signal in &entry.signals {
+                let current = instance.setup.channels.get(&signal.role).copied();
+                let selected = channel_choices.iter().find(|c| c.value == current).cloned();
+                let role = signal.role.clone();
+                block = block.push(labelled(
+                    signal.label.clone(),
+                    pick_list(channel_choices.clone(), selected, move |choice| {
+                        Message::DecoderChannelPicked(id, role.clone(), choice)
+                    })
+                    .text_size(13)
+                    .into(),
+                ));
+            }
+            for option in &entry.options {
+                let option_id = option.id.clone();
+                let current = state
+                    .decoders
+                    .instance(id)
+                    .and_then(|i| i.setup.options.get(&option.id).cloned());
+                let field: Element<'_, Message> = match &option.kind {
+                    CatalogueOptionKind::Choice { choices, default } => {
+                        let all: Vec<Choice<String>> = choices
+                            .iter()
+                            .map(|(value, label)| Choice {
+                                value: value.clone(),
+                                label: label.clone(),
+                            })
+                            .collect();
+                        let wanted = match current {
+                            Some(Value::Choice(v)) => v,
+                            _ => default.clone(),
+                        };
+                        let selected = all.iter().find(|c| c.value == wanted).cloned();
+                        pick_list(all, selected, move |choice| {
+                            Message::DecoderOptionPicked(id, option_id.clone(), choice)
+                        })
+                        .text_size(13)
+                        .into()
+                    }
+                    CatalogueOptionKind::Integer { default, .. } => {
+                        let shown = self
+                            .option_texts
+                            .get(&(id, option.id.clone()))
+                            .cloned()
+                            .unwrap_or_else(|| match current {
+                                Some(Value::Integer(v)) => v.to_string(),
+                                _ => default.to_string(),
+                            });
+                        text_input("", &shown)
+                            .size(13)
+                            .width(110)
+                            .on_input(move |t| Message::DecoderOptionText(id, option_id.clone(), t))
+                            .into()
+                    }
+                    CatalogueOptionKind::Boolean { default } => {
+                        let on = match current {
+                            Some(Value::Boolean(v)) => v,
+                            _ => *default,
+                        };
+                        checkbox(on)
+                            .on_toggle(move |v| {
+                                Message::DecoderOptionFlag(id, option_id.clone(), v)
+                            })
+                            .into()
+                    }
+                };
+                block = block.push(labelled(option.label.clone(), field));
+            }
+        }
+        container(block)
+            .padding(4)
+            .width(Fill)
+            .style(container::rounded_box)
             .into()
     }
 
@@ -1520,6 +1852,13 @@ impl App {
             cache: &self.cache,
             variant: self.variant,
             localizer: self.shell.localizer(),
+            selected: self
+                .shell
+                .state()
+                .decoders
+                .selection
+                .as_ref()
+                .map(|s| (s.instance, s.annotation)),
         })
         .width(Fill)
         .height(Fill);
@@ -1532,7 +1871,12 @@ impl App {
             .push(
                 row![
                     signal,
-                    column![self.markers_panel(), self.channel_panel()].width(280)
+                    column![
+                        self.decoders_panel(),
+                        self.markers_panel(),
+                        self.channel_panel()
+                    ]
+                    .width(280)
                 ]
                 .height(Fill),
             )
@@ -1705,6 +2049,96 @@ mod tests {
                 .matches_image(std::path::Path::new(&directory).join("capture"))
                 .unwrap();
         }
+    }
+
+    /// Adds the sample decoder to the capture on screen, gives it its channels and waits for it.
+    fn decode(app: &mut App) {
+        let _ = app.update(Message::AddDecoderMenu);
+        let id = app.shell.state().decoders.instances[0].id;
+        for (role, channel) in [("clock", 0_u8), ("data", 1)] {
+            let _ = app.update(Message::DecoderChannelPicked(
+                id,
+                role.to_owned(),
+                Choice {
+                    value: Some(channel),
+                    label: String::new(),
+                },
+            ));
+        }
+        let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
+        while app.shell.state().decoders.instances[0].state
+            != la_host::decoders::InstanceState::Finished
+        {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the decoder did not finish");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn the_view_renders_decoder_lanes_and_overlays_at_two_zoom_levels() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("decoder-render");
+        decode(&mut app);
+        for (name, start, end) in [
+            ("decoder-zoomed", 100_000, 100_500),
+            ("decoder-wide", 0, 300_000),
+        ] {
+            let _ = app.update(Message::Run(Command::ZoomToRange { start, end }));
+            assert_eq!(app.plan.lanes.len(), 1, "{name}");
+            assert!(app.plan.lanes[0].plan.represented() > 0, "{name}");
+            assert!(!app.plan.overlays.is_empty(), "{name}");
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(1180.0, 720.0),
+                app.view(),
+            );
+            let snapshot = ui.snapshot(&app.theme()).unwrap();
+            if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+                snapshot
+                    .matches_image(std::path::Path::new(&directory).join(name))
+                    .unwrap();
+            }
+        }
+    }
+
+    static ECHO: la_decoders::descriptor::Descriptor = la_decoders::descriptor::Descriptor {
+        id: "test.echo",
+        ..la_decoders::decoders::clocked_bits::DESCRIPTOR
+    };
+
+    #[test]
+    fn a_registered_test_decoder_appears_without_changing_the_shell() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("decoder-registered");
+        assert_eq!(app.shell.state().decoders.catalogue.len(), 1);
+        app.shell
+            .register_decoder(&ECHO, la_decoders::decoders::clocked_bits::create)
+            .unwrap();
+        let catalogue = &app.shell.state().decoders.catalogue;
+        assert_eq!(catalogue.len(), 2);
+        let echo = catalogue.iter().find(|c| c.id == "test.echo").unwrap();
+        // The setup form is built from the descriptor: its signals and options.
+        assert_eq!(echo.signals.len(), 2);
+        assert_eq!(echo.options.len(), 4);
+        // With two decoders the panel offers a list instead of a button; adding works from it.
+        let _ = app.update(Message::AddDecoderPicked(Choice {
+            value: "test.echo".to_owned(),
+            label: String::new(),
+        }));
+        assert_eq!(app.shell.state().decoders.instances.len(), 1);
+        let _ = app.update(Message::AddDecoderMenu);
+        assert_eq!(
+            app.shell.state().decoders.instances.len(),
+            1,
+            "the menu cannot choose for you"
+        );
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        ui.snapshot(&app.theme()).unwrap();
     }
 
     #[test]

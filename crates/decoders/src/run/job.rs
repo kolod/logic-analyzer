@@ -4,12 +4,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use la_core::Error;
-use la_storage::{CaptureReader, Snapshot};
+use la_storage::Snapshot;
 
 use super::{End, Run, Sink};
 use crate::descriptor::Descriptor;
 use crate::error;
-use crate::input::{Chunk, SignalReader};
+use crate::input::{Chunk, SignalReader, SnapshotSource};
 use crate::model::Bounds;
 use crate::setup::Setup;
 use crate::store::Full;
@@ -220,7 +220,7 @@ impl Pass {
 /// `decoder.failed` if the decoder returned an error.
 pub fn run_pass(
     pass: &mut Pass,
-    capture: &CaptureReader,
+    capture: &dyn SnapshotSource,
     limits: &ChunkLimits,
     cancel: &AtomicBool,
     wait: &mut dyn FnMut() -> bool,

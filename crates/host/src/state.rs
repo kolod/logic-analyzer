@@ -8,6 +8,7 @@ use la_i18n::Language;
 
 use crate::capture::{CaptureView, ProgressView};
 use crate::command::{Changes, Guarded};
+use crate::decoders::DecoderState;
 use crate::devices::{ConfigDraft, ConfigProblem};
 use crate::markers::Markers;
 use crate::notices::NoticeList;
@@ -76,6 +77,8 @@ pub struct Versions {
     pub theme: u64,
     /// The notices.
     pub notices: u64,
+    /// Decoder instances, their state and the annotation selection.
+    pub decoders: u64,
 }
 
 impl Versions {
@@ -88,6 +91,7 @@ impl Versions {
             (Changes::MARKERS, &mut self.markers),
             (Changes::THEME, &mut self.theme),
             (Changes::NOTICES, &mut self.notices),
+            (Changes::DECODERS, &mut self.decoders),
         ];
         for (part, counter) in parts {
             if changes.contains(part) {
@@ -148,4 +152,6 @@ pub struct State {
     pub settings: Settings,
     /// The language in use (mirrors the settings choice or the system default).
     pub language: Language,
+    /// The decoder instances and what is selected in their results.
+    pub decoders: DecoderState,
 }

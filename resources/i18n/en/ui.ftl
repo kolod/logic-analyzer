@@ -278,3 +278,29 @@ ann-sample-clocked-bits-bit = Bit { $value }
 ann-sample-clocked-bits-incomplete = Incomplete byte: { $value } bits
 # Annotation (error): positions of the capture were lost here.
 ann-sample-clocked-bits-gap = Samples lost here
+
+### Decoders: menu, panel and the selected annotation
+menu-decoders = Decoders
+menu-decoders-add = Add decoder
+menu-decoders-previous = Previous annotation
+menu-decoders-next = Next annotation
+menu-decoders-goto = Go to selected annotation
+panel-decoders = Decoders
+decoders-add = Add decoder
+decoders-empty = No decoders yet. Add one to see what the signals say.
+decoders-need-capture = Capture or open signals first.
+decoder-state-waiting = Waiting
+decoder-state-running = Running
+decoder-state-finished = Finished
+decoder-state-cancelled = Cancelled
+decoder-state-failed = Failed
+decoder-needs-channels = Choose the channels to start decoding.
+decoder-channel-none = (none)
+decoder-lane-show = Show the lane
+decoder-remove = Remove decoder
+decoder-annotations = Annotations: { $number }
+decoder-incomplete = Incomplete results
+decoder-selected = Selected annotation
+decoder-detail-length = Length: { $value }
+decoder-detail-error = Reports a problem in the signal
+decoder-detail-position = Position: { $first } to { $second }

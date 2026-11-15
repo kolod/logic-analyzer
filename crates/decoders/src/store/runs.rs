@@ -94,6 +94,18 @@ impl Run {
         })
     }
 
+    /// The entry with this start and id.
+    #[must_use]
+    pub fn find(&self, start: u64, id: u64, probes: &mut u64) -> Option<&Entry> {
+        let first = self.entries.partition_point(|e| {
+            *probes = probes.saturating_add(1);
+            (e.start(), e.id) < (start, id)
+        });
+        self.entries
+            .get(first)
+            .filter(|e| e.start() == start && e.id == id)
+    }
+
     /// The first entry with `start >= position`.
     #[must_use]
     pub fn first_from(&self, position: u64, probes: &mut u64) -> Option<&Entry> {

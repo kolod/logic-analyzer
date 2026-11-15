@@ -332,6 +332,7 @@ impl Shell {
             }
         }
         let limits = window_limits(bounds.length, state.view_size.pixels);
+        state.decoders.reset();
         state.capture = Some(view);
         state.presentation = presentation;
         // The one flag of a channel is also what the next capture records.

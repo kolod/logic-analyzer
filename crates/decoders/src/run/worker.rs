@@ -12,10 +12,10 @@ use std::time::{Duration, Instant};
 
 use la_core::Error;
 use la_diagnostics::{WorkerFailure, WorkerHandle, lock_recover, spawn_worker};
-use la_storage::CaptureReader;
 
 use super::{ChunkLimits, Outcome, Pass, Results, Run, Sink, run_pass};
 use crate::descriptor::Descriptor;
+use crate::input::SnapshotSource;
 use crate::setup::Setup;
 use crate::store::{Budget, Limits};
 
@@ -33,7 +33,7 @@ pub struct JobSpec {
     /// The state of the pass.
     pub run: Box<dyn Run>,
     /// The capture to read.
-    pub capture: CaptureReader,
+    pub capture: Arc<dyn SnapshotSource>,
     /// The chunk bounds.
     pub chunk_limits: ChunkLimits,
     /// The limits of the instance.
@@ -186,7 +186,7 @@ fn work(spec: JobSpec, shared: Arc<Shared>) -> JobEnd {
     let mut last_publish = Instant::now();
     let outcome = run_pass(
         &mut pass,
-        &capture,
+        capture.as_ref(),
         &chunk_limits,
         &shared.cancel,
         &mut || {

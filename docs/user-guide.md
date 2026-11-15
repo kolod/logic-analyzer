@@ -86,6 +86,31 @@ and next marker.
 With two markers chosen the panel shows the **distance** in time and its **frequency**, formatted for
 your language. The frequency shows only as many digits as the distance really resolves.
 
+## Decoders
+
+A decoder reads the signals of the capture on screen and says what they mean. The first one is the
+sample decoder **Clocked bits**: it samples a data channel on every edge of a clock channel and groups
+the bits into bytes.
+
+1. Capture (or open) signals, then press **D** or choose **Decoders → Add decoder**.
+2. In the **Decoders** panel choose the channel for each signal (here **Clock** and **Data**) and, if
+   you like, the options: which clock edge, the bit order, the bits per byte and the idle limit in
+   samples. The decoding starts as soon as the channels are chosen, and again whenever a channel or
+   an option changes.
+3. A **lane** with the decoder's name appears below the channels. A range is a byte (its value in
+   hexadecimal), a dot is a bit, and an arrow on the clock channel marks every sampled edge; a dot on
+   the data channel marks the first bit of a byte. Annotations drawn in red report a problem in the
+   signal, such as a byte that was cut short or samples that were lost. When there are too many
+   annotations for the width of the view, a small block shows how many are there (red if one of them
+   is an error); zoom in to see them one by one.
+4. Click an annotation to select it: the panel shows its text, position, length in time and whether it
+   is an error. Click it twice to bring it into view. **F8** and **Shift+F8** select the next and the
+   previous annotation, and **Ctrl+F8** goes to the selected one.
+5. The check box **Show the lane** hides the lane and its overlays; the cross removes the decoder.
+
+Decoding never changes the capture. A dashed line along the bottom of a lane means that its results
+are not whole (the decoder was cancelled or stopped).
+
 ## Saving and opening
 
 The program saves a capture with its channel names, colours, order, markers and the zoom in a
@@ -140,6 +165,7 @@ contains signal data, channel names or marker names.
 | F1 | about |
 | `+` `-` Ctrl+0 Home End Left Right (with Shift: a whole view) | the view |
 | M `[` `]` Delete S | markers |
+| D, F8, Shift+F8, Ctrl+F8 | add a decoder, next / previous / selected annotation |
 | Ctrl+= Ctrl+- | interface scale |
 
 Every menu entry shows its shortcut, and every command can be reached from the keyboard.
