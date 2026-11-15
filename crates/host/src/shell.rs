@@ -23,6 +23,7 @@ use crate::notices::{Notice, NoticeContent, NoticeId, NoticeList, Severity, noti
 use crate::plan::{ChannelView, FramePlan, MarkerPlan, build_plan};
 use crate::presentation::Presentation;
 use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
+use crate::sessions::Operation;
 use crate::settings::{RealSettingsFs, Settings, SettingsFs};
 use crate::state::{Activity, State, Unsaved, Versions};
 use crate::status::{StatusLine, status_line};
@@ -70,7 +71,7 @@ impl ShellConfig {
 }
 
 /// Why a command did not complete.
-enum Reject {
+pub(crate) enum Reject {
     /// Not valid now; nothing to report to the user.
     Ignored(&'static str),
     /// Failed; the user is told.
@@ -78,7 +79,7 @@ enum Reject {
 }
 
 /// What a command did.
-enum Executed {
+pub(crate) enum Executed {
     /// It ran; these parts changed.
     Changed(Changes),
     /// Unsaved data would be lost: the command waits for a decision.
@@ -87,24 +88,27 @@ enum Executed {
 
 /// The host: state, commands and text.
 pub struct Shell {
-    state: State,
-    localizer: Localizer,
-    config: ShellConfig,
-    settings_fs: Arc<dyn SettingsFs>,
+    pub(crate) state: State,
+    pub(crate) localizer: Localizer,
+    pub(crate) config: ShellConfig,
+    pub(crate) settings_fs: Arc<dyn SettingsFs>,
     registry: DeviceRegistry,
-    running: Option<Running>,
+    pub(crate) running: Option<Running>,
+    pub(crate) operation: Option<Operation>,
+    #[cfg(feature = "test-support")]
+    pub(crate) session_fs: Arc<dyn la_session::harness::FileSystem>,
     #[cfg(feature = "test-support")]
     test_failures: Vec<la_devices::ScriptedFailure>,
 }
 
-fn now_seconds() -> i64 {
+pub(crate) fn now_seconds() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
 /// Adds a notice for `error` to `state` and logs it with its code and technical detail.
-fn report_into(state: &mut State, severity: Severity, error: &Error) -> NoticeId {
+pub(crate) fn report_into(state: &mut State, severity: Severity, error: &Error) -> NoticeId {
     match severity {
         Severity::Error => {
             tracing::error!(target: "la_host", code = error.code(), detail = error.detail(), "failure");
@@ -121,14 +125,14 @@ fn report_into(state: &mut State, severity: Severity, error: &Error) -> NoticeId
 }
 
 /// The limits a capture is created with, from the user's memory limit.
-fn capture_limits(settings: &Settings) -> Limits {
+pub(crate) fn capture_limits(settings: &Settings) -> Limits {
     Limits {
         memory_budget_bytes: settings.memory_limit_bytes,
         ..Limits::default()
     }
 }
 
-fn window_limits(capture_length: u64, pixels: u32) -> WindowLimits {
+pub(crate) fn window_limits(capture_length: u64, pixels: u32) -> WindowLimits {
     WindowLimits {
         capture_length,
         pixels,
@@ -170,6 +174,9 @@ impl Shell {
             progress: None,
             presentation: Presentation::default(),
             markers: Markers::new(),
+            session_path: None,
+            operation: None,
+            session_extras: Vec::new(),
             snap: loaded.settings.snap_markers,
             pending_decision: None,
             follow_latest: loaded.settings.follow_latest,
@@ -188,6 +195,9 @@ impl Shell {
             settings_fs,
             registry,
             running: None,
+            operation: None,
+            #[cfg(feature = "test-support")]
+            session_fs: Arc::new(la_session::harness::RealFileSystem),
             #[cfg(feature = "test-support")]
             test_failures: Vec::new(),
         }
@@ -340,6 +350,7 @@ impl Shell {
 
     fn poll_inner(&mut self, state: &mut State, now: Instant) -> Changes {
         let mut changes = self.poll_devices(state);
+        changes.insert(self.poll_operation(state));
         changes.insert(self.poll_capture(state, now));
         changes
     }
@@ -485,6 +496,9 @@ impl Shell {
 
     /// Runs `command` against the working copy `state`.
     fn execute(&mut self, state: &mut State, command: Command) -> Result<Executed, Reject> {
+        if self.operation.is_some() && command.waits_for_operation() {
+            return Err(Reject::Ignored(error::INVALID_COMMAND));
+        }
         let changed = |changes: Changes| Ok(Executed::Changed(changes));
         match command {
             Command::DismissNotice(id) => {
@@ -539,6 +553,30 @@ impl Shell {
             Command::RequestClose => self.quit_or_guard(state, Guarded::Close),
             Command::Quit => self.quit_or_guard(state, Guarded::Quit),
             Command::Decide(decision) => self.decide(state, decision),
+            Command::SaveSession => {
+                let path = state
+                    .session_path
+                    .clone()
+                    .ok_or(Reject::Ignored(crate::command::NEEDS_PATH))?;
+                self.begin_save(state, path)
+            }
+            Command::SaveSessionAs(path) => self.begin_save(state, path),
+            Command::OpenSession(path) => {
+                if state.unsaved != Unsaved::Clean || self.running.is_some() {
+                    return Ok(self.guard(Guarded::OpenSession(path)));
+                }
+                if state.activity != Activity::Idle {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                self.begin_load(state, path)
+            }
+            Command::CancelOperation => match &self.operation {
+                Some(operation) => {
+                    operation.cancel();
+                    changed(Changes::NONE)
+                }
+                None => Err(Reject::Ignored(error::INVALID_COMMAND)),
+            },
             Command::SetViewSize(size) => {
                 if size.pixels == 0 || size == state.view_size {
                     return changed(Changes::NONE);
@@ -770,8 +808,21 @@ impl Shell {
                 state.pending_decision = None;
                 Ok(Executed::Changed(Changes::DECISION))
             }
-            // Saving first arrives with the session operations.
-            Decision::Save => Err(Reject::Ignored(error::INVALID_COMMAND)),
+            Decision::Save => {
+                // A capture that is still stopping cannot be saved yet: the interface offers the
+                // choice only when the activity is idle.
+                if state.capture.is_none()
+                    || self.running.is_some()
+                    || state.activity != Activity::Idle
+                {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                let path = state
+                    .session_path
+                    .clone()
+                    .ok_or(Reject::Ignored(crate::command::NEEDS_PATH))?;
+                self.begin_save(state, path)
+            }
             Decision::Discard => {
                 state.pending_decision = None;
                 // The data is thrown away: let the acquisition end unobserved.
@@ -779,23 +830,7 @@ impl Shell {
                     run.acquisition.stop();
                 }
                 let mut changes = Changes::DECISION;
-                match guarded {
-                    Guarded::NewCapture => {
-                        clear_capture(state);
-                        changes.insert(Changes::CAPTURE | Changes::PROGRESS | Changes::WINDOW);
-                    }
-                    Guarded::StartCapture => {
-                        clear_capture(state);
-                        let Executed::Changed(started) = self.begin_capture(state)? else {
-                            return Err(Reject::Ignored(error::INVALID_COMMAND));
-                        };
-                        changes.insert(started);
-                    }
-                    Guarded::Close | Guarded::Quit => changes.insert(Changes::QUIT),
-                    Guarded::OpenSession(_) => {
-                        return Err(Reject::Ignored(error::INVALID_COMMAND));
-                    }
-                }
+                changes.insert(self.continue_guarded(state, guarded)?);
                 Ok(Executed::Changed(changes))
             }
         }
@@ -815,7 +850,7 @@ impl Shell {
     }
 
     /// Starts the acquisition for the selected device with the validated draft.
-    fn begin_capture(&mut self, state: &mut State) -> Result<Executed, Reject> {
+    pub(crate) fn begin_capture(&mut self, state: &mut State) -> Result<Executed, Reject> {
         let device: DeviceDescriptor = state
             .selected_device
             .as_ref()
@@ -951,7 +986,7 @@ fn marker_target(state: &State, position: u64, channel: u8) -> Result<(u64, u64)
 }
 
 /// The default presentation of a capture: its enabled channels, in index order.
-fn default_presentation(capture: &CaptureView) -> Presentation {
+pub(crate) fn default_presentation(capture: &CaptureView) -> Presentation {
     Presentation::defaults(
         capture.snapshot.channels(),
         capture.description.enabled_mask(),
@@ -1000,9 +1035,11 @@ fn edit_presentation(
 }
 
 /// Removes the capture and everything about it.
-fn clear_capture(state: &mut State) {
+pub(crate) fn clear_capture(state: &mut State) {
     state.presentation = Presentation::default();
     state.markers = Markers::new();
+    state.session_path = None;
+    state.session_extras.clear();
     state.capture = None;
     state.progress = None;
     state.activity = Activity::Idle;

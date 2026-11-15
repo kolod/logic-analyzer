@@ -7,6 +7,10 @@
     clippy::arithmetic_side_effects
 )]
 
+mod session_support;
+#[allow(unused_imports)]
+pub use session_support::*;
+
 use la_storage::{Capture, CaptureConfig, Limits, Snapshot};
 
 /// A tiny deterministic generator (tests must not depend on a random crate).

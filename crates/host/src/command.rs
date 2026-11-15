@@ -253,7 +253,36 @@ pub enum Command {
     TestError(&'static str),
 }
 
+/// The reason of an ignored save: the capture has no file yet, so a path is needed (the user
+/// interface then asks for one and sends `SaveSessionAs`).
+pub const NEEDS_PATH: &str = "needs_path";
+
 impl Command {
+    /// Whether the command must wait while a save or load runs: it would change what is being
+    /// saved or replace what is being loaded.
+    #[must_use]
+    pub fn waits_for_operation(&self) -> bool {
+        matches!(
+            self,
+            Command::StartCapture
+                | Command::NewCapture
+                | Command::SaveSession
+                | Command::SaveSessionAs(_)
+                | Command::OpenSession(_)
+                | Command::RenameChannel { .. }
+                | Command::SetChannelColour { .. }
+                | Command::SetChannelVisible { .. }
+                | Command::MoveChannel { .. }
+                | Command::ResetPresentation
+                | Command::PlaceMarker { .. }
+                | Command::MoveMarker { .. }
+                | Command::RenameMarker { .. }
+                | Command::RemoveMarker(_)
+                | Command::RemoveAllMarkers
+                | Command::Decide(Decision::Save | Decision::Discard)
+        )
+    }
+
     /// A short stable name for the log (never contains user text).
     #[must_use]
     pub fn name(&self) -> &'static str {

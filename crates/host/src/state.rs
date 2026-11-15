@@ -14,6 +14,27 @@ use crate::notices::NoticeList;
 use crate::presentation::Presentation;
 use crate::settings::Settings;
 use crate::window::{ViewSize, ViewWindow};
+use std::path::PathBuf;
+
+/// A save or a load.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationKind {
+    /// Writing a session file.
+    Save,
+    /// Reading a session file.
+    Load,
+}
+
+/// A save or load that is running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OperationView {
+    /// Which one.
+    pub kind: OperationKind,
+    /// Bytes done so far.
+    pub done_bytes: u64,
+    /// The size of the file (zero until known).
+    pub total_bytes: u64,
+}
 
 /// What the application is busy with (at most one thing at a time).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +130,12 @@ pub struct State {
     pub presentation: Presentation,
     /// The markers of the capture.
     pub markers: Markers,
+    /// The session file the capture was saved to or opened from.
+    pub session_path: Option<PathBuf>,
+    /// The save or load that is running.
+    pub operation: Option<OperationView>,
+    /// Optional sections found in the opened file that this version keeps as they are.
+    pub(crate) session_extras: Vec<la_session::Section>,
     /// Whether markers snap to the nearest transition.
     pub snap: bool,
     /// A command waiting for the user to decide what happens to unsaved data.

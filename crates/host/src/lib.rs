@@ -21,6 +21,7 @@ pub mod notices;
 pub mod plan;
 pub mod presentation;
 pub mod sanitize;
+pub mod sessions;
 pub mod settings;
 mod shell;
 pub mod shortcuts;
@@ -30,12 +31,12 @@ pub mod view_section;
 pub mod window;
 
 pub use command::{
-    Changes, Command, ConfigEdit, Decision, Guarded, Outcome, PanStep, Tick, ZoomAnchor,
-    ZoomDirection, ZoomFactor,
+    Changes, Command, ConfigEdit, Decision, Guarded, NEEDS_PATH, Outcome, PanStep, Tick,
+    ZoomAnchor, ZoomDirection, ZoomFactor,
 };
 pub use devices::SignalProfile;
 pub use shell::{Shell, ShellConfig};
-pub use state::{Activity, State, Unsaved, Versions};
+pub use state::{Activity, OperationKind, OperationView, State, Unsaved, Versions};
 
 /// Version of the host API contract (`docs/host-api.md`). A change to commands, state fields,
 /// events or their meaning changes this value together with the document.
