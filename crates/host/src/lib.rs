@@ -26,6 +26,7 @@ mod shell;
 pub mod shortcuts;
 mod state;
 pub mod status;
+pub mod view_section;
 pub mod window;
 
 pub use command::{

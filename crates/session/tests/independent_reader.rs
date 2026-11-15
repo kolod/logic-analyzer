@@ -96,6 +96,8 @@ impl<'a> Reader<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 struct Model {
+    /// The format minor version of the file (the current writer emits 1).
+    minor: u16,
     simulated: bool,
     seed: Option<u64>,
     device_id: String,
@@ -127,7 +129,8 @@ fn parse(file: &[u8]) -> Result<Model, String> {
         return Err("magic".into());
     }
     let mut r = Reader { b: file, at: 8 };
-    let (major, _minor, flags) = (r.take(2)?, r.take(2)?, r.u32()?);
+    let (major, minor, flags) = (r.take(2)?, r.take(2)?, r.u32()?);
+    let minor = u16::from_le_bytes(minor.try_into().unwrap());
     if u16::from_le_bytes(major.try_into().unwrap()) != 1 || flags != 0 {
         return Err("version or flags".into());
     }
@@ -256,6 +259,7 @@ fn parse(file: &[u8]) -> Result<Model, String> {
         return Err("capt trailing".into());
     }
     Ok(Model {
+        minor,
         simulated: flags & 1 != 0,
         seed,
         device_id,
@@ -364,9 +368,9 @@ fn write(m: &Model) -> Vec<u8> {
         body.extend_from_slice(&crc(&frame).to_le_bytes());
     }
     let total = (32 + body.len() + 16) as u64;
-    let mut out = vec![
-        0x89, b'L', b'A', b'S', 0x0D, 0x0A, 0x1A, 0x0A, 1, 0, 0, 0, 0, 0, 0, 0,
-    ];
+    let mut out = vec![0x89, b'L', b'A', b'S', 0x0D, 0x0A, 0x1A, 0x0A, 1, 0];
+    out.extend_from_slice(&m.minor.to_le_bytes());
+    out.extend_from_slice(&[0, 0, 0, 0]);
     out.extend_from_slice(&total.to_le_bytes());
     out.extend_from_slice(&(all.len() as u32).to_le_bytes());
     out.extend_from_slice(&crc(&out).to_le_bytes());
@@ -476,7 +480,7 @@ fn assert_agrees(model: &Model, session: &la_session::Session, what: &str) {
 fn fixture_files() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut files = Vec::new();
-    for dir in ["reference", "v1_0"] {
+    for dir in ["reference", "v1_0", "v1_1"] {
         for entry in std::fs::read_dir(root.join(dir)).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|e| e == "lasession") {
@@ -540,6 +544,7 @@ fn the_independent_reader_agrees_with_the_loader_on_generated_files() {
 #[test]
 fn a_file_written_by_the_independent_writer_loads_in_the_crate() {
     let model = Model {
+        minor: 1,
         simulated: true,
         seed: Some(42),
         device_id: "virtual:0".into(),
