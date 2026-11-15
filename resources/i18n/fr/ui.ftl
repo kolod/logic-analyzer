@@ -71,7 +71,6 @@ menu-view-page-left = Page précédente
 menu-view-page-right = Page suivante
 menu-capture-follow = Suivre les dernières données
 panel-channels = Canaux
-channel-show = Afficher et enregistrer dans la prochaine capture
 channel-move-up = Monter
 channel-move-down = Descendre
 channel-colour = Couleur

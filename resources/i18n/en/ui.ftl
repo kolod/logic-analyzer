@@ -129,8 +129,6 @@ menu-view-page-right = Page right
 menu-capture-follow = Follow latest data
 # Title of the panel that lists the channels.
 panel-channels = Channels
-# Tooltip of the checkbox that shows or hides a channel.
-channel-show = Show, and record in the next capture
 # Tooltip of the button that moves a channel up in the order.
 channel-move-up = Move up
 # Tooltip of the button that moves a channel down in the order.

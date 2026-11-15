@@ -71,7 +71,6 @@ menu-view-page-left = 前のページ
 menu-view-page-right = 次のページ
 menu-capture-follow = 最新データを追従
 panel-channels = チャンネル
-channel-show = 表示し、次のキャプチャで記録する
 channel-move-up = 上へ
 channel-move-down = 下へ
 channel-colour = 色

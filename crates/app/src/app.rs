@@ -1183,7 +1183,13 @@ impl App {
         .wrap();
 
         let mut toolbar = column![container(controls).padding([6, 8])];
-        for problem in &state.config_problems {
+        // "No channel is chosen" needs no message: the flags in the channel list show it, and
+        // Start stays unavailable.
+        for problem in state
+            .config_problems
+            .iter()
+            .filter(|p| p.setting != la_host::devices::Setting::Channels)
+        {
             toolbar = toolbar.push(
                 container(
                     text(localizer.error_message_for_code(problem.code))
@@ -1320,12 +1326,8 @@ impl App {
             });
             let index = style.index;
             let line = row![
-                tooltip(
-                    checkbox(style.visible).on_toggle_maybe(
-                        can_flag.then_some(move |v| Message::ChannelVisible(index, v)),
-                    ),
-                    text(self.t("channel-show")),
-                    tooltip::Position::Bottom,
+                checkbox(style.visible).on_toggle_maybe(
+                    can_flag.then_some(move |v| Message::ChannelVisible(index, v)),
                 ),
                 text_input(&default_label, name)
                     .size(13)
@@ -2259,7 +2261,7 @@ mod tests {
         assert_eq!(app.shell.state().config.enabled_channels, 0);
         assert!(
             !app.shell.state().config_problems.is_empty(),
-            "no channel at all is a problem the toolbar explains"
+            "no channel at all keeps Start unavailable (without a message: the flags show it)"
         );
         for channel in [0, 2, 5] {
             let _ = app.update(Message::ChannelVisible(channel, true));

@@ -63,7 +63,7 @@ device. Each row has **one flag**, a name, a colour and arrows:
 - **The flag** does two things at once. When it is on, the channel is shown (if the capture on
   screen has data for it) and the next capture records it. Turn it off and the lane disappears and
   the channel is left out of the next capture. Any combination works (for example channels 0, 2 and
-  5 only). With no flag on, Start stays unavailable and the toolbar says why. A channel the capture
+  5 only). With no flag on, Start stays unavailable. A channel the capture
   on screen has no data for gets a lane only after the next capture records it. The flag is locked
   while a capture runs, because what that capture records cannot change.
 - The text field names the channel, the colour square steps through the palette and the arrows

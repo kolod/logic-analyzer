@@ -71,7 +71,6 @@ menu-view-page-left = Сторінка назад
 menu-view-page-right = Сторінка вперед
 menu-capture-follow = Стежити за новими даними
 panel-channels = Канали
-channel-show = Показувати й записувати в наступному захопленні
 channel-move-up = Вгору
 channel-move-down = Вниз
 channel-colour = Колір
