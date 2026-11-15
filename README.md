@@ -9,9 +9,13 @@ storage, fast viewport queries, bounded memory, gaps), the device layer
 (`la-devices`: device abstraction, background acquisition into the store, failure handling
 that keeps captured data, an always-available seeded virtual device, and a hardware-free
 test harness), the session file format (`la-session`: atomic, checksummed save and fuzzed, bounded load of
-a capture with its description) and the localization foundation (`la-i18n`: six languages, error
-messages, plurals, locale formatting, a translation parity check) exist so far; there is no UI and
-there are no real hardware drivers yet. See [roadmap.md](roadmap.md).
+a capture with its description), the localization foundation (`la-i18n`: six languages, error
+messages, plurals, locale formatting, a translation parity check) and the application itself
+(`la-host`: the host API, frame plan, markers, settings and unsaved-data protection; `la-app`: the
+window, signal view, markers, channels, saving and opening, settings and six languages) exist
+so far. You can run the application and try it with the simulated device; there are no real
+hardware drivers yet. See the [user guide](docs/user-guide.md), the
+[host API](docs/host-api.md) and [roadmap.md](roadmap.md).
 
 Supported operating systems: Windows 10/11 and Debian 13.
 
@@ -30,6 +34,7 @@ Requirements:
 ```text
 cargo build --workspace
 cargo test --workspace
+cargo run -p la-app
 ```
 
 Checks that CI enforces on both operating systems:

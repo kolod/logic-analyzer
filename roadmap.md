@@ -14,8 +14,8 @@ built and verified without capture hardware, using the virtual device.
 | 002 | `002-signal-storage-core` (merged) | Transition-based signal storage with an index for O(log N) lookup, summaries for zoomed-out views, bounded memory, benchmarks with a recorded baseline. | 001 |
 | 003 | `003-session-file-format` (merged) | Atomic write and safe read of the native session format, validation, fuzzing, "simulated" flag. Sigrok `.sr` import/export is a later, separate item. | 002 |
 | 004 | `004-device-abstraction-virtual-device` (merged) | Common device abstraction (discovery, capabilities, configuration, sample stream), seeded virtual device, configuration validation, disconnect and buffer-overrun handling. | 002 |
-| 005 | `005-i18n-foundation` (implemented) | Choice of the shared resource format and library (Fluent is the leading candidate), six languages, CLDR plurals, locale formatting, runtime language switch, key-parity check in CI. | 001 |
-| 006 | `006-ui-shell-signal-view` | UI toolkit choice, window shell, signal view (zoom, pan, markers), capture control, CJK and long German layout, user-facing error handling. | 002, 004, 005 |
+| 005 | `005-i18n-foundation` (merged) | Choice of the shared resource format and library (Fluent is the leading candidate), six languages, CLDR plurals, locale formatting, runtime language switch, key-parity check in CI. | 001 |
+| 006 | `006-ui-shell-signal-view` (implemented) | UI toolkit choice, window shell, signal view (zoom, pan, markers), capture control, CJK and long German layout, user-facing error handling. | 002, 004, 005 |
 | 007 | `007-decoder-framework-annotations` | Annotation model (lane and signal overlay: points, edge arrows, ranges), decoder stacking, fault isolation, background cancellable execution, indexed lookup. One sample decoder with its generator. | 002, 004, 006 |
 | 008 | `008-i2c-decoder-generator` | I2C decoder with overlays (start/stop on SDA, sampling edge on SCL), generator for the virtual device, round-trip tests, deliberate errors (NAK). | 007 |
 | 009 | `009-decoded-log-export` | Decoded log export (CSV/text), versioned locale-independent format, streaming write, range selection, errors included in output. | 008 |
@@ -35,8 +35,8 @@ built and verified without capture hardware, using the virtual device.
 - 005 and 006 close the constitution's `TODO(UI_TOOLKIT_AND_L10N_FORMAT)`. The UI
   toolkit must be chosen with fast signal rendering in mind (possibly a custom canvas
   renderer, with the toolkit used for everything else).
-- The host API contract (`TODO(HOST_API_CONTRACT)`) first appears in 006/007; its
-  location is decided then.
+- The host API contract (`TODO(HOST_API_CONTRACT)`) appeared in 006: it lives in
+  [docs/host-api.md](docs/host-api.md), versioned and checked against the code by a test.
 
 ## Risks and open questions
 

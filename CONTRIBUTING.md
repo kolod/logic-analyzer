@@ -75,9 +75,9 @@ user input, scripts).
 
 All project documentation is **English**: specifications, plans, tasks, README, this
 guide, code comments, commit messages, and the description of any API contract or
-script. Log text is English and is not translated. There are no user interface strings
-yet; when there are, they must never be hardcoded (see the constitution, section
-"Localization Requirements").
+script. Log text is English and is not translated. User interface text is never
+hardcoded: it lives in the localization resources in six languages (see section 8 and the
+constitution, section "Localization Requirements").
 
 ## 4. Branches
 
@@ -123,3 +123,54 @@ Features go through `/speckit-specify`, `/speckit-plan`, `/speckit-tasks` and
 `/speckit-implement`; the feature documents live in `specs/NNN-short-name/`. Every plan
 passes the Constitution Check before research and again after design. The order of
 planned features is in [roadmap.md](roadmap.md).
+
+## 8. Working on the application (`la-host` and `la-app`)
+
+The application is split on purpose. **`la-host`** holds everything the program knows how to do:
+commands, state, the frame plan, markers, settings, session files, text. **`la-app`** (iced) only
+draws what the host describes and turns input into host commands. **`la-app` contains no domain
+logic**: if a rule can be tested without a window, it belongs in `la-host`, with its test.
+
+### Adding a command
+
+1. Add the variant to `Command` (`crates/host/src/command.rs`), a short name in `Command::name`,
+   and, if it changes the capture or what is being saved, to `Command::waits_for_operation`.
+2. Execute it in `Shell::execute` (`crates/host/src/shell.rs`); validate every argument, return
+   `Reject::Ignored` for a command that is not allowed now and never panic.
+3. Make it reachable from the keyboard: a row in the shortcut table
+   (`crates/host/src/shortcuts.rs`) with a menu path and, where it makes sense, an accelerator that
+   does not clash with one the desktops keep. The test `shortcut_coverage` fails until the command
+   is in the table or in one of its justified lists.
+4. Add a row to the command table of [docs/host-api.md](docs/host-api.md); the test
+   `host_api_doc` fails if the table and the enum differ. A change that existing shells cannot
+   ignore changes `HOST_API_VERSION` and the version line in the document.
+5. Write the test first, in `crates/host/tests/`. The random walk (`random_walk`) will pick the
+   command up when you add it to its action list; add it there.
+
+### Adding or changing a user interface string
+
+Every text the user sees is a message in `resources/i18n/<language>/ui.ftl`, in all six languages
+(English, German, French, Spanish, Japanese, Ukrainian); the parity test fails if a key is missing
+in one, if placeholders differ, or if a key is unused. Keys start with the area they belong to:
+`menu-`, `toolbar-`, `status-`, `dialog-`, `settings-`, `panel-`, `notice-`, and a title ends in
+`-title`. Put a comment above the message that says where it is shown and what each argument is.
+Do not build sentences from pieces: one message per sentence, with arguments for numbers and
+names. Texts in menus, buttons, labels and titles also have a length budget in every language
+(`crates/host/tests/string_budget.rs`) so that they fit at the minimum window size of 800 by 560.
+How to write the messages and a worked example are in [docs/localization.md](docs/localization.md).
+User-typed text (channel and marker names) is never translated and is sanitized by the host.
+
+### Building and running the application
+
+`cargo run -p la-app` starts it. No system package is needed to build beyond `build-essential`,
+`git` and `curl` on Debian 13 (the CI job installs exactly these). To run it you need a graphics
+driver and a desktop session (see [docs/user-guide.md](docs/user-guide.md)). `la-app` needs a newer
+Rust compiler than the rest of the workspace; the MSRV job builds everything else.
+
+### Tests that need a window
+
+Pictures of the interface are rendered without a window by the toolkit test support. Set
+`LA_SNAPSHOT_DIR` to a folder to get them as PNG files for a person to look at (an existing file is
+kept, so delete the old one first). The tests that render take turns because several software
+renderers at once crashed the Windows CI runner. `LA_FRAME_STATS=1` makes the running application
+log how long building and drawing a frame take.
