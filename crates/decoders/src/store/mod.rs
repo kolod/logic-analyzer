@@ -139,7 +139,8 @@ impl Budget {
         }
     }
 
-    fn reserve(&self, bytes: u64) -> bool {
+    /// Takes `bytes` from the budget; `false` (and nothing taken) if it would pass the limit.
+    pub fn reserve(&self, bytes: u64) -> bool {
         let limit = self.limit();
         self.update(|used| {
             let next = used.saturating_add(bytes);
@@ -147,7 +148,8 @@ impl Budget {
         })
     }
 
-    fn release(&self, bytes: u64) {
+    /// Gives `bytes` back.
+    pub fn release(&self, bytes: u64) {
         self.update(|used| Some(used.saturating_sub(bytes)));
     }
 }
@@ -429,10 +431,22 @@ impl Snapshot {
         limit: usize,
         probes: &mut u64,
     ) -> (Vec<&Entry>, bool) {
-        let mut found: Vec<&Entry> = Vec::new();
         if from >= to {
-            return (found, false);
+            return (Vec::new(), false);
         }
+        self.collect(from, to, limit, probes)
+    }
+
+    /// The annotations that start before `position` and reach beyond it (ranges that cross it),
+    /// at most `limit` of them (the flag says there are more), ordered by start.
+    #[must_use]
+    pub fn crossing(&self, position: u64, limit: usize, probes: &mut u64) -> (Vec<&Entry>, bool) {
+        self.collect(position, position, limit, probes)
+    }
+
+    /// The entries with `start < to` and `reach > from` (no check that the window is not empty).
+    fn collect(&self, from: u64, to: u64, limit: usize, probes: &mut u64) -> (Vec<&Entry>, bool) {
+        let mut found: Vec<&Entry> = Vec::new();
         let mut truncated = false;
         for run in &self.runs {
             let completed = run.window(from, to, probes, &mut |entry| {
@@ -482,6 +496,19 @@ impl Snapshot {
             self.tail_errors.get(in_tail).copied().unwrap_or(0),
         ));
         Rank { count, errors }
+    }
+
+    /// The annotation with the smallest start at or after `position` (ties by id).
+    #[must_use]
+    pub fn first_from(&self, position: u64, probes: &mut u64) -> Option<&Entry> {
+        let from_runs = self
+            .runs
+            .iter()
+            .filter_map(|r| r.first_from(position, probes));
+        let first = self.tail.partition_point(|e| e.start() < position);
+        from_runs
+            .chain(self.tail.get(first))
+            .min_by_key(|e| (e.start(), e.id))
     }
 
     /// The annotation with the smallest start above `position` (ties by id).

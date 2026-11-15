@@ -94,6 +94,13 @@ impl Run {
         })
     }
 
+    /// The first entry with `start >= position`.
+    #[must_use]
+    pub fn first_from(&self, position: u64, probes: &mut u64) -> Option<&Entry> {
+        let first = self.partition(position, probes);
+        self.entries.get(first)
+    }
+
     /// The first entry with `start > position`.
     #[must_use]
     pub fn after(&self, position: u64, probes: &mut u64) -> Option<&Entry> {
