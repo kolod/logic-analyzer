@@ -297,10 +297,15 @@ fn work(spec: JobSpec, shared: Arc<Shared>) -> JobEnd {
             },
             &mut |position, sink| {
                 shared.covered.store(position, Ordering::Release);
-                shared
-                    .length
-                    .store(capture.snapshot().length(), Ordering::Release);
+                let snapshot = capture.snapshot();
+                shared.length.store(snapshot.length(), Ordering::Release);
                 beat(&shared);
+                // The capture and the interface come first: give up the processor after every
+                // chunk, and a little more while a capture is still being recorded.
+                std::thread::yield_now();
+                if !snapshot.status().closed {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
                 if last_publish.elapsed() >= PUBLISH_EVERY {
                     last_publish = Instant::now();
                     publish(&shared, sink.results());

@@ -269,6 +269,21 @@ pub(crate) struct DecoderRuntime {
     pub(crate) deadlines: la_decoders::run::Deadlines,
     /// How big a chunk may be.
     pub(crate) chunk_limits: ChunkLimits,
+    /// The most passes that run at once.
+    pub(crate) thread_cap: usize,
+    /// Instances that wait for a free decode thread, in the order they asked.
+    queue: std::collections::VecDeque<u32>,
+}
+
+/// The most decode threads that run at once: half the cores, at least one, so that the capture and
+/// the interface keep the rest.
+#[must_use]
+pub fn default_thread_cap() -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, std::num::NonZeroUsize::get)
+        .checked_div(2)
+        .unwrap_or(1)
+        .max(1)
 }
 
 impl DecoderRuntime {
@@ -284,6 +299,8 @@ impl DecoderRuntime {
                 max_edges: DEFAULT_CHUNK_EDGES,
                 max_span: DEFAULT_CHUNK_SPAN,
             },
+            thread_cap: default_thread_cap(),
+            queue: std::collections::VecDeque::new(),
         }
     }
 
@@ -297,6 +314,7 @@ impl DecoderRuntime {
             kept
         });
         self.results.retain(|id, _| keep(*id));
+        self.queue.retain(|id| keep(*id));
     }
 }
 
@@ -418,11 +436,21 @@ impl Shell {
     /// Starts a new pass of an instance whose setup is complete; a pass that was running is
     /// abandoned and its results dropped.
     pub(crate) fn start_pass(&mut self, state: &mut State, id: u32) {
+        self.start_pass_keeping(state, id, false);
+    }
+
+    /// Starts a pass. With `keep_old` the results of the pass before stay (flagged outdated) until
+    /// the new pass publishes its first results, which replace them at once; otherwise they go.
+    pub(crate) fn start_pass_keeping(&mut self, state: &mut State, id: u32, keep_old: bool) {
         if let Some(job) = self.decoders.jobs.remove(&id) {
             job.cancel();
         }
+        self.decoders.queue.retain(|queued| *queued != id);
         self.apply_pending_decoder_limit();
-        self.decoders.results.remove(&id);
+        let kept = keep_old && self.decoders.results.contains_key(&id);
+        if !kept {
+            self.decoders.results.remove(&id);
+        }
         let Some(instance) = state.decoders.instance(id).cloned() else {
             return;
         };
@@ -450,13 +478,23 @@ impl Shell {
         let mut view = instance;
         view.ready = ready;
         view.covered = 0;
-        view.annotations = 0;
-        view.refused = 0;
+        if !kept {
+            view.annotations = 0;
+            view.refused = 0;
+        }
         view.incomplete = false;
-        view.outdated = false;
+        view.outdated = kept;
         view.loaded = false;
         view.fault = None;
         view.state = InstanceState::Waiting;
+        if started.is_some() && self.decoders.jobs.len() >= self.decoders.thread_cap {
+            // Every decode thread is busy: this instance waits its turn.
+            self.decoders.queue.push_back(id);
+            if let Some(slot) = state.decoders.instance_mut(id) {
+                *slot = view;
+            }
+            return;
+        }
         if let Some((source, descriptor)) = started {
             match self.decoders.registry.create(&view.setup) {
                 Ok(run) => {
@@ -639,7 +677,7 @@ impl Shell {
         }
         mark_dirty(state);
         if changes_results || current.state == InstanceState::Waiting {
-            self.start_pass(state, id);
+            self.start_pass_keeping(state, id, true);
         }
         Ok(Executed::Changed(Changes::DECODERS))
     }
@@ -811,6 +849,7 @@ impl Shell {
     pub(crate) fn poll_decoders(&mut self, state: &mut State) -> Changes {
         let mut changes = Changes::NONE;
         self.apply_pending_decoder_limit();
+        changes.insert(self.start_queued(state));
         let ids: Vec<u32> = self.decoders.jobs.keys().copied().collect();
         for id in ids {
             let Some(job) = self.decoders.jobs.get_mut(&id) else {
@@ -841,7 +880,11 @@ impl Shell {
             let latest = job.latest();
             let ended = job.poll();
             if let Some(results) = latest {
+                // The first results of a new pass replace the old ones at once.
                 self.decoders.results.insert(id, results);
+                if let Some(view) = state.decoders.instance_mut(id) {
+                    view.outdated = false;
+                }
             }
             let mut notice: Option<la_core::Error> = None;
             let finished = ended.is_some();
@@ -920,9 +963,34 @@ impl Shell {
         changes
     }
 
+    /// Starts the instances that waited for a free decode thread.
+    fn start_queued(&mut self, state: &mut State) -> Changes {
+        let mut changes = Changes::NONE;
+        while self.decoders.jobs.len() < self.decoders.thread_cap {
+            let Some(id) = self.decoders.queue.pop_front() else {
+                break;
+            };
+            let waiting = state
+                .decoders
+                .instance(id)
+                .is_some_and(|i| i.state == InstanceState::Waiting);
+            if waiting {
+                self.start_pass_keeping(state, id, true);
+                changes.insert(Changes::DECODERS);
+            }
+        }
+        changes
+    }
+
+    /// Sets how many passes may run at once (tests).
+    #[cfg(feature = "test-support")]
+    pub fn set_decoder_thread_cap(&mut self, cap: usize) {
+        self.decoders.thread_cap = cap.max(1);
+    }
+
     /// Whether any pass is running.
     pub(crate) fn decoders_running(&self) -> bool {
-        !self.decoders.jobs.is_empty()
+        !self.decoders.jobs.is_empty() || !self.decoders.queue.is_empty()
     }
 
     /// The lane plans and the overlay plans of the visible instances for a window.

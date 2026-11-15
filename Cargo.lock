@@ -1694,6 +1694,7 @@ dependencies = [
  "la-devices",
  "la-diagnostics",
  "la-storage",
+ "serde_json",
  "tracing",
 ]
 

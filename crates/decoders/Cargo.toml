@@ -21,6 +21,15 @@ test-support = []
 [dev-dependencies]
 la-decoders = { path = ".", features = ["test-support"] }
 la-devices = { path = "../devices", features = ["test-support"] }
+serde_json = "1.0"
+
+[[bench]]
+name = "store_insert"
+harness = false
+
+[[bench]]
+name = "decode_throughput"
+harness = false
 
 [lints]
 workspace = true

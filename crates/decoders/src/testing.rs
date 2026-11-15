@@ -61,6 +61,8 @@ const fn descriptor(id: &'static str) -> Descriptor {
 
 /// Counts chunks and emits a range for each: the healthy neighbour of the faulty ones.
 pub static HEALTHY: Descriptor = descriptor("test.healthy");
+/// Healthy, but takes 20 ms for every chunk.
+pub static SLOW: Descriptor = descriptor("test.slow");
 /// Returns an error at chunk [`FAULT_AT_CHUNK`].
 pub static RETURNS_ERROR: Descriptor = descriptor("test.returns_error");
 /// Panics at chunk [`FAULT_AT_CHUNK`].
@@ -77,6 +79,7 @@ pub static INVALID_OUTPUT: Descriptor = descriptor("test.invalid_output");
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind0 {
     Healthy,
+    Slow,
     ReturnsError,
     Panics,
     NeverReturns,
@@ -121,7 +124,10 @@ impl Run for Fixture {
             end: chunk.end,
         };
         match self.kind {
-            Kind0::Healthy => {
+            Kind0::Healthy | Kind0::Slow => {
+                if self.kind == Kind0::Slow {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
                 sink.annotate(annotation(range, Target::Lane, Text::Literal("ok".into())))?;
             }
             Kind0::ReturnsError | Kind0::Panics | Kind0::NeverReturns => {
@@ -226,6 +232,7 @@ macro_rules! create {
 }
 
 create!(create_healthy, Kind0::Healthy);
+create!(create_slow, Kind0::Slow);
 create!(create_returns_error, Kind0::ReturnsError);
 create!(create_panics, Kind0::Panics);
 create!(create_never_returns, Kind0::NeverReturns);
@@ -238,6 +245,7 @@ create!(create_invalid, Kind0::Invalid);
 pub fn fixtures() -> Vec<(&'static Descriptor, crate::registry::Create)> {
     vec![
         (&HEALTHY, create_healthy),
+        (&SLOW, create_slow),
         (&RETURNS_ERROR, create_returns_error),
         (&PANICS, create_panics),
         (&NEVER_RETURNS, create_never_returns),

@@ -34,3 +34,18 @@ valid for a configured decoder.
 |------|----------|------|--------|
 | 2026-11-15 | Windows 11 (automated) | `fault_injection`, `decoder_faults`, `decoder_log`, `decoder_settings`: an error, a panic, a decoder that never returns, memory and annotation limits and invalid output next to a healthy decoder | Pass. |
 | pending | Windows 11 and Debian, running application | a person reads the six-language fault messages in the panel | **Not done yet**; the translations are machine drafts. |
+
+## Phase 6 (User Story 3): a very large capture stays smooth, also while it grows
+
+Machine: the maintainer's Windows 11 PC, release builds, 2026-11-15. Baselines are in
+`crates/decoders/benches/baseline.json` and `crates/host/benches/annotation_baseline.json`.
+
+| Measurement | Result |
+|-------------|--------|
+| Store insertion (2 M annotations) | 262 ns in start order, 331 ns nearly in order, 1,192 ns in random order; 4 runs |
+| Sample decoder over 100 M samples (generated clocked bits, 440 k annotations) | 0.19 s, about 539 M samples/s |
+| Lane plan, 1 M and 5 M annotations over 100 M and 1,000 M samples, whole capture, 1 % and 4 px per sample, 2000 and 4000 px | 0.4 to 1.5 ms; the 5 M store is x1.01 of the 1 M store; at most 4,894 cells (limit 4 · W) |
+| `measure_decoder_responsiveness` (16 channels, 100 M samples, random signals, sample decoder, 1,900 px) | during capture and decoding the longest call 2.7 ms; zoom and pan update + plan p50 2.35 ms, max 3.64 ms; widget tree max 0.27 ms; language change 8.3 ms; cancel 13 ms |
+
+The bench uses 5 M annotations as the large case because that is the most an instance can hold
+(the task text says 10 M). The pictures on a real graphics card and on Debian are not measured here.

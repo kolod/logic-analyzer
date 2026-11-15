@@ -1591,6 +1591,12 @@ impl App {
             ))
             .size(12),
         );
+        if instance.state == InstanceState::Running && instance.length > 0 {
+            block = block.push(progress_bar(
+                0.0..=1.0,
+                instance.covered as f32 / instance.length as f32,
+            ));
+        }
         if !instance.ready {
             block = block.push(text(self.t("decoder-needs-channels")).size(12));
         } else {
@@ -2147,6 +2153,140 @@ mod tests {
         }
         assert!(entry_for(&table, &Key::Character("q".into()), Modifiers::empty()).is_none());
         assert!(entry_for(&table, &Key::Unidentified, Modifiers::CTRL).is_none());
+    }
+
+    /// What the interface thread does while a decoder works on a very large capture: the longest
+    /// call during decoding, a cancel, zooming and a language change, and the time of the frame plan
+    /// with the full set of annotations. Like the measurement above it is run on purpose:
+    /// `cargo test -p la-app --release measure_decoder_responsiveness -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check; run it on purpose"]
+    fn measure_decoder_responsiveness() {
+        use std::time::Duration;
+
+        fn row(label: &str, v: &mut [Duration]) {
+            v.sort_unstable();
+            let at = |p: usize| {
+                v.get(v.len().saturating_sub(1) * p / 100)
+                    .copied()
+                    .unwrap_or_default()
+            };
+            println!(
+                "{label:<34} n={:<4} p50 {:>7.2} ms  p95 {:>7.2} ms  max {:>7.2} ms",
+                v.len(),
+                at(50).as_secs_f64() * 1e3,
+                at(95).as_secs_f64() * 1e3,
+                at(100).as_secs_f64() * 1e3
+            );
+        }
+
+        let _turn = render_turn();
+        let dir =
+            std::env::temp_dir().join(format!("la-app-decoder-measure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        for edit in [
+            ConfigEdit::Realtime(false),
+            ConfigEdit::Channels(0xffff),
+            ConfigEdit::SampleRate(100_000_000),
+            ConfigEdit::Length(100_000_000),
+            ConfigEdit::Seed(Some(5)),
+            ConfigEdit::AcceptBudgetRisk(true),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        let _ = app.update(Message::AreaResized(1900.0));
+        // A first capture, so that a decoder can be added; the second one is decoded as it grows.
+        let _ = app.update(Message::Run(Command::EditConfig(ConfigEdit::Length(
+            1_000_000,
+        ))));
+        let _ = app.update(Message::Run(Command::StartCapture));
+        while app.shell.state().activity != Activity::Idle {
+            let _ = app.update(Message::Tick(Instant::now()));
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = app.update(Message::AddDecoderMenu);
+        let id = app.shell.state().decoders.instances[0].id;
+        for (role, channel) in [("clock", 0_u8), ("data", 1)] {
+            let _ = app.update(Message::DecoderChannelPicked(
+                id,
+                role.to_owned(),
+                Choice {
+                    value: Some(channel),
+                    label: String::new(),
+                },
+            ));
+        }
+        let _ = app.update(Message::Run(Command::EditConfig(ConfigEdit::Length(
+            100_000_000,
+        ))));
+        let mut decoding = Vec::new();
+        let _ = app.update(Message::Run(Command::StartCapture));
+        loop {
+            let t = Instant::now();
+            let _ = app.update(Message::Tick(Instant::now()));
+            let _ = app.view();
+            decoding.push(t.elapsed());
+            let view = app.shell.state().decoders.instance(id).unwrap();
+            if app.shell.state().activity == Activity::Idle
+                && view.state != la_host::decoders::InstanceState::Running
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let annotations = app.shell.state().decoders.instance(id).unwrap().annotations;
+        println!("{annotations} annotations over 100 M samples");
+        row("during capture + decoding", &mut decoding);
+        let mut plans = Vec::new();
+        let mut views = Vec::new();
+        for i in 0..300 {
+            let message = match i % 3 {
+                0 => Message::Run(Command::Zoom {
+                    factor: la_host::ZoomFactor {
+                        numerator: 4,
+                        denominator: 5,
+                    },
+                    anchor: la_host::ZoomAnchor::Column(900),
+                }),
+                1 => Message::Run(Command::Pan { pixels: 200 }),
+                _ => Message::Run(Command::Zoom {
+                    factor: la_host::ZoomFactor {
+                        numerator: 5,
+                        denominator: 4,
+                    },
+                    anchor: la_host::ZoomAnchor::Column(400),
+                }),
+            };
+            let t = Instant::now();
+            let _ = app.update(message);
+            plans.push(t.elapsed());
+            let t = Instant::now();
+            let _ = app.view();
+            views.push(t.elapsed());
+        }
+        row("zoom and pan: update + plan", &mut plans);
+        row("zoom and pan: widget tree", &mut views);
+        let mut language = Vec::new();
+        for l in [la_i18n::Language::Uk, la_i18n::Language::En] {
+            let t = Instant::now();
+            let _ = app.update(Message::Run(Command::SetLanguage(l)));
+            let _ = app.view();
+            language.push(t.elapsed());
+        }
+        row("language change", &mut language);
+        // A cancel while a pass runs: set the setup anew, then cancel at once.
+        let _ = app.update(Message::Run(Command::RunDecoder(id)));
+        let t = Instant::now();
+        let _ = app.update(Message::Run(Command::CancelDecoder(id)));
+        while app.shell.state().decoders.instance(id).unwrap().state
+            == la_host::decoders::InstanceState::Running
+        {
+            let _ = app.update(Message::Tick(Instant::now()));
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        println!("cancel took {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Runs a fast capture on the simulated device and returns the application showing it.

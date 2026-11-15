@@ -1,0 +1,10 @@
+{
+  "decode_throughput": {
+    "microseconds_per_million_samples": 1857.0
+  },
+  "store_insert": {
+    "in_order_ns": 262.0,
+    "nearly_ns": 331.0,
+    "random_ns": 1192.0
+  }
+}

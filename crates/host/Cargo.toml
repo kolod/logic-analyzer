@@ -35,5 +35,9 @@ la-session = { path = "../session", features = ["test-support"] }
 name = "frame_plan"
 harness = false
 
+[[bench]]
+name = "annotation_plan"
+harness = false
+
 [lints]
 workspace = true

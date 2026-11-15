@@ -190,7 +190,11 @@ records), the reason the last command was refused (`refusal`: code and the setti
 annotation with its details, and the limits in force. `Versions.decoders` and the change flag
 `DECODERS` tell a shell what to redraw; results growing during a pass bump them. A pass runs on a
 supervised worker and never blocks `apply` or `poll`; closing the capture, opening a file or starting a
-capture removes every instance. The decoder side of the contract is `docs/decoder-api.md`.
+capture removes every instance. At most half of the cores (at least one) decode at once; the other instances are `Waiting` and take their
+turn. A pass yields after every chunk and follows a capture that is still growing, finishing only when
+the capture is closed. A change of the setup that alters results starts a new pass and keeps the old
+results, flagged `outdated`, until the new pass publishes its first results, which replace them at
+once. The decoder side of the contract is `docs/decoder-api.md`.
 
 ## Text and localization
 

@@ -1,0 +1,28 @@
+{
+  "annotation_plan": {
+    "1M annotations / 100M samples / whole capture / 2000px": {"plan_us": 454, "cells": 2000},
+    "1M annotations / 100M samples / 1 % window / 2000px": {"plan_us": 371, "cells": 2000},
+    "1M annotations / 100M samples / 4 px per sample / 2000px": {"plan_us": 1, "cells": 5},
+    "1M annotations / 100M samples / whole capture / 4000px": {"plan_us": 900, "cells": 4000},
+    "1M annotations / 100M samples / 1 % window / 4000px": {"plan_us": 1535, "cells": 4894},
+    "1M annotations / 100M samples / 4 px per sample / 4000px": {"plan_us": 1, "cells": 10},
+    "1M annotations / 1000M samples / whole capture / 2000px": {"plan_us": 444, "cells": 2000},
+    "1M annotations / 1000M samples / 1 % window / 2000px": {"plan_us": 275, "cells": 2000},
+    "1M annotations / 1000M samples / 4 px per sample / 2000px": {"plan_us": 0, "cells": 0},
+    "1M annotations / 1000M samples / whole capture / 4000px": {"plan_us": 858, "cells": 4000},
+    "1M annotations / 1000M samples / 1 % window / 4000px": {"plan_us": 1506, "cells": 4806},
+    "1M annotations / 1000M samples / 4 px per sample / 4000px": {"plan_us": 0, "cells": 1},
+    "5M annotations / 100M samples / whole capture / 2000px": {"plan_us": 433, "cells": 2000},
+    "5M annotations / 100M samples / 1 % window / 2000px": {"plan_us": 298, "cells": 2001},
+    "5M annotations / 100M samples / 4 px per sample / 2000px": {"plan_us": 2, "cells": 26},
+    "5M annotations / 100M samples / whole capture / 4000px": {"plan_us": 970, "cells": 4000},
+    "5M annotations / 100M samples / 1 % window / 4000px": {"plan_us": 540, "cells": 4001},
+    "5M annotations / 100M samples / 4 px per sample / 4000px": {"plan_us": 5, "cells": 51},
+    "5M annotations / 1000M samples / whole capture / 2000px": {"plan_us": 458, "cells": 2000},
+    "5M annotations / 1000M samples / 1 % window / 2000px": {"plan_us": 306, "cells": 2001},
+    "5M annotations / 1000M samples / 4 px per sample / 2000px": {"plan_us": 1, "cells": 3},
+    "5M annotations / 1000M samples / whole capture / 4000px": {"plan_us": 1002, "cells": 4000},
+    "5M annotations / 1000M samples / 1 % window / 4000px": {"plan_us": 567, "cells": 4001},
+    "5M annotations / 1000M samples / 4 px per sample / 4000px": {"plan_us": 1, "cells": 6}
+  }
+}
