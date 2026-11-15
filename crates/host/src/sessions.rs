@@ -209,6 +209,11 @@ impl Shell {
                 };
                 changes.insert(started);
             }
+            Guarded::RemoveDecoder(id) => {
+                if let Executed::Changed(removed) = self.remove_with_dependants(state, id)? {
+                    changes.insert(removed);
+                }
+            }
             Guarded::Close | Guarded::Quit => changes.insert(Changes::QUIT),
             Guarded::OpenSession(path) => {
                 if let Executed::Changed(started) = self.begin_load(state, path)? {

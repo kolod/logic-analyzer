@@ -314,3 +314,10 @@ decoder-run = Run again
 decoder-cancel = Cancel
 settings-decoder-memory = Memory limit of decoder results
 settings-decoder-memory-note = Shared by all decoders. Applies to the next pass.
+
+### Decoders: stacking
+decoder-source = Reads from
+decoder-source-capture = The capture
+dialog-remove-decoder-title = Remove decoder
+dialog-remove-decoder-body = Other decoders read from this one. Removing it removes them too. The capture is not affected.
+dialog-remove-decoder-confirm = Remove them all

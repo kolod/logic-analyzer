@@ -16,7 +16,8 @@ use la_decoders::registry::Registry;
 use la_decoders::run::{
     ChunkLimits, DEFAULT_CHUNK_EDGES, DEFAULT_CHUNK_SPAN, Ended, Job, JobSpec, Outcome, Results,
 };
-use la_decoders::setup::{MAX_INSTANCES, MAX_STACK_DEPTH, Setup};
+use la_decoders::setup::{MAX_INSTANCES, MAX_STACK_DEPTH, Setup, Source};
+use la_decoders::stack::{ItemStream, dependants, stack_order};
 use la_decoders::store::{
     Budget, DEFAULT_MAX_ANNOTATIONS, DEFAULT_MEMORY_LIMIT, Full, Limits as StoreLimits,
 };
@@ -263,6 +264,8 @@ pub(crate) struct DecoderRuntime {
     pub(crate) budget: Arc<Budget>,
     jobs: BTreeMap<u32, Job>,
     results: BTreeMap<u32, Results>,
+    /// The items of the latest pass of each instance, read by the instances stacked on it.
+    streams: BTreeMap<u32, ItemStream>,
     /// A new memory limit that waits for the running passes to end.
     pub(crate) pending_limit: Option<u64>,
     /// The deadlines the supervisor enforces.
@@ -294,6 +297,7 @@ impl DecoderRuntime {
             jobs: BTreeMap::new(),
             results: BTreeMap::new(),
             pending_limit: None,
+            streams: BTreeMap::new(),
             deadlines: la_decoders::run::Deadlines::default(),
             chunk_limits: ChunkLimits {
                 max_edges: DEFAULT_CHUNK_EDGES,
@@ -314,6 +318,7 @@ impl DecoderRuntime {
             kept
         });
         self.results.retain(|id, _| keep(*id));
+        self.streams.retain(|id, _| keep(*id));
         self.queue.retain(|id| keep(*id));
     }
 }
@@ -471,8 +476,14 @@ impl Shell {
             return;
         }
         let source = self.decoder_source(state);
-        let started = match (ready, source) {
-            (true, Some(source)) => Some((source, descriptor)),
+        // A decoder that reads items needs the stream of the instance below; without one (that
+        // instance has not started) it waits, and is started when the one below starts.
+        let input = match instance.setup.source {
+            Source::Capture => Some(None),
+            Source::Instance(below) => self.decoders.streams.get(&below).cloned().map(Some),
+        };
+        let started = match (ready, source, input) {
+            (true, Some(source), Some(input)) => Some((source, descriptor, input)),
             _ => None,
         };
         let mut view = instance;
@@ -495,9 +506,11 @@ impl Shell {
             }
             return;
         }
-        if let Some((source, descriptor)) = started {
+        if let Some((source, descriptor, input)) = started {
             match self.decoders.registry.create(&view.setup) {
                 Ok(run) => {
+                    let output = ItemStream::new();
+                    self.decoders.streams.insert(id, output.clone());
                     let job = Job::spawn(JobSpec {
                         descriptor,
                         setup: view.setup.clone(),
@@ -509,6 +522,8 @@ impl Shell {
                         },
                         budget: Arc::clone(&self.decoders.budget),
                         deadlines: self.decoders.deadlines,
+                        output,
+                        input,
                     });
                     self.decoders.jobs.insert(id, job);
                     view.state = InstanceState::Running;
@@ -523,6 +538,18 @@ impl Shell {
         }
         if let Some(slot) = state.decoders.instance_mut(id) {
             *slot = view;
+        }
+        // The instances stacked on this one read its new items: they start again, their old
+        // results kept (flagged outdated) until the new ones arrive.
+        let above: Vec<u32> = state
+            .decoders
+            .instances
+            .iter()
+            .filter(|i| i.setup.source == Source::Instance(id))
+            .map(|i| i.id)
+            .collect();
+        for dependant in above {
+            self.start_pass_keeping(state, dependant, true);
         }
     }
 
@@ -553,7 +580,14 @@ impl Shell {
     /// A new capture starts: every instance decodes it from the start.
     pub(crate) fn restart_decoders(&mut self, state: &mut State) {
         state.decoders.selection = None;
-        let ids: Vec<u32> = state.decoders.instances.iter().map(|i| i.id).collect();
+        // Instances that read the capture start; the ones stacked on them follow.
+        let ids: Vec<u32> = state
+            .decoders
+            .instances
+            .iter()
+            .filter(|i| i.setup.source == Source::Capture)
+            .map(|i| i.id)
+            .collect();
         for id in ids {
             self.start_pass(state, id);
         }
@@ -593,6 +627,77 @@ impl Shell {
         job.cancel();
         let _ = state;
         Ok(Executed::Changed(Changes::NONE))
+    }
+
+    /// Removes an instance and every instance stacked on it, after the user agreed.
+    pub(crate) fn remove_with_dependants(
+        &mut self,
+        state: &mut State,
+        id: u32,
+    ) -> Result<Executed, Reject> {
+        let setups: Vec<Setup> = state
+            .decoders
+            .instances
+            .iter()
+            .map(|i| i.setup.clone())
+            .collect();
+        let mut doomed = dependants(&setups, id);
+        doomed.push(id);
+        for gone in doomed.iter().rev() {
+            if let Some(job) = self.decoders.jobs.remove(gone) {
+                job.cancel();
+            }
+            self.decoders.results.remove(gone);
+            self.decoders.streams.remove(gone);
+        }
+        state.decoders.instances.retain(|i| !doomed.contains(&i.id));
+        if state
+            .decoders
+            .selection
+            .as_ref()
+            .is_some_and(|s| doomed.contains(&s.instance))
+        {
+            state.decoders.selection = None;
+        }
+        state.decoders.refusal = None;
+        mark_dirty(state);
+        Ok(Executed::Changed(Changes::DECODERS))
+    }
+
+    /// What the instance could read from: the capture (for a decoder that reads signals) or an
+    /// instance whose output fits and that would not close a cycle or make the stack too deep.
+    #[must_use]
+    pub fn decoder_sources(&self, id: u32) -> Vec<Source> {
+        let state = &self.state;
+        let Some(instance) = state.decoders.instance(id) else {
+            return Vec::new();
+        };
+        let channels = Self::decoder_channels(state);
+        let others = Self::other_setups(state, id);
+        let mut candidates = vec![Source::Capture];
+        candidates.extend(
+            state
+                .decoders
+                .instances
+                .iter()
+                .filter(|i| i.id != id)
+                .map(|i| Source::Instance(i.id)),
+        );
+        candidates
+            .into_iter()
+            .filter(|source| {
+                let mut setup = instance.setup.clone();
+                setup.source = *source;
+                // The channels and options are not what is asked here.
+                match setup.validate(&self.decoders.registry, &others, channels) {
+                    Ok(()) => true,
+                    Err(e) => {
+                        e.code() == la_decoders::error::INVALID_SETUP
+                            && e.detail().starts_with("channels.")
+                    }
+                }
+            })
+            .collect()
     }
 
     /// Cancels the passes and removes the results of instances that are gone.
@@ -859,6 +964,9 @@ impl Shell {
             // alone and nothing it still does is read.
             if let Some(why) = job.overdue() {
                 tracing::error!(target: "la_host", ?why, "a decoder is not responding");
+                if let Some(stream) = self.decoders.streams.get(&id) {
+                    stream.end(false);
+                }
                 if let Some(stuck) = self.decoders.jobs.remove(&id) {
                     if let Some(latest) = stuck.latest() {
                         self.decoders.results.insert(id, latest);
@@ -1007,7 +1115,18 @@ impl Shell {
         };
         let mut lane_plans = Vec::new();
         let mut overlay_plans = Vec::new();
-        for instance in &self.state.decoders.instances {
+        // The lanes come in stack order: every decoder below the ones that read from it.
+        let setups: Vec<Setup> = self
+            .state
+            .decoders
+            .instances
+            .iter()
+            .map(|i| i.setup.clone())
+            .collect();
+        let order = stack_order(&setups);
+        let mut ordered: Vec<&InstanceView> = self.state.decoders.instances.iter().collect();
+        ordered.sort_by_key(|i| order.iter().position(|o| *o == i.id));
+        for instance in ordered {
             if !instance.setup.lane_visible {
                 continue;
             }

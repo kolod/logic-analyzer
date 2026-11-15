@@ -45,6 +45,8 @@ fn spawn_sample(reader: la_storage::CaptureReader, chunk: ChunkLimits) -> Job {
         limits: Limits::default(),
         budget: Budget::new(1 << 30),
         deadlines: Deadlines::default(),
+        output: la_decoders::stack::ItemStream::new(),
+        input: None,
     })
 }
 
@@ -133,6 +135,8 @@ fn cancel_takes_effect_within_a_second_even_for_a_slow_decoder_and_keeps_the_res
             limits: Limits::default(),
             budget: Budget::new(1 << 30),
             deadlines: Deadlines::default(),
+            output: la_decoders::stack::ItemStream::new(),
+            input: None,
         })
     };
     let mut job = make();

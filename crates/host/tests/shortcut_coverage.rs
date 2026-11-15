@@ -81,7 +81,7 @@ const SETTINGS_DIALOG: [&str; 4] = [
 ];
 
 /// Controls of the side panels and the toolbar: reachable with Tab and the keyboard in them.
-const FOCUSABLE_CONTROLS: [&str; 23] = [
+const FOCUSABLE_CONTROLS: [&str; 24] = [
     "RefreshDevices",
     "SelectDevice",
     "EditConfig",
@@ -102,6 +102,7 @@ const FOCUSABLE_CONTROLS: [&str; 23] = [
     "ShowDecoderLane",
     "RemoveDecoder",
     "RunDecoder",
+    "StackDecoder",
     "CancelDecoder",
     "SelectAnnotation",
     "ClearAnnotationSelection",

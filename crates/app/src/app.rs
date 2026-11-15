@@ -11,7 +11,7 @@ use iced::widget::{
     scrollable, stack, text, text_input, tooltip,
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
-use la_decoders::setup::Value;
+use la_decoders::setup::{Source, Value};
 use la_devices::DeviceId;
 use la_host::decoders::{CatalogueOptionKind, InstanceState};
 use la_host::presentation::{Colour, PALETTE_SIZE};
@@ -108,6 +108,8 @@ pub enum Message {
     MarkerMeasure(usize, u32),
     /// The menu entry that adds a decoder.
     AddDecoderMenu,
+    /// A source was chosen for a decoder instance (the capture, or another instance).
+    DecoderSourcePicked(u32, Choice<Source>),
     /// A decoder was chosen in the list of decoders to add.
     AddDecoderPicked(Choice<String>),
     /// A decoder instance was renamed in the panel.
@@ -1034,6 +1036,10 @@ impl App {
                     _ => Task::none(),
                 }
             }
+            Message::DecoderSourcePicked(id, choice) => self.run(Command::StackDecoder {
+                id,
+                source: choice.value,
+            }),
             Message::AddDecoderPicked(choice) => self.run(Command::AddDecoder {
                 decoder: choice.value,
             }),
@@ -1629,6 +1635,48 @@ impl App {
             block = block.push(text(self.t("decoder-incomplete")).size(12));
         }
         if let Some(entry) = entry {
+            // Where it reads from, when there is a choice (a stacked decoder reads another one).
+            let sources = self.shell.decoder_sources(id);
+            if sources.len() > 1 || entry.reads_items {
+                let label_of = |source: &Source| match source {
+                    Source::Capture => self.t("decoder-source-capture"),
+                    Source::Instance(other) => state
+                        .decoders
+                        .instance(*other)
+                        .map(|i| {
+                            if i.setup.name.is_empty() {
+                                state
+                                    .decoders
+                                    .catalogue
+                                    .iter()
+                                    .find(|c| c.id == i.setup.decoder)
+                                    .map_or_else(String::new, |c| c.name.clone())
+                            } else {
+                                i.setup.name.clone()
+                            }
+                        })
+                        .unwrap_or_default(),
+                };
+                let choices: Vec<Choice<Source>> = sources
+                    .iter()
+                    .map(|source| Choice {
+                        value: *source,
+                        label: label_of(source),
+                    })
+                    .collect();
+                let selected = choices
+                    .iter()
+                    .find(|c| c.value == instance.setup.source)
+                    .cloned();
+                block = block.push(labelled(
+                    self.t("decoder-source"),
+                    pick_list(choices, selected, move |choice| {
+                        Message::DecoderSourcePicked(id, choice)
+                    })
+                    .text_size(13)
+                    .into(),
+                ));
+            }
             let mut channel_choices: Vec<Choice<Option<u8>>> = vec![Choice {
                 value: None,
                 label: self.t("decoder-channel-none"),
@@ -1969,6 +2017,27 @@ impl App {
     }
 
     fn unsaved_dialog(&self) -> Element<'_, Message> {
+        // The question about removing a decoder that others read from is not about the capture.
+        if let Some(la_host::Guarded::RemoveDecoder(_)) = self.shell.state().pending_decision {
+            let body = column![
+                text(self.t("dialog-remove-decoder-title")).size(18),
+                text(self.t("dialog-remove-decoder-body")),
+                row![
+                    button(text(self.t("dialog-remove-decoder-confirm")))
+                        .style(button::danger)
+                        .on_press(Message::Run(Command::Decide(Decision::Discard))),
+                    button(text(self.t("dialog-cancel")))
+                        .style(button::secondary)
+                        .on_press(Message::Run(Command::Decide(Decision::Cancel))),
+                ]
+                .spacing(8),
+            ]
+            .spacing(12)
+            .max_width(420);
+            return container(container(body).padding(20).style(container::bordered_box))
+                .center(Fill)
+                .into();
+        }
         let body = column![
             text(self.t("dialog-unsaved-title")).size(18),
             text(self.t("dialog-unsaved-body")),

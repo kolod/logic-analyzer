@@ -9,9 +9,10 @@ use la_storage::Snapshot;
 use super::{End, Run, Sink};
 use crate::descriptor::Descriptor;
 use crate::error;
-use crate::input::{Chunk, SignalReader, SnapshotSource};
+use crate::input::{Chunk, ItemChunk, SignalReader, SnapshotSource};
 use crate::model::Bounds;
 use crate::setup::Setup;
+use crate::stack::ItemStream;
 use crate::store::Full;
 
 /// The default most edges in one chunk.
@@ -205,6 +206,84 @@ impl Pass {
                 self.descriptor.id, e.detail
             ))
         })
+    }
+}
+
+/// The most items handed to an upper decoder in one chunk.
+const ITEMS_PER_CHUNK: usize = 4_096;
+
+/// Runs the pass of a decoder that reads the items of the decoder below it.
+///
+/// Items come in chunks: those whose end is at or below the watermark of the lower pass. The lower
+/// pass that is still running is waited for (`wait`); when it ends whole, this pass ends whole; when
+/// it ends cut or failed, this pass keeps what it made and marks it incomplete (it does not fail).
+/// `capture` gives the snapshots annotations are checked against.
+///
+/// # Errors
+///
+/// `decoder.failed` if the decoder returned an error.
+pub fn run_item_pass(
+    pass: &mut Pass,
+    stream: &ItemStream,
+    capture: &dyn SnapshotSource,
+    cancel: &AtomicBool,
+    wait: &mut dyn FnMut() -> bool,
+    on_chunk: &mut dyn FnMut(u64, &mut Sink),
+) -> Result<Outcome, Error> {
+    let mut next = 0_usize;
+    loop {
+        let snapshot = capture.snapshot();
+        if cancel.load(Ordering::Acquire) {
+            pass.finish(&snapshot, End::Cut)?;
+            return Ok(Outcome::Cancelled);
+        }
+        let read = stream.read(next, ITEMS_PER_CHUNK);
+        if !read.items.is_empty() || read.covered > pass.position {
+            pass.sink.set_bounds(Bounds {
+                length: snapshot.length(),
+                channels: snapshot.channels(),
+            });
+            let count = read.items.len();
+            let chunk = ItemChunk {
+                items: read.items,
+                covered: read.covered,
+            };
+            let result = pass.run.process_items(&chunk, &mut pass.sink);
+            if let Some(full) = pass.sink.full() {
+                pass.sink.set_coverage(pass.position, true);
+                pass.finish(&snapshot, End::Cut)?;
+                return Ok(Outcome::Limit(full));
+            }
+            if let Err(e) = result {
+                pass.sink.set_coverage(pass.position, true);
+                return Err(error::failed(format!(
+                    "decoder `{}` failed at position {}: {}",
+                    pass.descriptor.id, pass.position, e.detail
+                )));
+            }
+            next = next.saturating_add(count);
+            pass.position = pass.position.max(chunk.covered);
+            pass.chunks = pass.chunks.saturating_add(1);
+            pass.sink.set_coverage(pass.position, false);
+            on_chunk(pass.position, &mut pass.sink);
+            continue;
+        }
+        match read.ended {
+            Some(complete) => {
+                pass.finish(&snapshot, if complete { End::Complete } else { End::Cut })?;
+                if !complete {
+                    let position = pass.position;
+                    pass.sink.set_coverage(position, true);
+                }
+                return Ok(Outcome::Complete);
+            }
+            None => {
+                if !wait() {
+                    pass.finish(&snapshot, End::Cut)?;
+                    return Ok(Outcome::Cancelled);
+                }
+            }
+        }
     }
 }
 

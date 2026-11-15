@@ -6,14 +6,15 @@ mod sink;
 mod worker;
 
 pub use job::{
-    Advance, ChunkLimits, DEFAULT_CHUNK_EDGES, DEFAULT_CHUNK_SPAN, Outcome, Pass, run_pass,
+    Advance, ChunkLimits, DEFAULT_CHUNK_EDGES, DEFAULT_CHUNK_SPAN, Outcome, Pass, run_item_pass,
+    run_pass,
 };
 pub use sink::{Limit, Refused, Results, Sink};
 pub use worker::{
     Deadlines, Ended, Job, JobEnd, JobSpec, MAX_STUCK_WORKERS, Overdue, Progress, stuck_workers,
 };
 
-use crate::input::{Chunk, SignalReader};
+use crate::input::{Chunk, ItemChunk, SignalReader};
 
 /// Why a pass is being ended, as `finish` is told.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +63,17 @@ pub trait Run: Send {
         reader: &SignalReader,
         sink: &mut Sink,
     ) -> Result<(), DecodeError>;
+
+    /// Processes items of the decoder below (for a decoder with `Input::Items`): the items whose
+    /// end is at or below the watermark `chunk.covered`, in order.
+    ///
+    /// # Errors
+    ///
+    /// As for `process`.
+    fn process_items(&mut self, chunk: &ItemChunk, sink: &mut Sink) -> Result<(), DecodeError> {
+        let _ = (chunk, sink);
+        Ok(())
+    }
 
     /// Called once when the pass ends; flushes a pending construct.
     ///

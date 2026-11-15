@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::model::{Annotation, Bounds, Item, Refusal, Target};
+use crate::stack::ItemStream;
 use crate::store::{Budget, Coverage, Full, Limits, Snapshot, Store};
 
 /// A limit was reached; nothing more can be stored.
@@ -59,7 +60,7 @@ pub struct Sink {
     budget: Arc<Budget>,
     lane: Store,
     overlays: BTreeMap<u8, Store>,
-    items: Vec<Item>,
+    stream: ItemStream,
     item_bytes: u64,
     last_item_end: u64,
     refused: Refused,
@@ -72,6 +73,12 @@ impl Sink {
     /// An empty sink with the instance limits, drawing memory from the shared `budget`.
     #[must_use]
     pub fn new(limits: Limits, budget: Arc<Budget>) -> Self {
+        Self::with_stream(limits, budget, ItemStream::new())
+    }
+
+    /// An empty sink whose items go into `stream`, which the instances stacked on this one read.
+    #[must_use]
+    pub fn with_stream(limits: Limits, budget: Arc<Budget>, stream: ItemStream) -> Self {
         // The store limits are not used for the count: the instance total is checked here.
         let store_limits = Limits {
             max_annotations: usize::MAX,
@@ -85,7 +92,7 @@ impl Sink {
             lane: Store::new(store_limits, Arc::clone(&budget)),
             overlays: BTreeMap::new(),
             budget,
-            items: Vec::new(),
+            stream,
             item_bytes: 0,
             last_item_end: 0,
             refused: Refused::default(),
@@ -110,8 +117,14 @@ impl Sink {
 
     /// The items stored.
     #[must_use]
-    pub fn items(&self) -> &[Item] {
-        &self.items
+    pub fn items(&self) -> Vec<Item> {
+        self.stream.items()
+    }
+
+    /// The stream the items go into.
+    #[must_use]
+    pub fn stream(&self) -> ItemStream {
+        self.stream.clone()
     }
 
     /// The records refused so far.
@@ -184,7 +197,7 @@ impl Sink {
         }
         self.item_bytes = self.item_bytes.saturating_add(cost);
         self.last_item_end = item.end;
-        self.items.push(item);
+        self.stream.push(item);
         Ok(())
     }
 
@@ -197,6 +210,7 @@ impl Sink {
     pub fn set_coverage(&mut self, covered: u64, incomplete: bool) {
         self.covered = covered;
         self.incomplete = incomplete;
+        self.stream.set_covered(covered);
     }
 
     /// What the interface may read now.

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use la_devices::{DeviceId, Trigger};
 use la_i18n::Language;
 
-use la_decoders::setup::{Setup, Value};
+use la_decoders::setup::{Setup, Source, Value};
 
 use crate::decoders::AnnotationRef;
 use crate::devices::SignalProfile;
@@ -100,6 +100,8 @@ pub enum Guarded {
     StartCapture,
     /// Opening a session file.
     OpenSession(PathBuf),
+    /// Removing a decoder that other decoders are stacked on (they go with it).
+    RemoveDecoder(u32),
     /// Closing the window.
     Close,
     /// Quitting.
@@ -277,8 +279,15 @@ pub enum Command {
         /// Whether they are shown.
         visible: bool,
     },
-    /// Removes an instance and its results.
+    /// Removes an instance and its results (asks first when other instances read from it).
     RemoveDecoder(u32),
+    /// Makes the capture or another instance the input of an instance.
+    StackDecoder {
+        /// The instance.
+        id: u32,
+        /// Where it reads from.
+        source: Source,
+    },
     /// Starts a new pass of an instance that is not running.
     RunDecoder(u32),
     /// Stops the running pass of an instance within a second, keeping its results (incomplete).
@@ -366,6 +375,7 @@ impl Command {
                 | Command::RenameDecoder { .. }
                 | Command::ShowDecoderLane { .. }
                 | Command::RemoveDecoder(_)
+                | Command::StackDecoder { .. }
                 | Command::RunDecoder(_)
                 | Command::Decide(Decision::Save | Decision::Discard)
         )
@@ -411,6 +421,7 @@ impl Command {
             Command::RenameDecoder { .. } => "rename_decoder",
             Command::ShowDecoderLane { .. } => "show_decoder_lane",
             Command::RemoveDecoder(_) => "remove_decoder",
+            Command::StackDecoder { .. } => "stack_decoder",
             Command::RunDecoder(_) => "run_decoder",
             Command::CancelDecoder(_) => "cancel_decoder",
             Command::SetDecoderMemoryLimit(_) => "set_decoder_memory_limit",

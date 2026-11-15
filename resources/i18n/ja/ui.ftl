@@ -194,3 +194,10 @@ decoder-run = もう一度実行
 decoder-cancel = キャンセル
 settings-decoder-memory = デコーダーの結果のメモリ上限
 settings-decoder-memory-note = すべてのデコーダーで共有します。次の実行から有効です。
+
+### Decoders: stacking
+decoder-source = 入力元
+decoder-source-capture = キャプチャ
+dialog-remove-decoder-title = デコーダーを削除
+dialog-remove-decoder-body = このデコーダーから他のデコーダーが読み取っています。削除するとそれらも削除されます。キャプチャには影響しません。
+dialog-remove-decoder-confirm = すべて削除

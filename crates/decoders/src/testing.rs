@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use la_core::Error;
 
 use crate::descriptor::{Descriptor, Input, Signal};
-use crate::input::{Chunk, SignalReader};
+use crate::input::{Chunk, ItemChunk, SignalReader};
 use crate::model::{Annotation, Item, Kind, Payload, Shape, Style, Target, Text};
 use crate::registry::Registry;
 use crate::run::{DecodeError, End, Run, Sink};
@@ -59,6 +59,20 @@ const fn descriptor(id: &'static str) -> Descriptor {
     }
 }
 
+/// Produces one `byte` item per chunk (its payload is the number of the chunk): the lower decoder
+/// of the stacking tests.
+pub static LOWER_BYTES: Descriptor = Descriptor {
+    outputs: &["byte"],
+    ..descriptor("test.lower_bytes")
+};
+/// Reads `byte` items and annotates them in pairs, producing a `word` item for each pair: the upper
+/// decoder of the stacking tests. A byte left over at the end is an error mark.
+pub static UPPER_WORDS: Descriptor = Descriptor {
+    signals: &[],
+    input: Input::Items("byte"),
+    outputs: &["word"],
+    ..descriptor("test.upper_words")
+};
 /// Counts chunks and emits a range for each: the healthy neighbour of the faulty ones.
 pub static HEALTHY: Descriptor = descriptor("test.healthy");
 /// Healthy, but takes 20 ms for every chunk.
@@ -79,6 +93,8 @@ pub static INVALID_OUTPUT: Descriptor = descriptor("test.invalid_output");
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind0 {
     Healthy,
+    Lower,
+    Upper,
     Slow,
     ReturnsError,
     Panics,
@@ -92,6 +108,7 @@ struct Fixture {
     kind: Kind0,
     chunks: u64,
     channel: u8,
+    pending: Option<Item>,
 }
 
 fn style() -> Style {
@@ -124,6 +141,16 @@ impl Run for Fixture {
             end: chunk.end,
         };
         match self.kind {
+            Kind0::Upper => {}
+            Kind0::Lower => {
+                sink.emit(Item {
+                    kind: "byte",
+                    start: chunk.start,
+                    end: chunk.end,
+                    payload: Payload::Integer(self.chunks),
+                    error: false,
+                })?;
+            }
             Kind0::Healthy | Kind0::Slow => {
                 if self.kind == Kind0::Slow {
                     std::thread::sleep(std::time::Duration::from_millis(20));
@@ -214,7 +241,45 @@ impl Run for Fixture {
         Ok(())
     }
 
-    fn finish(&mut self, _: End, _: &SignalReader, _: &mut Sink) -> Result<(), DecodeError> {
+    fn process_items(&mut self, chunk: &ItemChunk, sink: &mut Sink) -> Result<(), DecodeError> {
+        if self.kind != Kind0::Upper {
+            return Ok(());
+        }
+        for item in &chunk.items {
+            match self.pending.take() {
+                None => self.pending = Some(item.clone()),
+                Some(first) => {
+                    sink.annotate(annotation(
+                        Kind::Range {
+                            start: first.start,
+                            end: item.end,
+                        },
+                        Target::Lane,
+                        Text::Literal("pair".into()),
+                    ))?;
+                    sink.emit(Item {
+                        kind: "word",
+                        start: first.start,
+                        end: item.end,
+                        payload: Payload::Integer(0),
+                        error: false,
+                    })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn finish(&mut self, _: End, _: &SignalReader, sink: &mut Sink) -> Result<(), DecodeError> {
+        if let Some(first) = self.pending.take() {
+            let mut mark = annotation(
+                Kind::Point { at: first.start },
+                Target::Lane,
+                Text::Literal("odd".into()),
+            );
+            mark.error = true;
+            sink.annotate(mark)?;
+        }
         Ok(())
     }
 }
@@ -226,6 +291,7 @@ macro_rules! create {
                 kind: $kind,
                 chunks: 0,
                 channel: setup.channels.get("clock").copied().unwrap_or(0),
+                pending: None,
             }))
         }
     };
@@ -233,6 +299,8 @@ macro_rules! create {
 
 create!(create_healthy, Kind0::Healthy);
 create!(create_slow, Kind0::Slow);
+create!(create_lower, Kind0::Lower);
+create!(create_upper, Kind0::Upper);
 create!(create_returns_error, Kind0::ReturnsError);
 create!(create_panics, Kind0::Panics);
 create!(create_never_returns, Kind0::NeverReturns);
@@ -246,6 +314,8 @@ pub fn fixtures() -> Vec<(&'static Descriptor, crate::registry::Create)> {
     vec![
         (&HEALTHY, create_healthy),
         (&SLOW, create_slow),
+        (&LOWER_BYTES, create_lower),
+        (&UPPER_WORDS, create_upper),
         (&RETURNS_ERROR, create_returns_error),
         (&PANICS, create_panics),
         (&NEVER_RETURNS, create_never_returns),
@@ -270,5 +340,13 @@ pub fn registry() -> Registry {
 pub fn setup(descriptor: &Descriptor, instance: u32) -> Setup {
     let mut setup = Setup::new(instance, descriptor.id);
     setup.channels.insert("clock".into(), 0);
+    setup
+}
+
+/// The setup of an instance of a decoder that reads the items of instance `below`.
+#[must_use]
+pub fn setup_above(descriptor: &Descriptor, instance: u32, below: u32) -> Setup {
+    let mut setup = Setup::new(instance, descriptor.id);
+    setup.source = crate::setup::Source::Instance(below);
     setup
 }

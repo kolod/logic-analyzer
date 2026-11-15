@@ -61,6 +61,8 @@ fn spawn(
         limits,
         budget,
         deadlines,
+        output: la_decoders::stack::ItemStream::new(),
+        input: None,
     })
 }
 

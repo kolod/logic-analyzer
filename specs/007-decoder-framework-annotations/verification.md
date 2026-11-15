@@ -49,3 +49,9 @@ Machine: the maintainer's Windows 11 PC, release builds, 2026-11-15. Baselines a
 
 The bench uses 5 M annotations as the large case because that is the most an instance can hold
 (the task text says 10 M). The pictures on a real graphics card and on Debian are not measured here.
+
+## Phase 7 (User Story 4): stack decoders
+
+There is no manual step: the one shipped decoder has nothing to stack, so the tests are the proof
+(`stacking` in `la-decoders` with the fixtures `lower_bytes` and `upper_words`, `decoder_stack` in
+`la-host`). Automated result on 2026-11-15 (Windows 11): pass.

@@ -13,10 +13,11 @@ use std::time::{Duration, Instant};
 use la_core::Error;
 use la_diagnostics::{WorkerFailure, WorkerHandle, lock_recover, spawn_worker};
 
-use super::{ChunkLimits, Outcome, Pass, Results, Run, Sink, run_pass};
+use super::{ChunkLimits, Outcome, Pass, Results, Run, Sink, run_item_pass, run_pass};
 use crate::descriptor::Descriptor;
 use crate::input::SnapshotSource;
 use crate::setup::Setup;
+use crate::stack::ItemStream;
 use crate::store::{Budget, Limits};
 
 /// How often the worker publishes results while it runs.
@@ -84,6 +85,10 @@ pub struct JobSpec {
     pub budget: Arc<Budget>,
     /// The deadlines the supervisor enforces.
     pub deadlines: Deadlines,
+    /// Where the items of this pass go (the instances stacked on this one read them).
+    pub output: ItemStream,
+    /// The items of the instance below, for a decoder that reads items.
+    pub input: Option<ItemStream>,
 }
 
 /// How a pass ended.
@@ -281,37 +286,56 @@ fn work(spec: JobSpec, shared: Arc<Shared>) -> JobEnd {
         limits,
         budget,
         deadlines: _,
+        output,
+        input,
     } = spec;
-    let mut pass = Pass::new(descriptor, setup, run, Sink::new(limits, budget));
+    let mut pass = Pass::new(
+        descriptor,
+        setup,
+        run,
+        Sink::with_stream(limits, budget, output.clone()),
+    );
     let mut last_publish = Instant::now();
     let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_pass(
-            &mut pass,
-            capture.as_ref(),
-            &chunk_limits,
-            &shared.cancel,
-            &mut || {
-                std::thread::sleep(FOLLOW_PAUSE);
-                beat(&shared);
-                !shared.cancel.load(Ordering::Acquire)
-            },
-            &mut |position, sink| {
-                shared.covered.store(position, Ordering::Release);
-                let snapshot = capture.snapshot();
-                shared.length.store(snapshot.length(), Ordering::Release);
-                beat(&shared);
-                // The capture and the interface come first: give up the processor after every
-                // chunk, and a little more while a capture is still being recorded.
-                std::thread::yield_now();
-                if !snapshot.status().closed {
-                    std::thread::sleep(Duration::from_millis(1));
-                }
-                if last_publish.elapsed() >= PUBLISH_EVERY {
-                    last_publish = Instant::now();
-                    publish(&shared, sink.results());
-                }
-            },
-        )
+        let mut wait = || {
+            std::thread::sleep(FOLLOW_PAUSE);
+            beat(&shared);
+            !shared.cancel.load(Ordering::Acquire)
+        };
+        let mut on_chunk = |position: u64, sink: &mut Sink| {
+            shared.covered.store(position, Ordering::Release);
+            let snapshot = capture.snapshot();
+            shared.length.store(snapshot.length(), Ordering::Release);
+            beat(&shared);
+            // The capture and the interface come first: give up the processor after every
+            // chunk, and a little more while a capture is still being recorded.
+            std::thread::yield_now();
+            if !snapshot.status().closed {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            if last_publish.elapsed() >= PUBLISH_EVERY {
+                last_publish = Instant::now();
+                publish(&shared, sink.results());
+            }
+        };
+        match &input {
+            Some(stream) => run_item_pass(
+                &mut pass,
+                stream,
+                capture.as_ref(),
+                &shared.cancel,
+                &mut wait,
+                &mut on_chunk,
+            ),
+            None => run_pass(
+                &mut pass,
+                capture.as_ref(),
+                &chunk_limits,
+                &shared.cancel,
+                &mut wait,
+                &mut on_chunk,
+            ),
+        }
     }));
     let outcome = match ran {
         Ok(outcome) => outcome,
@@ -321,11 +345,14 @@ fn work(spec: JobSpec, shared: Arc<Shared>) -> JobEnd {
             let position = pass.position();
             pass.sink().set_coverage(position, true);
             publish(&shared, pass.sink().results());
+            output.end(false);
             std::panic::resume_unwind(payload);
         }
     };
     pass.sink().compact();
     let results = pass.sink().results();
+    // The instances above learn how this pass ended: whole, or cut short.
+    output.end(matches!(outcome, Ok(Outcome::Complete)) && !results.coverage.incomplete);
     publish(&shared, results.clone());
     shared
         .covered

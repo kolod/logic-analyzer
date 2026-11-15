@@ -116,7 +116,8 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetDecoderOption { id, option, value }` | one option value; same validation and effect |
 | | `RenameDecoder { id, name }` | sanitized, at most 64 characters |
 | | `ShowDecoderLane { id, visible }` | shows or hides the lane and its overlays |
-| | `RemoveDecoder(id)` | removes the instance, its pass and its results |
+| | `RemoveDecoder(id)` | removes the instance, its pass and its results; when instances are stacked on it the answer is `NeedsDecision(Guarded::RemoveDecoder(id))`: `Decide(Discard)` removes it and everything above it, `Decide(Cancel)` keeps all, `Decide(Save)` is ignored; the capture is not touched |
+| | `StackDecoder { id, source }` | makes `source` (the capture or another instance) the input of `id`; refused with `decoder.stack_incompatible`, `decoder.stack_cycle` or `decoder.stack_too_deep` (in `decoders.refusal`); a valid change starts a new pass, and the instances stacked on `id` start again after it |
 | | `RunDecoder(id)` | starts a new pass of an instance that is not running (finished, cancelled, failed) |
 | | `CancelDecoder(id)` | stops the running pass within a second; what it found is kept and marked incomplete; a decoder that does not stop in time is abandoned (`decoder.not_responding`) |
 | | `SetDecoderMemoryLimit(bytes)` | 16 MiB to 4 GiB, remembered; applies to passes that start afterwards, never to a running one |
@@ -190,7 +191,9 @@ records), the reason the last command was refused (`refusal`: code and the setti
 annotation with its details, and the limits in force. `Versions.decoders` and the change flag
 `DECODERS` tell a shell what to redraw; results growing during a pass bump them. A pass runs on a
 supervised worker and never blocks `apply` or `poll`; closing the capture, opening a file or starting a
-capture removes every instance. At most half of the cores (at least one) decode at once; the other instances are `Waiting` and take their
+capture removes every instance. The lanes come in stack order (an instance after the one it reads from). The instances stacked on one that runs again start again after it and show their old results, flagged `outdated`, until the new ones arrive; a fault below makes the results above incomplete without failing them. `Host::decoder_sources(id)` lists what an instance could read from.
+
+At most half of the cores (at least one) decode at once; the other instances are `Waiting` and take their
 turn. A pass yields after every chunk and follows a capture that is still growing, finishing only when
 the capture is closed. A change of the setup that alters results starts a new pass and keeps the old
 results, flagged `outdated`, until the new pass publishes its first results, which replace them at

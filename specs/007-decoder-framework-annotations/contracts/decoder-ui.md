@@ -36,7 +36,8 @@ apply unchanged.
   is not invalidated by annotation changes).
 - The **Decoders panel** is the third panel of the right-hand column. It lists the instances (name,
   decoder, state, progress, counts), has **Add decoder…**, and per instance: configure, run, cancel, show
-  or hide the lane, remove, and move up or down in the lane order where the stack allows. Below the list it
+  or hide the lane and remove (lanes are in stack order: an instance after the one it reads from, so
+  they are not moved by hand). Below the list it
   shows the **selected annotation** (kind, text, start, end, length, error).
 - The **Add decoder** dialog is built from the catalogue (data): a list of decoders with their
   descriptions. The **configuration form** is built from a descriptor: a channel chooser per signal

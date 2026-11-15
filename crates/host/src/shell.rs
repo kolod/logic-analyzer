@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use la_core::Error;
+use la_decoders::setup::Setup;
 use la_devices::{AcquisitionOptions, DeviceDescriptor, DeviceId, DeviceRegistry, RegistryConfig};
 use la_i18n::{Args, Key, Language, Localizer};
 use la_storage::Limits;
@@ -673,7 +674,24 @@ impl Shell {
             Command::ShowDecoderLane { id, visible } => {
                 self.edit_decoder(state, id, |setup| setup.lane_visible = visible)
             }
-            Command::RemoveDecoder(id) => self.remove_decoder(state, id),
+            Command::RemoveDecoder(id) => {
+                let setups: Vec<Setup> = state
+                    .decoders
+                    .instances
+                    .iter()
+                    .map(|i| i.setup.clone())
+                    .collect();
+                if state.decoders.instance(id).is_some()
+                    && !la_decoders::stack::dependants(&setups, id).is_empty()
+                {
+                    // Others read from it: ask first. The capture is not touched.
+                    return Ok(Executed::Needs(Guarded::RemoveDecoder(id)));
+                }
+                self.remove_decoder(state, id)
+            }
+            Command::StackDecoder { id, source } => {
+                self.edit_decoder(state, id, |setup| setup.source = source)
+            }
             Command::RunDecoder(id) => self.run_decoder(state, id),
             Command::CancelDecoder(id) => self.cancel_decoder(state, id),
             Command::SetDecoderMemoryLimit(bytes) => {
@@ -960,6 +978,23 @@ impl Shell {
         let Some(guarded) = state.pending_decision.clone() else {
             return Err(Reject::Ignored(error::INVALID_COMMAND));
         };
+        if let Guarded::RemoveDecoder(id) = guarded {
+            // A question about decoders only: the capture and what is running stay as they are.
+            return match decision {
+                Decision::Cancel => {
+                    state.pending_decision = None;
+                    Ok(Executed::Changed(Changes::DECISION))
+                }
+                Decision::Save => Err(Reject::Ignored(error::INVALID_COMMAND)),
+                Decision::Discard => {
+                    state.pending_decision = None;
+                    let Executed::Changed(removed) = self.remove_with_dependants(state, id)? else {
+                        return Err(Reject::Ignored(error::INVALID_COMMAND));
+                    };
+                    Ok(Executed::Changed(Changes::DECISION | removed))
+                }
+            };
+        }
         match decision {
             Decision::Cancel => {
                 state.pending_decision = None;
