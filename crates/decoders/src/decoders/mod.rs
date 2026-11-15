@@ -1,1 +1,3 @@
-//! decoders (filled in by the tasks of feature 007).
+//! The built-in decoders.
+
+pub mod clocked_bits;

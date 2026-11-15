@@ -255,3 +255,26 @@ about-title = About
 about-body = Logic Analyzer { $version }. Records digital signals and shows them on a timeline; a simulated device lets you try it without hardware.
 # License line of the about dialog.
 about-license = Free software under the GNU General Public License, version 3.
+
+### Decoders: the sample decoder
+# The sample decoder (decoders describe themselves with these keys).
+decoder-sample-clocked-bits-name = Clocked bits
+decoder-sample-clocked-bits-description = Reads bits from a data line on the edges of a clock line and groups them into bytes. A sample decoder that shows what decoders can do.
+decoder-sample-clocked-bits-signal-clock = Clock
+decoder-sample-clocked-bits-signal-data = Data
+decoder-sample-clocked-bits-option-clock_edge = Clock edge
+decoder-sample-clocked-bits-choice-clock_edge-rising = Rising
+decoder-sample-clocked-bits-choice-clock_edge-falling = Falling
+decoder-sample-clocked-bits-option-bit_order = Bit order
+decoder-sample-clocked-bits-choice-bit_order-msb = Most significant bit first
+decoder-sample-clocked-bits-choice-bit_order-lsb = Least significant bit first
+decoder-sample-clocked-bits-option-bits = Bits per byte
+decoder-sample-clocked-bits-option-idle = Idle limit (samples)
+# Annotation: a byte. $value is the value in hexadecimal, such as 0x5A.
+ann-sample-clocked-bits-byte = Byte { $value }
+# Annotation: one sampled bit. $value is 0 or 1.
+ann-sample-clocked-bits-bit = Bit { $value }
+# Annotation (error): a byte that ended early. $value is the number of bits it had.
+ann-sample-clocked-bits-incomplete = Incomplete byte: { $value } bits
+# Annotation (error): positions of the capture were lost here.
+ann-sample-clocked-bits-gap = Samples lost here

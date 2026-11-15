@@ -140,3 +140,21 @@ dialog-close = Cerrar
 about-title = Acerca de
 about-body = Logic Analyzer { $version }. Registra señales digitales y las muestra en una línea de tiempo; un dispositivo simulado permite probarlo sin hardware.
 about-license = Software libre bajo la GNU General Public License, versión 3.
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = Bits con reloj
+decoder-sample-clocked-bits-description = Lee bits de una línea de datos en los flancos de una línea de reloj y los agrupa en bytes. Un decodificador de ejemplo que muestra lo que pueden hacer los decodificadores.
+decoder-sample-clocked-bits-signal-clock = Reloj
+decoder-sample-clocked-bits-signal-data = Datos
+decoder-sample-clocked-bits-option-clock_edge = Flanco del reloj
+decoder-sample-clocked-bits-choice-clock_edge-rising = Ascendente
+decoder-sample-clocked-bits-choice-clock_edge-falling = Descendente
+decoder-sample-clocked-bits-option-bit_order = Orden de los bits
+decoder-sample-clocked-bits-choice-bit_order-msb = Primero el bit más significativo
+decoder-sample-clocked-bits-choice-bit_order-lsb = Primero el bit menos significativo
+decoder-sample-clocked-bits-option-bits = Bits por byte
+decoder-sample-clocked-bits-option-idle = Límite de inactividad (muestras)
+ann-sample-clocked-bits-byte = Byte { $value }
+ann-sample-clocked-bits-bit = Bit { $value }
+ann-sample-clocked-bits-incomplete = Byte incompleto: { $value } bits
+ann-sample-clocked-bits-gap = Aquí se perdieron muestras

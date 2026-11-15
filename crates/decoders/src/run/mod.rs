@@ -3,11 +3,13 @@
 
 mod job;
 mod sink;
+mod worker;
 
 pub use job::{
     Advance, ChunkLimits, DEFAULT_CHUNK_EDGES, DEFAULT_CHUNK_SPAN, Outcome, Pass, run_pass,
 };
 pub use sink::{Limit, Refused, Results, Sink};
+pub use worker::{Ended, Job, JobEnd, JobSpec, Progress};
 
 use crate::input::{Chunk, SignalReader};
 

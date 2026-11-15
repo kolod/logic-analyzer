@@ -140,3 +140,21 @@ dialog-close = Schließen
 about-title = Über
 about-body = Logic Analyzer { $version }. Zeichnet digitale Signale auf und zeigt sie auf einer Zeitleiste; ein simuliertes Gerät erlaubt das Ausprobieren ohne Hardware.
 about-license = Freie Software unter der GNU General Public License, Version 3.
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = Getaktete Bits
+decoder-sample-clocked-bits-description = Liest Bits von einer Datenleitung bei den Flanken einer Taktleitung und fasst sie zu Bytes zusammen. Ein Beispiel-Decoder, der zeigt, was Decoder können.
+decoder-sample-clocked-bits-signal-clock = Takt
+decoder-sample-clocked-bits-signal-data = Daten
+decoder-sample-clocked-bits-option-clock_edge = Taktflanke
+decoder-sample-clocked-bits-choice-clock_edge-rising = Steigend
+decoder-sample-clocked-bits-choice-clock_edge-falling = Fallend
+decoder-sample-clocked-bits-option-bit_order = Bitreihenfolge
+decoder-sample-clocked-bits-choice-bit_order-msb = Höchstwertiges Bit zuerst
+decoder-sample-clocked-bits-choice-bit_order-lsb = Niedrigstwertiges Bit zuerst
+decoder-sample-clocked-bits-option-bits = Bits pro Byte
+decoder-sample-clocked-bits-option-idle = Leerlaufgrenze (Abtastwerte)
+ann-sample-clocked-bits-byte = Byte { $value }
+ann-sample-clocked-bits-bit = Bit { $value }
+ann-sample-clocked-bits-incomplete = Unvollständiges Byte: { $value } Bits
+ann-sample-clocked-bits-gap = Hier gingen Abtastwerte verloren

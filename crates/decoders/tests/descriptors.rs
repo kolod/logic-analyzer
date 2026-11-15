@@ -100,7 +100,7 @@ static TOP: Descriptor = Descriptor {
 };
 
 fn registry() -> Registry {
-    let mut registry = Registry::builtin();
+    let mut registry = Registry::new();
     registry.register(&LOW).unwrap();
     registry.register(&MIDDLE).unwrap();
     registry.register(&TOP).unwrap();

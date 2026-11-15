@@ -140,3 +140,21 @@ dialog-close = 閉じる
 about-title = バージョン情報
 about-body = Logic Analyzer { $version }。デジタル信号を記録してタイムライン上に表示します。シミュレーションデバイスで、ハードウェアなしで試せます。
 about-license = GNU General Public License バージョン3のもとで公開されている自由ソフトウェアです。
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = クロック付きビット
+decoder-sample-clocked-bits-description = クロック線のエッジでデータ線からビットを読み取り、バイトにまとめます。デコーダーにできることを示すサンプルのデコーダーです。
+decoder-sample-clocked-bits-signal-clock = クロック
+decoder-sample-clocked-bits-signal-data = データ
+decoder-sample-clocked-bits-option-clock_edge = クロックエッジ
+decoder-sample-clocked-bits-choice-clock_edge-rising = 立ち上がり
+decoder-sample-clocked-bits-choice-clock_edge-falling = 立ち下がり
+decoder-sample-clocked-bits-option-bit_order = ビット順
+decoder-sample-clocked-bits-choice-bit_order-msb = 最上位ビットが先
+decoder-sample-clocked-bits-choice-bit_order-lsb = 最下位ビットが先
+decoder-sample-clocked-bits-option-bits = 1 バイトのビット数
+decoder-sample-clocked-bits-option-idle = アイドル上限（サンプル数）
+ann-sample-clocked-bits-byte = バイト { $value }
+ann-sample-clocked-bits-bit = ビット { $value }
+ann-sample-clocked-bits-incomplete = 不完全なバイト：{ $value } ビット
+ann-sample-clocked-bits-gap = ここでサンプルが失われました

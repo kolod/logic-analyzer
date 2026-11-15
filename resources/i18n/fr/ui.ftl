@@ -140,3 +140,21 @@ dialog-close = Fermer
 about-title = À propos
 about-body = Logic Analyzer { $version }. Enregistre des signaux numériques et les affiche sur une ligne de temps ; un appareil simulé permet de l’essayer sans matériel.
 about-license = Logiciel libre sous licence GNU General Public License, version 3.
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = Bits cadencés
+decoder-sample-clocked-bits-description = Lit des bits sur une ligne de données aux fronts d'une ligne d'horloge et les regroupe en octets. Un décodeur d'exemple qui montre ce que les décodeurs peuvent faire.
+decoder-sample-clocked-bits-signal-clock = Horloge
+decoder-sample-clocked-bits-signal-data = Données
+decoder-sample-clocked-bits-option-clock_edge = Front d'horloge
+decoder-sample-clocked-bits-choice-clock_edge-rising = Montant
+decoder-sample-clocked-bits-choice-clock_edge-falling = Descendant
+decoder-sample-clocked-bits-option-bit_order = Ordre des bits
+decoder-sample-clocked-bits-choice-bit_order-msb = Bit de poids fort d'abord
+decoder-sample-clocked-bits-choice-bit_order-lsb = Bit de poids faible d'abord
+decoder-sample-clocked-bits-option-bits = Bits par octet
+decoder-sample-clocked-bits-option-idle = Limite d'inactivité (échantillons)
+ann-sample-clocked-bits-byte = Octet { $value }
+ann-sample-clocked-bits-bit = Bit { $value }
+ann-sample-clocked-bits-incomplete = Octet incomplet : { $value } bits
+ann-sample-clocked-bits-gap = Des échantillons ont été perdus ici

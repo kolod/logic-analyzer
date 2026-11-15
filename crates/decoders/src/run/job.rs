@@ -129,7 +129,8 @@ impl Pass {
     }
 
     /// Processes the snapshot chunk by chunk until it is exhausted, a cancel is seen or a limit is
-    /// reached. `on_chunk` is told the position reached after every chunk.
+    /// reached. `on_chunk` is told the position reached after every chunk and may read the sink (to publish
+    /// results).
     ///
     /// # Errors
     ///
@@ -139,7 +140,7 @@ impl Pass {
         snapshot: &Snapshot,
         limits: &ChunkLimits,
         cancel: &AtomicBool,
-        on_chunk: &mut dyn FnMut(u64),
+        on_chunk: &mut dyn FnMut(u64, &mut Sink),
     ) -> Result<Advance, Error> {
         let reader = SignalReader::from_setup(snapshot.clone(), self.descriptor, &self.setup);
         self.sink.set_bounds(Bounds {
@@ -176,7 +177,7 @@ impl Pass {
             self.position = end;
             self.chunks = self.chunks.saturating_add(1);
             self.sink.set_coverage(self.position, false);
-            on_chunk(self.position);
+            on_chunk(self.position, &mut self.sink);
         }
     }
 
@@ -211,7 +212,8 @@ impl Pass {
 ///
 /// A new snapshot is taken every round, so growth is followed. When the pass has caught up with a
 /// capture that is not closed, `wait` is called; it returns `false` to stop waiting (the pass is
-/// then cut). `on_chunk` is told the position reached after every chunk.
+/// then cut). `on_chunk` is told the position reached after every chunk and may read the sink (to publish
+/// results).
 ///
 /// # Errors
 ///
@@ -222,7 +224,7 @@ pub fn run_pass(
     limits: &ChunkLimits,
     cancel: &AtomicBool,
     wait: &mut dyn FnMut() -> bool,
-    on_chunk: &mut dyn FnMut(u64),
+    on_chunk: &mut dyn FnMut(u64, &mut Sink),
 ) -> Result<Outcome, Error> {
     loop {
         let snapshot = capture.snapshot();

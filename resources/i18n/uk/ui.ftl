@@ -140,3 +140,21 @@ dialog-close = Закрити
 about-title = Про програму
 about-body = Logic Analyzer { $version }. Записує цифрові сигнали та показує їх на часовій шкалі; змодельований пристрій дозволяє спробувати програму без обладнання.
 about-license = Вільне програмне забезпечення за ліцензією GNU General Public License, версія 3.
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = Тактовані біти
+decoder-sample-clocked-bits-description = Читає біти з лінії даних за фронтами тактової лінії та збирає їх у байти. Зразковий декодер, що показує можливості декодерів.
+decoder-sample-clocked-bits-signal-clock = Такт
+decoder-sample-clocked-bits-signal-data = Дані
+decoder-sample-clocked-bits-option-clock_edge = Фронт такту
+decoder-sample-clocked-bits-choice-clock_edge-rising = Зростаючий
+decoder-sample-clocked-bits-choice-clock_edge-falling = Спадний
+decoder-sample-clocked-bits-option-bit_order = Порядок бітів
+decoder-sample-clocked-bits-choice-bit_order-msb = Старший біт першим
+decoder-sample-clocked-bits-choice-bit_order-lsb = Молодший біт першим
+decoder-sample-clocked-bits-option-bits = Бітів у байті
+decoder-sample-clocked-bits-option-idle = Межа простою (відліків)
+ann-sample-clocked-bits-byte = Байт { $value }
+ann-sample-clocked-bits-bit = Біт { $value }
+ann-sample-clocked-bits-incomplete = Неповний байт: { $value } бітів
+ann-sample-clocked-bits-gap = Тут втрачено відліки

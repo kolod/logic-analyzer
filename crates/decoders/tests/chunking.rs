@@ -227,7 +227,7 @@ fn run_all(words: &[u32], limits: ChunkLimits, mode: Mode) -> (Pass, Log, Outcom
         &limits,
         &AtomicBool::new(false),
         &mut || false,
-        &mut |p| positions.push(p),
+        &mut |p, _| positions.push(p),
     )
     .unwrap();
     (pass, log, outcome, positions)
@@ -405,7 +405,7 @@ fn a_growing_capture_is_followed_and_finish_waits_for_its_end() {
             }
             true
         },
-        &mut |_| {},
+        &mut |_, _| {},
     )
     .unwrap();
     assert_eq!(outcome, Outcome::Complete);
@@ -434,7 +434,7 @@ fn giving_up_on_a_capture_that_stops_growing_cuts_the_pass() {
         &ChunkLimits::default(),
         &AtomicBool::new(false),
         &mut || false,
-        &mut |_| {},
+        &mut |_, _| {},
     )
     .unwrap();
     assert_eq!(outcome, Outcome::Cancelled);
@@ -461,7 +461,7 @@ fn a_cancel_stops_at_the_next_chunk_boundary_and_keeps_what_was_found() {
         },
         &cancel,
         &mut || false,
-        &mut |_| {
+        &mut |_, _| {
             seen += 1;
             if seen == 4 {
                 cancel.store(true, Ordering::Release);
@@ -501,7 +501,7 @@ fn the_annotation_limit_ends_the_pass_with_what_fits() {
         &ChunkLimits::default(),
         &AtomicBool::new(false),
         &mut || false,
-        &mut |_| {},
+        &mut |_, _| {},
     )
     .unwrap();
     assert_eq!(outcome, Outcome::Limit(Full::Count));
@@ -535,7 +535,7 @@ fn the_memory_limit_ends_the_pass_and_gives_the_memory_back() {
         &ChunkLimits::default(),
         &AtomicBool::new(false),
         &mut || false,
-        &mut |_| {},
+        &mut |_, _| {},
     )
     .unwrap();
     assert_eq!(outcome, Outcome::Limit(Full::Memory));
@@ -559,7 +559,7 @@ fn a_decoder_error_is_reported_with_its_code_and_keeps_the_earlier_output() {
         },
         &AtomicBool::new(false),
         &mut || false,
-        &mut |_| {},
+        &mut |_, _| {},
     )
     .unwrap_err();
     assert_eq!(err.code(), error::FAILED);
@@ -617,7 +617,7 @@ fn a_gap_is_listed_in_the_chunks_it_touches() {
         },
         &AtomicBool::new(false),
         &mut || false,
-        &mut |_| {},
+        &mut |_, _| {},
     )
     .unwrap();
     for (start, end, gaps) in seen.lock().unwrap().iter() {
