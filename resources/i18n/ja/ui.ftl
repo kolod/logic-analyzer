@@ -184,3 +184,7 @@ decoder-selected = 選択中の注釈
 decoder-detail-length = 長さ: { $value }
 decoder-detail-error = 信号の問題を示しています
 decoder-detail-position = 位置: { $first } から { $second }
+
+### Decoders: the simulation of signals that are valid for a decoder
+decoder-generator-errors = シミュレートした信号にわざとエラーを入れる
+decoder-generator-rate = おおよそこの数に 1 バイトが途中で切れます

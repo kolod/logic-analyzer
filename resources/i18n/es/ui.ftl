@@ -184,3 +184,7 @@ decoder-selected = Anotación seleccionada
 decoder-detail-length = Duración: { $value }
 decoder-detail-error = Indica un problema en la señal
 decoder-detail-position = Posición: de { $first } a { $second }
+
+### Decoders: the simulation of signals that are valid for a decoder
+decoder-generator-errors = Introducir errores a propósito en las señales simuladas
+decoder-generator-rate = Aproximadamente uno de cada tantos bytes se corta

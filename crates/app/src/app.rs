@@ -118,6 +118,10 @@ pub enum Message {
     DecoderOptionText(u32, String, String),
     /// A switch option of a decoder instance was changed.
     DecoderOptionFlag(u32, String, bool),
+    /// A generator option of a decoder instance changed (`errors` or `error_rate`).
+    DecoderGenerator(u32, &'static str, i64),
+    /// The text of the generator's error rate changed.
+    DecoderRateText(u32, String),
     /// Nothing to do.
     Noop,
 }
@@ -1014,6 +1018,28 @@ impl App {
                     None => Task::none(),
                 }
             }
+            Message::DecoderGenerator(id, key, value) => {
+                let Some(mut setup) = self
+                    .shell
+                    .state()
+                    .decoders
+                    .instance(id)
+                    .map(|i| i.setup.clone())
+                else {
+                    return Task::none();
+                };
+                setup.generator.insert(key.to_owned(), value);
+                self.run(Command::ConfigureDecoder { id, setup })
+            }
+            Message::DecoderRateText(id, text) => {
+                let parsed = text.trim().parse::<i64>().ok();
+                self.option_texts
+                    .insert((id, "error_rate".to_owned()), text);
+                match parsed {
+                    Some(rate) => self.update(Message::DecoderGenerator(id, "error_rate", rate)),
+                    None => Task::none(),
+                }
+            }
             Message::DecoderOptionFlag(id, option, on) => self.run(Command::SetDecoderOption {
                 id,
                 option,
@@ -1614,6 +1640,55 @@ impl App {
                     }
                 };
                 block = block.push(labelled(option.label.clone(), field));
+            }
+            // A simulated device makes signals that are valid for the decoder, with errors on
+            // request.
+            let simulated = state
+                .selected_device
+                .as_ref()
+                .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+                .is_some_and(|d| d.simulated);
+            if simulated && entry.has_generator {
+                let errors = instance
+                    .setup
+                    .generator
+                    .get(la_decoders::generators::clocked_bits::OPTION_ERRORS)
+                    .copied()
+                    .unwrap_or(0)
+                    != 0;
+                block = block.push(
+                    checkbox(errors)
+                        .label(self.t("decoder-generator-errors"))
+                        .size(14)
+                        .on_toggle(move |on| {
+                            Message::DecoderGenerator(
+                                id,
+                                la_decoders::generators::clocked_bits::OPTION_ERRORS,
+                                i64::from(on),
+                            )
+                        }),
+                );
+                if errors {
+                    let rate = instance
+                        .setup
+                        .generator
+                        .get(la_decoders::generators::clocked_bits::OPTION_ERROR_RATE)
+                        .copied()
+                        .unwrap_or(la_decoders::generators::clocked_bits::DEFAULT_ERROR_RATE);
+                    let shown = self
+                        .option_texts
+                        .get(&(id, "error_rate".to_owned()))
+                        .cloned()
+                        .unwrap_or_else(|| rate.to_string());
+                    block = block.push(labelled(
+                        self.t("decoder-generator-rate"),
+                        text_input("", &shown)
+                            .size(13)
+                            .width(110)
+                            .on_input(move |t| Message::DecoderRateText(id, t))
+                            .into(),
+                    ));
+                }
             }
         }
         container(block)

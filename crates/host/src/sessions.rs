@@ -200,7 +200,10 @@ impl Shell {
                 changes.insert(Changes::CAPTURE | Changes::PROGRESS | Changes::WINDOW);
             }
             Guarded::StartCapture => {
+                // The decoders stay: they decode the new capture too.
+                let kept = state.decoders.instances.clone();
                 clear_capture(state);
+                state.decoders.instances = kept;
                 let Executed::Changed(started) = self.begin_capture(state)? else {
                     return Err(Reject::Ignored(error::INVALID_COMMAND));
                 };

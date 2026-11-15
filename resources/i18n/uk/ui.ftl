@@ -184,3 +184,7 @@ decoder-selected = Вибрана анотація
 decoder-detail-length = Тривалість: { $value }
 decoder-detail-error = Повідомляє про проблему в сигналі
 decoder-detail-position = Позиція: від { $first } до { $second }
+
+### Decoders: the simulation of signals that are valid for a decoder
+decoder-generator-errors = Навмисно додавати помилки в змодельовані сигнали
+decoder-generator-rate = Приблизно кожен такий за рахунком байт обривається

@@ -14,3 +14,16 @@ looked at.
 Known gaps against the task text (to close in the polish phase): no hover readout of an annotation's
 text (the selected annotation is described in the panel instead), and no separate `decoders.rs`
 module in `la-app` (the panel is in `app.rs` next to the other panels).
+
+## Phase 4 (User Story 6): try decoding without hardware
+
+| Date | Platform | Step | Result |
+|------|----------|------|--------|
+| 2026-11-15 | Windows 11 (automated) | quickstart 8.4 as tests: `decoder_generator` captures on the simulated device with and without deliberate errors and compares the lane with `expected()` and `expected_errors()`; `round_trip` does 1,000 seeds (10,000 in the ignored variant) | Pass. |
+| pending | Windows 11, running application | add the decoder, tick the deliberate errors, start a capture, look for the red marks | **Not done yet**: needs a person at the window. |
+| pending | Debian | the same | **Not done yet**: asked of the user. |
+
+Design note: `AddDecoder` needs a capture on screen, so a decoder is added to a capture and then stays
+for the next one: `StartCapture` keeps the instances and restarts their passes on the new capture
+(`NewCapture`, opening a file and closing remove them). This is how a simulated capture can be made
+valid for a configured decoder.

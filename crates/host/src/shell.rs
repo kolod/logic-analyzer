@@ -1017,7 +1017,14 @@ impl Shell {
         let failures = self.test_failures.clone();
         #[cfg(not(feature = "test-support"))]
         let failures = Vec::new();
-        let config = state.config.to_device_config(&device, seed, &failures);
+        // Instances whose decoder has a generator make the signals of their channels when the
+        // capture is simulated; the other channels stay random (constitution Principle XI).
+        let source = (device.id.provider() == la_devices::VIRTUAL_PROVIDER_NAME)
+            .then(|| self.generator_source(state))
+            .flatten();
+        let config = state
+            .config
+            .to_device_config(&device, seed, &failures, source);
         let limits = capture_limits(&state.settings);
         let options = AcquisitionOptions {
             limits,
@@ -1033,7 +1040,6 @@ impl Shell {
             .map_err(Reject::Failed)?;
         let snapshot = acquisition.capture().snapshot();
         let description = acquisition.description();
-        state.decoders.reset();
         state.capture = Some(CaptureView::new(
             snapshot,
             description,
@@ -1061,8 +1067,10 @@ impl Shell {
             memory_limit: limits.memory_budget_bytes,
             planned: Some(state.config.length),
         });
+        self.restart_decoders(state);
         Ok(Executed::Changed(
-            Changes::ACTIVITY
+            Changes::DECODERS
+                | Changes::ACTIVITY
                 | Changes::CAPTURE
                 | Changes::PROGRESS
                 | Changes::WINDOW

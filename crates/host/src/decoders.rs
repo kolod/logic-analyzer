@@ -465,6 +465,39 @@ impl Shell {
         }
     }
 
+    /// The source of a simulated capture: the generators of the instances that have one, on their
+    /// channels, with the random signals on the rest.
+    pub(crate) fn generator_source(
+        &self,
+        state: &State,
+    ) -> Option<Arc<dyn la_devices::SignalSourceFactory>> {
+        let setups: Vec<Setup> = state
+            .decoders
+            .instances
+            .iter()
+            .map(|i| i.setup.clone())
+            .collect();
+        let claims = self.decoders.registry.claims(&setups);
+        if claims.is_empty() {
+            return None;
+        }
+        Some(Arc::new(
+            la_decoders::generators::composite::CompositeFactory::new(
+                claims,
+                state.config.profile.mean_gap(),
+            ),
+        ))
+    }
+
+    /// A new capture starts: every instance decodes it from the start.
+    pub(crate) fn restart_decoders(&mut self, state: &mut State) {
+        state.decoders.selection = None;
+        let ids: Vec<u32> = state.decoders.instances.iter().map(|i| i.id).collect();
+        for id in ids {
+            self.start_pass(state, id);
+        }
+    }
+
     /// Cancels the passes and removes the results of instances that are gone.
     pub(crate) fn sync_decoders(&mut self) {
         let ids: Vec<u32> = self.state.decoders.instances.iter().map(|i| i.id).collect();

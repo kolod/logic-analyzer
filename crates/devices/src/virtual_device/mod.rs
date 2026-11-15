@@ -22,7 +22,7 @@ mod source;
 
 use generator::RandomGenerator;
 use script::{FailureScript, search_trigger};
-pub use source::{SignalSource, SignalSourceFactory};
+pub use source::{RandomSource, SignalSource, SignalSourceFactory};
 
 /// The name of the virtual provider and the prefix of its device id.
 pub const PROVIDER_NAME: &str = "virtual";

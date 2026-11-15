@@ -158,6 +158,12 @@ expected(setup: &Setup, seed: u64, length: u64) -> Vec<Item>                    
 - A generator encodes at its own level; version 1.0 ships the single-level case and fixes the trait for
   the stacked one.
 
+Implemented as `generators::clocked_bits` (`source(setup, seed)`, `expected(setup, seed, length)`,
+`expected_errors(setup, seed, length)` and `claim(setup)`) and combined with the random signals of the
+device by `generators::composite::CompositeFactory`; the host builds the factory from the instances when
+a capture starts on a simulated device. The generator options of an instance are kept in
+`Setup::generator` (`errors`: 0 or 1, `error_rate`: about one byte in this many is cut short).
+
 ## Registering a decoder
 
 Registering a descriptor (and its `create` and generator) in the registry (`registry::Registry`) is all

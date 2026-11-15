@@ -108,6 +108,13 @@ the bits into bytes.
    previous annotation, and **Ctrl+F8** goes to the selected one.
 5. The check box **Show the lane** hides the lane and its overlays; the cross removes the decoder.
 
+**Trying a decoder without hardware.** When the selected device is the simulated one, the virtual
+device makes signals that are valid for the decoder on the channels you chose (the other channels stay
+random), and the same seed gives the same signals. Add the decoder to a capture on screen, then start
+the next capture: the decoder stays and decodes it from the start. Tick **Plant deliberate errors in the
+simulated signals** in the decoder's block to cut some bytes short on purpose and look for the red
+marks where they were planted.
+
 Decoding never changes the capture. A dashed line along the bottom of a lane means that its results
 are not whole (the decoder was cancelled or stopped).
 
