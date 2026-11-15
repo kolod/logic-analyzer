@@ -442,6 +442,16 @@ impl canvas::Program<Message> for SignalView<'_> {
                 }
                 None
             }
+            // The hover line follows the pointer: it is drawn from the pointer position, so a
+            // plain move over the view (no button, nothing to publish) must still ask for a
+            // redraw, or the line waits for the next timer tick. It also has to go away when the
+            // pointer leaves.
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.drag_from.is_none() => {
+                Some(canvas::Action::request_redraw())
+            }
+            canvas::Event::Mouse(mouse::Event::CursorLeft) => {
+                Some(canvas::Action::request_redraw())
+            }
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 let from = state.drag_from?;
                 let position = cursor.position_in(bounds)?;
@@ -539,5 +549,88 @@ impl SignalView<'_> {
             align_x: iced::alignment::Horizontal::Right.into(),
             ..Text::default()
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::widget::canvas::Program;
+    use iced::{Point, Rectangle, mouse};
+    use la_host::window::ViewSize;
+    use la_host::{Shell, ShellConfig};
+
+    fn event_result(
+        state: &mut ViewState,
+        event: &canvas::Event,
+        cursor: mouse::Cursor,
+    ) -> Option<(Option<Message>, iced::window::RedrawRequest)> {
+        let shell = Shell::new(ShellConfig::for_tests(&std::env::temp_dir()));
+        let plan = shell.frame_plan(ViewSize::default());
+        let cache = Cache::new();
+        let localizer = la_i18n::Localizer::new(la_i18n::Language::En);
+        let view = SignalView {
+            plan: &plan,
+            cache: &cache,
+            variant: Variant::Dark,
+            localizer: &localizer,
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
+        // The width is reported first, as the view does on its first event.
+        state.reported_width = bounds.width - GUTTER;
+        view.update(state, event, bounds, cursor).map(|action| {
+            let (message, redraw, _) = action.into_inner();
+            (message, redraw)
+        })
+    }
+
+    #[test]
+    fn a_plain_pointer_move_asks_for_a_redraw_so_the_hover_line_follows_at_once() {
+        let mut state = ViewState::default();
+        let moved = canvas::Event::Mouse(mouse::Event::CursorMoved {
+            position: Point::new(400.0, 200.0),
+        });
+        let result = event_result(
+            &mut state,
+            &moved,
+            mouse::Cursor::Available(Point::new(400.0, 200.0)),
+        )
+        .expect("a move over the view is handled");
+        assert!(
+            result.0.is_none(),
+            "nothing is published: no command is needed"
+        );
+        assert!(
+            matches!(result.1, iced::window::RedrawRequest::NextFrame),
+            "{:?}",
+            result.1
+        );
+    }
+
+    #[test]
+    fn leaving_the_view_asks_for_a_redraw_so_the_hover_line_goes_away() {
+        let mut state = ViewState::default();
+        let left = canvas::Event::Mouse(mouse::Event::CursorLeft);
+        let result = event_result(&mut state, &left, mouse::Cursor::Unavailable)
+            .expect("leaving is handled");
+        assert!(matches!(result.1, iced::window::RedrawRequest::NextFrame));
+    }
+
+    #[test]
+    fn dragging_still_pans_and_does_not_only_redraw() {
+        let mut state = ViewState {
+            drag_from: Some(500.0),
+            ..ViewState::default()
+        };
+        let moved = canvas::Event::Mouse(mouse::Event::CursorMoved {
+            position: Point::new(480.0, 200.0),
+        });
+        let result = event_result(
+            &mut state,
+            &moved,
+            mouse::Cursor::Available(Point::new(480.0, 200.0)),
+        )
+        .expect("a drag is handled");
+        assert!(result.0.is_some(), "a drag publishes the pan");
     }
 }
