@@ -1338,6 +1338,15 @@ mod tests {
         la_host::shortcuts::table()
     }
 
+    /// Headless rendering creates a software renderer; doing that from several test threads at
+    /// once crashed the Windows runner of the CI (STATUS_ACCESS_VIOLATION), so the tests that
+    /// render take turns.
+    fn render_turn() -> std::sync::MutexGuard<'static, ()> {
+        static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        TURN.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     #[test]
     fn f5_starts_and_shift_f5_stops() {
         let table = table();
@@ -1386,6 +1395,7 @@ mod tests {
 
     #[test]
     fn the_view_renders_a_capture_headlessly() {
+        let _turn = render_turn();
         let app = app_with_capture("render");
         assert!(!app.plan.channels.is_empty());
         let mut ui = iced_test::Simulator::with_size(
@@ -1404,6 +1414,7 @@ mod tests {
 
     #[test]
     fn the_view_renders_a_zoomed_capture_with_single_edges() {
+        let _turn = render_turn();
         let mut app = app_with_capture("zoomed");
         let _ = app.update(Message::Run(Command::ZoomToRange {
             start: 150_000,
@@ -1433,6 +1444,7 @@ mod tests {
 
     #[test]
     fn a_damaged_settings_file_shows_a_localized_message_with_its_buttons() {
+        let _turn = render_turn();
         let dir = std::env::temp_dir().join(format!("la-app-banner-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("settings.json"), b"{ not json").unwrap();
@@ -1464,6 +1476,7 @@ mod tests {
 
     #[test]
     fn two_markers_show_their_distance_and_frequency() {
+        let _turn = render_turn();
         let mut app = app_with_capture("markers");
         let _ = app.update(Message::Run(Command::SetSnap(false)));
         let _ = app.update(Message::Run(Command::ZoomToRange {
@@ -1534,6 +1547,7 @@ mod tests {
 
     #[test]
     fn closing_with_unsaved_data_shows_the_question_with_its_three_answers() {
+        let _turn = render_turn();
         let mut app = app_with_capture("close");
         let _ = app.update(Message::CloseRequested);
         assert!(app.shell.state().pending_decision.is_some());
@@ -1555,6 +1569,7 @@ mod tests {
 
     #[test]
     fn a_running_save_shows_its_progress_with_a_cancel_button() {
+        let _turn = render_turn();
         let app = app_with_capture("progress");
         let view = la_host::OperationView {
             kind: la_host::OperationKind::Save,
