@@ -10,6 +10,8 @@
     clippy::panic
 )]
 
+mod common;
+
 use la_host::error::VIEW_INVALID;
 use la_host::markers::{Marker, Markers};
 use la_host::presentation::{ChannelStyle, Colour, Presentation};
@@ -544,4 +546,56 @@ fn marker_helpers_agree_with_the_decoded_state() {
     );
     assert_eq!(state.markers.list, restored.list);
     assert_eq!(presentation_of(&state).len(), 3);
+}
+
+/// Random mutations of valid payloads: `LA_VIEW_FUZZ_ITERATIONS` of them (a million in the
+/// nightly workflow). Whatever is accepted re-encodes to the same bytes; nothing panics.
+#[test]
+#[ignore = "a million random mutations; the nightly workflow runs it"]
+fn a_million_random_mutations_never_panic_or_break_the_round_trip() {
+    let iterations: u64 = std::env::var("LA_VIEW_FUZZ_ITERATIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1_000_000);
+    let (max, max_bounds) = maximal();
+    let seeds = [
+        (Payload::empty().bytes(), BOUNDS),
+        (typical().bytes(), BOUNDS),
+        (max.bytes(), max_bounds),
+    ];
+    let mut rng = common::Lcg(0x5eed);
+    let mut accepted = 0_u64;
+    for i in 0..iterations {
+        let (payload, bounds) = &seeds[(i % 3) as usize];
+        let mut bytes = payload.clone();
+        for _ in 0..=rng.below(4) {
+            match rng.below(5) {
+                0 if !bytes.is_empty() => {
+                    let at = rng.below(bytes.len() as u64) as usize;
+                    bytes[at] = rng.below(256) as u8;
+                }
+                1 if !bytes.is_empty() => {
+                    let at = rng.below(bytes.len() as u64) as usize;
+                    bytes[at] ^= 1 << rng.below(8);
+                }
+                2 if !bytes.is_empty() => {
+                    let at = rng.below(bytes.len() as u64) as usize;
+                    bytes.remove(at);
+                }
+                3 => {
+                    let at = rng.below(bytes.len() as u64 + 1) as usize;
+                    bytes.insert(at, rng.below(256) as u8);
+                }
+                _ => {
+                    let keep = rng.below(bytes.len() as u64 + 1) as usize;
+                    bytes.truncate(keep);
+                }
+            }
+        }
+        if decode(&bytes, *bounds).is_ok() {
+            accepted += 1;
+        }
+        check_accepts_only_canonical(&bytes, *bounds);
+    }
+    assert!(accepted > 0, "no mutation was ever accepted");
 }

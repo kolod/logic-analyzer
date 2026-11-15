@@ -1,8 +1,9 @@
 # Contract: Host API (version 1.0)
 
-**Status**: design source for `docs/host-api.md`, which becomes the authoritative copy during
-implementation (research R3). `la_host::HOST_API_VERSION` and the document's version line must
-agree; a test fails otherwise.
+**Status**: the design source. The final, authoritative text is [`docs/host-api.md`](../../../docs/host-api.md)
+(research R3), which includes the changes made during implementation: where the two differ, the
+document in `docs/` is right. `la_host::HOST_API_VERSION` and that document's version line agree;
+a test fails otherwise.
 
 The host API is the only way a user interface talks to the core (constitution Principle IV). It is
 UI-toolkit independent, synchronous and made of plain data. The first consumer is `la-app`

@@ -1,4 +1,6 @@
-# Long fuzzing run of the session file loader (specs/003-session-file-format, SC-005).
+# Long fuzzing runs: the session file loader (specs/003-session-file-format, SC-005), the random
+# walk of two million actions on the host (specs/006-ui-shell-signal-view, SC-005) and the decoder
+# of the VIEW section.
 #
 # Informational, NOT a required check: it runs one million mutated inputs in a release build
 # and uploads the failing input, if any, as an artifact. A shorter run (20,000 inputs) is part
@@ -45,6 +47,12 @@ jobs:
           LA_KILL_ITERATIONS: "1000"
       - name: One million hostile localization operations
         run: cargo test -p la-i18n --release --test stress -- --ignored
+      - name: Two million random actions on the host
+        run: cargo test -p la-host --release --test random_walk -- --ignored
+      - name: One million mutated view sections
+        run: cargo test -p la-host --release --test view_section -- --ignored
+        env:
+          LA_VIEW_FUZZ_ITERATIONS: "1000000"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

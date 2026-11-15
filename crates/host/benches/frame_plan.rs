@@ -162,6 +162,21 @@ fn main() {
         gated.micros / 1000.0
     );
 
+    // The numbers of this run, as an artifact for the benchmark workflow.
+    let artifact_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/la-host-bench");
+    if std::fs::create_dir_all(&artifact_dir).is_ok() {
+        let mut json = String::from("{\n  \"frame_plan\": {\n");
+        for (i, row) in rows.iter().enumerate() {
+            let comma = if i + 1 == rows.len() { "" } else { "," };
+            json.push_str(&format!(
+                "    \"{} / {} / {}px\": {{\"plan_us\": {:.0}, \"probes\": {}}}{comma}\n",
+                row.capture, row.view, row.pixels, row.micros, row.probes
+            ));
+        }
+        json.push_str("  }\n}\n");
+        let _ = std::fs::write(artifact_dir.join("frame_plan.json"), json);
+    }
+
     let baseline_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/baseline.json");
     if write_baseline {
         let mut json = String::from("{\n  \"frame_plan\": {\n");
