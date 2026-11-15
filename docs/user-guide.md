@@ -21,11 +21,10 @@ always there: it produces repeatable pseudo-random signals, so you can try every
 hardware. A simulated capture is marked as such in the status line and in saved files, and the mark
 cannot be removed.
 
-Set up a capture in the toolbar:
+Set up a capture in the toolbar (the channels to record are chosen in the **Channels** panel, below):
 
 | Control | Meaning |
 |---------|---------|
-| Channels | how many channels are recorded |
 | Sample rate (Hz) | samples per second |
 | Length (samples) | when the capture stops by itself |
 | Seed | the simulated device repeats exactly the same signal for the same seed; empty means random |
@@ -58,7 +57,11 @@ see nothing there is nothing, and if you see a band, zoom in and the edges appea
 
 ## Channels
 
-The **Channels** panel lists every channel: a check box shows or hides it, the text field renames
+Before a capture, the **Channels** panel lists every channel of the device and a flag on each one
+chooses whether it is recorded; any combination works (for example channels 0, 2 and 5 only). With
+no channel ticked, Start stays unavailable and the toolbar says why.
+
+After a capture, the **Channels** panel lists every channel: a check box shows or hides it, the text field renames
 it, the colour square steps through the palette, and the arrows change the order. Names are yours:
 they are never translated and they are saved with the capture. **Reset channels** brings back the
 defaults.

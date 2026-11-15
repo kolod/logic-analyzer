@@ -33,7 +33,6 @@ menu-capture-stop = 停止
 ### ツールバー、ビュー、ダイアログ
 
 toolbar-device = デバイス
-toolbar-channels = チャンネル
 toolbar-rate = サンプルレート (Hz)
 toolbar-length = 長さ (サンプル数)
 toolbar-seed = シード
@@ -142,3 +141,8 @@ dialog-close = 閉じる
 about-title = バージョン情報
 about-body = Logic Analyzer { $version }。デジタル信号を記録してタイムライン上に表示します。シミュレーションデバイスで、ハードウェアなしで試せます。
 about-license = GNU General Public License バージョン3のもとで公開されている自由ソフトウェアです。
+
+# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
+channel-record = このチャンネルを記録する
+# Note at the top of the channel list before a capture: the flags choose what is recorded.
+channels-record-note = 記録するチャンネルを自由に組み合わせて選びます。

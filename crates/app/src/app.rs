@@ -42,7 +42,8 @@ pub enum Message {
     /// A device was chosen.
     DevicePicked(DeviceChoice),
     /// A number of channels was chosen.
-    ChannelsPicked(ChannelCount),
+    /// A channel was ticked or unticked for recording (before a capture exists).
+    RecordChannel(u8, bool),
     /// The sample rate text changed.
     RateText(String),
     /// The capture length text changed.
@@ -182,16 +183,6 @@ pub struct DeviceChoice {
 impl fmt::Display for DeviceChoice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.label)
-    }
-}
-
-/// A number of channels in the chooser.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChannelCount(u8);
-
-impl fmt::Display for ChannelCount {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 
@@ -976,10 +967,10 @@ impl App {
                 self.sync_texts();
                 task
             }
-            Message::ChannelsPicked(count) => {
-                let mask = 1_u32
-                    .checked_shl(u32::from(count.0))
-                    .map_or(u32::MAX, |bit| bit.wrapping_sub(1));
+            Message::RecordChannel(channel, record) => {
+                let bit = 1_u32.checked_shl(u32::from(channel)).unwrap_or(0);
+                let mask = self.shell.state().config.enabled_channels;
+                let mask = if record { mask | bit } else { mask & !bit };
                 self.run(Command::EditConfig(ConfigEdit::Channels(mask)))
             }
             Message::RateText(text) => {
@@ -1145,21 +1136,6 @@ impl App {
             .iter()
             .find(|c| Some(&c.id) == state.selected_device.as_ref())
             .cloned();
-        let channel_limit = state
-            .selected_device
-            .as_ref()
-            .and_then(|id| state.devices.iter().find(|d| d.id == *id))
-            .map_or(8, |d| d.capabilities.channels);
-        let counts: Vec<ChannelCount> = [1_u8, 2, 4, 8, 16, 32]
-            .into_iter()
-            .filter(|n| *n <= channel_limit)
-            .map(ChannelCount)
-            .collect();
-        let mask = state.config.enabled_channels;
-        let chosen = u8::try_from(mask.count_ones())
-            .ok()
-            .filter(|n| counts.iter().any(|c| c.0 == *n))
-            .map(ChannelCount);
         let profiles: Vec<ProfileChoice> = [
             (SignalProfile::Sparse, "profile-sparse"),
             (SignalProfile::Normal, "profile-normal"),
@@ -1177,7 +1153,6 @@ impl App {
             .cloned();
 
         let mut device_picker = pick_list(devices, selected, Message::DevicePicked);
-        let mut channel_picker = pick_list(counts, chosen, Message::ChannelsPicked);
         let mut profile_picker = pick_list(profiles, profile, Message::ProfilePicked);
         let mut rate = text_input("", &self.rate_text).width(110);
         let mut length = text_input("", &self.length_text).width(110);
@@ -1190,7 +1165,7 @@ impl App {
             seed = seed.on_input(Message::SeedText);
             realtime = realtime.on_toggle(Message::RealtimeToggled);
         }
-        let _ = (&mut channel_picker, &mut profile_picker);
+        let _ = &mut profile_picker;
 
         let start = if idle {
             let mut b = button(text(self.t("toolbar-start")));
@@ -1204,7 +1179,6 @@ impl App {
 
         let controls = row![
             labelled(self.t("toolbar-device"), device_picker.into()),
-            labelled(self.t("toolbar-channels"), channel_picker.into()),
             labelled(self.t("toolbar-rate"), rate.into()),
             labelled(self.t("toolbar-length"), length.into()),
             labelled(self.t("toolbar-seed"), seed.into()),
@@ -1319,6 +1293,60 @@ impl App {
             .into()
     }
 
+    /// The channel panel while there is no capture: one flag per channel of the selected device
+    /// chooses which channels are recorded, in any combination.
+    fn record_panel<'a>(
+        &'a self,
+        mut list: iced::widget::Column<'a, Message>,
+    ) -> Element<'a, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let channels = state
+            .selected_device
+            .as_ref()
+            .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+            .map_or(8, |d| d.capabilities.channels);
+        list = list.push(text(self.t("channels-record-note")).size(12));
+        for index in 0..channels {
+            let recorded =
+                u32::from(index) < 32 && state.config.enabled_channels >> u32::from(index) & 1 == 1;
+            let label = localizer.message(
+                &Key::from_static("channel-default"),
+                &Args::new().uint("number", u64::from(index)),
+            );
+            let colour = self.variant.channel(Colour::Palette(index % PALETTE_SIZE));
+            let swatch =
+                container(Space::new().width(14).height(14)).style(move |_theme: &Theme| {
+                    container::Style {
+                        background: Some(colour.into()),
+                        border: iced::Border {
+                            radius: 3.0.into(),
+                            ..iced::Border::default()
+                        },
+                        ..container::Style::default()
+                    }
+                });
+            list = list.push(
+                row![
+                    tooltip(
+                        checkbox(recorded).on_toggle(move |on| Message::RecordChannel(index, on)),
+                        text(self.t("channel-record")),
+                        tooltip::Position::Bottom,
+                    ),
+                    swatch,
+                    text(label).size(13),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center),
+            );
+        }
+        container(scrollable(list))
+            .width(Fill)
+            .height(Length::FillPortion(3))
+            .style(container::bordered_box)
+            .into()
+    }
+
     /// The panel that lists the channels: show, name, colour and order.
     fn channel_panel(&self) -> Element<'_, Message> {
         let state = self.shell.state();
@@ -1331,6 +1359,9 @@ impl App {
             left: 6.0,
         });
         list = list.push(text(self.t("panel-channels")).size(14));
+        if state.capture.is_none() {
+            return self.record_panel(list);
+        }
         let last = state.presentation.channels.len().saturating_sub(1);
         for (position, style) in state.presentation.channels.iter().enumerate() {
             let default_label = localizer.message(
@@ -2250,6 +2281,67 @@ mod tests {
                 app.shell.state().devices.len()
             );
         }
+    }
+
+    #[test]
+    fn channels_that_are_not_in_a_row_can_be_chosen_for_recording_in_the_panel() {
+        let _turn = render_turn();
+        let dir = std::env::temp_dir().join(format!("la-app-record-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        for edit in [
+            ConfigEdit::Realtime(false),
+            ConfigEdit::SampleRate(1_000_000),
+            ConfigEdit::Length(20_000),
+            ConfigEdit::Seed(Some(8)),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        // Start from nothing and tick channels 0, 2 and 5, as a person would.
+        for channel in 0..32 {
+            let _ = app.update(Message::RecordChannel(channel, false));
+        }
+        assert_eq!(app.shell.state().config.enabled_channels, 0);
+        assert!(
+            !app.shell.state().config_problems.is_empty(),
+            "no channel at all is a problem the toolbar explains"
+        );
+        for channel in [0, 2, 5] {
+            let _ = app.update(Message::RecordChannel(channel, true));
+        }
+        assert_eq!(app.shell.state().config.enabled_channels, 0b100101);
+        assert!(app.shell.state().config_problems.is_empty());
+
+        // The panel before a capture lists the channels with their flags.
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        assert!(
+            ui.find("Choose which channels to record, in any combination.")
+                .is_ok()
+        );
+        assert!(ui.find("Channel 31").is_ok());
+        let snapshot = ui.snapshot(&app.theme()).unwrap();
+        if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+            snapshot
+                .matches_image(std::path::Path::new(&directory).join("record-panel"))
+                .unwrap();
+        }
+        drop(ui);
+
+        // Recording gives exactly those channels, in the capture and in the panel after it.
+        let _ = app.update(Message::Run(Command::StartCapture));
+        let deadline = Instant::now().checked_add(Duration::from_secs(20)).unwrap();
+        while app.shell.state().activity != Activity::Idle {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let shown: Vec<u8> = app.plan.channels.iter().map(|c| c.channel).collect();
+        assert_eq!(shown, [0, 2, 5]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

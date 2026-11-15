@@ -33,7 +33,6 @@ menu-capture-stop = Arrêter
 ### Barre d'outils, vue et boîtes de dialogue
 
 toolbar-device = Appareil
-toolbar-channels = Canaux
 toolbar-rate = Fréquence d'échantillonnage (Hz)
 toolbar-length = Durée (échantillons)
 toolbar-seed = Graine
@@ -142,3 +141,8 @@ dialog-close = Fermer
 about-title = À propos
 about-body = Logic Analyzer { $version }. Enregistre des signaux numériques et les affiche sur une ligne de temps ; un appareil simulé permet de l’essayer sans matériel.
 about-license = Logiciel libre sous licence GNU General Public License, version 3.
+
+# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
+channel-record = Enregistrer ce canal
+# Note at the top of the channel list before a capture: the flags choose what is recorded.
+channels-record-note = Choisissez les canaux à enregistrer, dans n’importe quelle combinaison.

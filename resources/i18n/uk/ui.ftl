@@ -33,7 +33,6 @@ menu-capture-stop = Зупинити
 ### Панель інструментів, вигляд і діалоги
 
 toolbar-device = Пристрій
-toolbar-channels = Канали
 toolbar-rate = Частота дискретизації (Гц)
 toolbar-length = Довжина (відліків)
 toolbar-seed = Зерно
@@ -142,3 +141,8 @@ dialog-close = Закрити
 about-title = Про програму
 about-body = Logic Analyzer { $version }. Записує цифрові сигнали та показує їх на часовій шкалі; змодельований пристрій дозволяє спробувати програму без обладнання.
 about-license = Вільне програмне забезпечення за ліцензією GNU General Public License, версія 3.
+
+# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
+channel-record = Записувати цей канал
+# Note at the top of the channel list before a capture: the flags choose what is recorded.
+channels-record-note = Виберіть канали для запису в будь-якій комбінації.

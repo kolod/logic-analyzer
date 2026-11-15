@@ -56,8 +56,6 @@ menu-capture-stop = Stop
 
 # Label of the device chooser.
 toolbar-device = Device
-# Label of the number of channels to capture.
-toolbar-channels = Channels
 # Label of the sample rate field (the value is in hertz).
 toolbar-rate = Sample rate (Hz)
 # Label of the capture length field (the value is a number of samples).
@@ -259,3 +257,8 @@ about-title = About
 about-body = Logic Analyzer { $version }. Records digital signals and shows them on a timeline; a simulated device lets you try it without hardware.
 # License line of the about dialog.
 about-license = Free software under the GNU General Public License, version 3.
+
+# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
+channel-record = Record this channel
+# Note at the top of the channel list before a capture: the flags choose what is recorded.
+channels-record-note = Choose which channels to record, in any combination.

@@ -33,7 +33,6 @@ menu-capture-stop = Anhalten
 ### Werkzeugleiste, Ansicht und Dialoge
 
 toolbar-device = Gerät
-toolbar-channels = Kanäle
 toolbar-rate = Abtastrate (Hz)
 toolbar-length = Länge (Samples)
 toolbar-seed = Startwert
@@ -142,3 +141,8 @@ dialog-close = Schließen
 about-title = Über
 about-body = Logic Analyzer { $version }. Zeichnet digitale Signale auf und zeigt sie auf einer Zeitleiste; ein simuliertes Gerät erlaubt das Ausprobieren ohne Hardware.
 about-license = Freie Software unter der GNU General Public License, Version 3.
+
+# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
+channel-record = Diesen Kanal aufnehmen
+# Note at the top of the channel list before a capture: the flags choose what is recorded.
+channels-record-note = Wählen Sie, welche Kanäle aufgenommen werden, in beliebiger Kombination.
