@@ -142,7 +142,9 @@ about-title = À propos
 about-body = Logic Analyzer { $version }. Enregistre des signaux numériques et les affiche sur une ligne de temps ; un appareil simulé permet de l’essayer sans matériel.
 about-license = Logiciel libre sous licence GNU General Public License, version 3.
 
-# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
-channel-record = Enregistrer ce canal
-# Note at the top of the channel list before a capture: the flags choose what is recorded.
-channels-record-note = Choisissez les canaux à enregistrer, dans n’importe quelle combinaison.
+# Tooltip of the flag of a channel that chooses whether the next capture records it.
+channel-record = Enregistrer dans la prochaine capture
+# Short caption above the column of the flags that choose what the next capture records.
+channels-header-record = Enr.
+# Short caption above the column of the flags that show or hide a channel.
+channels-header-show = Voir

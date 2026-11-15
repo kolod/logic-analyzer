@@ -142,7 +142,9 @@ about-title = Про програму
 about-body = Logic Analyzer { $version }. Записує цифрові сигнали та показує їх на часовій шкалі; змодельований пристрій дозволяє спробувати програму без обладнання.
 about-license = Вільне програмне забезпечення за ліцензією GNU General Public License, версія 3.
 
-# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
-channel-record = Записувати цей канал
-# Note at the top of the channel list before a capture: the flags choose what is recorded.
-channels-record-note = Виберіть канали для запису в будь-якій комбінації.
+# Tooltip of the flag of a channel that chooses whether the next capture records it.
+channel-record = Записувати в наступному захопленні
+# Short caption above the column of the flags that choose what the next capture records.
+channels-header-record = Запис
+# Short caption above the column of the flags that show or hide a channel.
+channels-header-show = Показ

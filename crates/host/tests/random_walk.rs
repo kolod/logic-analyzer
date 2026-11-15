@@ -170,12 +170,25 @@ fn check_invariants(shell: &Shell) -> Result<(), String> {
             }
         }
     }
-    if let Some(capture) = capture {
-        if !styles.is_empty() && styles.len() != usize::from(capture.snapshot.channels()) {
-            return Err("the presentation does not match the channels".into());
+    // The presentation describes the channels of the capture on screen, or else those of the
+    // selected device; what the user set stays across captures.
+    let expected = capture.map_or_else(
+        || {
+            state
+                .selected_device
+                .as_ref()
+                .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+                .map(|d| d.capabilities.channels)
+        },
+        |c| Some(c.snapshot.channels()),
+    );
+    if let Some(expected) = expected {
+        if styles.len() != usize::from(expected) {
+            return Err(format!(
+                "the presentation has {} channels, expected {expected}",
+                styles.len()
+            ));
         }
-    } else if !styles.is_empty() {
-        return Err("a presentation without a capture".into());
     }
     // Activity and unsaved state.
     if state.operation.is_some() && state.activity != Activity::Idle {

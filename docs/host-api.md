@@ -85,9 +85,9 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `GoToEnd` | the window moves to the end |
 | | `ZoomToRange { start, end }` | shows that range |
 | | `SetFollowLatest(bool)` | live follow while capturing |
-| Channels | `RenameChannel { channel, name }` | the name is sanitized and limited to 64 characters |
+| Channels | `RenameChannel { channel, name }` | the name is sanitized and limited to 64 characters; the channel edits below work with or without a capture, and what they set stays for the next capture |
 | | `SetChannelColour { channel, colour }` | a palette entry or a chosen colour |
-| | `SetChannelVisible { channel, visible }` | shows or hides a channel |
+| | `SetChannelVisible { channel, visible }` | shows or hides a channel; a lane is drawn only for a channel that is shown and that the capture recorded (which channels the next capture records is `EditConfig(Channels)`) |
 | | `MoveChannel { from, to }` | changes the order |
 | | `ResetPresentation` | defaults for names, colours, order and visibility |
 | Markers | `PlaceMarker { position, channel }` | at most 64; snaps to the nearest transition of `channel` when snapping is on |

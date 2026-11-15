@@ -258,7 +258,9 @@ about-body = Logic Analyzer { $version }. Records digital signals and shows them
 # License line of the about dialog.
 about-license = Free software under the GNU General Public License, version 3.
 
-# Tooltip of the flag that chooses whether a channel is recorded (before a capture).
-channel-record = Record this channel
-# Note at the top of the channel list before a capture: the flags choose what is recorded.
-channels-record-note = Choose which channels to record, in any combination.
+# Tooltip of the flag of a channel that chooses whether the next capture records it.
+channel-record = Record in the next capture
+# Short caption above the column of the flags that choose what the next capture records.
+channels-header-record = Rec.
+# Short caption above the column of the flags that show or hide a channel.
+channels-header-show = Show

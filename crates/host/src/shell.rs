@@ -187,6 +187,7 @@ impl Shell {
             settings: loaded.settings,
         };
         revalidate(&mut state);
+        sync_presentation(&mut state);
         if let Some(problem) = loaded.problem {
             report_into(&mut state, Severity::Warning, &problem);
         }
@@ -301,12 +302,17 @@ impl Shell {
         } else {
             self.state.window.clamp(&limits)
         };
-        let channels: Vec<ChannelView> = if capture.is_some() {
+        let channels: Vec<ChannelView> = if let Some(capture) = capture {
+            let recorded = capture.description.enabled_mask();
             self.state
                 .presentation
                 .channels
                 .iter()
-                .filter(|style| style.visible)
+                .filter(|style| {
+                    style.visible
+                        && u32::from(style.index) < 32
+                        && recorded >> u32::from(style.index) & 1 == 1
+                })
                 .map(|style| ChannelView {
                     channel: style.index,
                     name: style.name.clone(),
@@ -834,10 +840,7 @@ impl Shell {
                 edit_presentation(state, |p| p.move_channel(from, to))
             }
             Command::ResetPresentation => {
-                let Some(capture) = &state.capture else {
-                    return Err(Reject::Ignored(error::INVALID_COMMAND));
-                };
-                state.presentation = default_presentation(capture);
+                state.presentation = Presentation::all_visible(presentation_channels(state));
                 mark_dirty(state);
                 changed(Changes::PRESENTATION)
             }
@@ -974,11 +977,7 @@ impl Shell {
             memory_limit: limits.memory_budget_bytes,
             planned: Some(state.config.length),
         });
-        state.presentation = state
-            .capture
-            .as_ref()
-            .map(default_presentation)
-            .unwrap_or_default();
+        sync_presentation(state);
         state.markers = Markers::new();
         state.activity = Activity::Capturing;
         state.unsaved = Unsaved::Running;
@@ -1024,6 +1023,9 @@ fn select_device(state: &mut State, id: &DeviceId) {
     if let Some(device) = state.devices.iter().find(|d| d.id == *id) {
         state.config = ConfigDraft::for_device(&device.capabilities);
     }
+    if state.capture.is_none() {
+        sync_presentation(state);
+    }
     revalidate(state);
 }
 
@@ -1067,12 +1069,31 @@ fn marker_target(state: &State, position: u64, channel: u8) -> Result<(u64, u64)
     Ok((length, position))
 }
 
-/// The default presentation of a capture: its enabled channels, in index order.
+/// The default presentation of a capture: every channel in index order, shown (a lane appears
+/// only for the channels the capture recorded).
 pub(crate) fn default_presentation(capture: &CaptureView) -> Presentation {
-    Presentation::defaults(
-        capture.snapshot.channels(),
-        capture.description.enabled_mask(),
+    Presentation::all_visible(capture.snapshot.channels())
+}
+
+/// How many channels the presentation describes: those of the capture on screen, or else those of
+/// the selected device.
+pub(crate) fn presentation_channels(state: &State) -> u8 {
+    state.capture.as_ref().map_or_else(
+        || {
+            state
+                .selected_device
+                .as_ref()
+                .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+                .map_or(8, |d| d.capabilities.channels)
+        },
+        |capture| capture.snapshot.channels(),
     )
+}
+
+/// Keeps the presentation as long as the channels it describes; what the user set is kept.
+pub(crate) fn sync_presentation(state: &mut State) {
+    let count = presentation_channels(state);
+    state.presentation.resize(count);
 }
 
 /// The pixel width the window limits use.
@@ -1109,7 +1130,7 @@ fn edit_presentation(
     state: &mut State,
     edit: impl FnOnce(&mut Presentation) -> bool,
 ) -> Result<Executed, Reject> {
-    if state.capture.is_none() || !edit(&mut state.presentation) {
+    if !edit(&mut state.presentation) {
         return Err(Reject::Ignored(error::INVALID_COMMAND));
     }
     mark_dirty(state);
@@ -1118,7 +1139,6 @@ fn edit_presentation(
 
 /// Removes the capture and everything about it.
 pub(crate) fn clear_capture(state: &mut State) {
-    state.presentation = Presentation::default();
     state.markers = Markers::new();
     state.session_path = None;
     state.session_extras.clear();
@@ -1129,4 +1149,6 @@ pub(crate) fn clear_capture(state: &mut State) {
     state.auto_fit = true;
     state.pending_decision = None;
     state.window = ViewWindow::fit_all(&window_limits(0, state.view_size.pixels));
+    // What the user set for the channels (names, colours, order) stays for the next capture.
+    sync_presentation(state);
 }

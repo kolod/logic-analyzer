@@ -145,6 +145,8 @@ fn autonym(localizer: &la_i18n::Localizer, language: la_i18n::Language) -> Strin
 
 /// The interface scales the shortcuts and the settings step through, in percent.
 const SCALE_STEPS: [u16; 6] = [75, 100, 125, 150, 175, 200];
+/// The width of a column of flags in the channel panel.
+const CHECK_COLUMN: f32 = 40.0;
 /// The smallest and the largest step.
 const SCALE_MIN: u16 = 75;
 const SCALE_MAX: u16 = 200;
@@ -1293,60 +1295,6 @@ impl App {
             .into()
     }
 
-    /// The channel panel while there is no capture: one flag per channel of the selected device
-    /// chooses which channels are recorded, in any combination.
-    fn record_panel<'a>(
-        &'a self,
-        mut list: iced::widget::Column<'a, Message>,
-    ) -> Element<'a, Message> {
-        let state = self.shell.state();
-        let localizer = self.shell.localizer();
-        let channels = state
-            .selected_device
-            .as_ref()
-            .and_then(|id| state.devices.iter().find(|d| d.id == *id))
-            .map_or(8, |d| d.capabilities.channels);
-        list = list.push(text(self.t("channels-record-note")).size(12));
-        for index in 0..channels {
-            let recorded =
-                u32::from(index) < 32 && state.config.enabled_channels >> u32::from(index) & 1 == 1;
-            let label = localizer.message(
-                &Key::from_static("channel-default"),
-                &Args::new().uint("number", u64::from(index)),
-            );
-            let colour = self.variant.channel(Colour::Palette(index % PALETTE_SIZE));
-            let swatch =
-                container(Space::new().width(14).height(14)).style(move |_theme: &Theme| {
-                    container::Style {
-                        background: Some(colour.into()),
-                        border: iced::Border {
-                            radius: 3.0.into(),
-                            ..iced::Border::default()
-                        },
-                        ..container::Style::default()
-                    }
-                });
-            list = list.push(
-                row![
-                    tooltip(
-                        checkbox(recorded).on_toggle(move |on| Message::RecordChannel(index, on)),
-                        text(self.t("channel-record")),
-                        tooltip::Position::Bottom,
-                    ),
-                    swatch,
-                    text(label).size(13),
-                ]
-                .spacing(8)
-                .align_y(iced::Alignment::Center),
-            );
-        }
-        container(scrollable(list))
-            .width(Fill)
-            .height(Length::FillPortion(3))
-            .style(container::bordered_box)
-            .into()
-    }
-
     /// The panel that lists the channels: show, name, colour and order.
     fn channel_panel(&self) -> Element<'_, Message> {
         let state = self.shell.state();
@@ -1359,9 +1307,20 @@ impl App {
             left: 6.0,
         });
         list = list.push(text(self.t("panel-channels")).size(14));
-        if state.capture.is_none() {
-            return self.record_panel(list);
-        }
+        // Column captions: the first flag chooses what the next capture records, the second what
+        // is shown.
+        list = list.push(
+            row![
+                container(text(self.t("channels-header-record")).size(10))
+                    .width(CHECK_COLUMN)
+                    .center_x(CHECK_COLUMN),
+                container(text(self.t("channels-header-show")).size(10))
+                    .width(CHECK_COLUMN)
+                    .center_x(CHECK_COLUMN),
+            ]
+            .spacing(4),
+        );
+        let can_record = state.activity == Activity::Idle;
         let last = state.presentation.channels.len().saturating_sub(1);
         for (position, style) in state.presentation.channels.iter().enumerate() {
             let default_label = localizer.message(
@@ -1381,9 +1340,25 @@ impl App {
                 }
             });
             let index = style.index;
+            let recorded =
+                u32::from(index) < 32 && state.config.enabled_channels >> u32::from(index) & 1 == 1;
             let line = row![
                 tooltip(
-                    checkbox(style.visible).on_toggle(move |v| Message::ChannelVisible(index, v)),
+                    container(checkbox(recorded).on_toggle_maybe(
+                        can_record.then_some(move |on| Message::RecordChannel(index, on)),
+                    ),)
+                    .width(CHECK_COLUMN)
+                    .center_x(CHECK_COLUMN),
+                    text(self.t("channel-record")),
+                    tooltip::Position::Bottom,
+                ),
+                tooltip(
+                    container(
+                        checkbox(style.visible)
+                            .on_toggle(move |v| Message::ChannelVisible(index, v)),
+                    )
+                    .width(CHECK_COLUMN)
+                    .center_x(CHECK_COLUMN),
                     text(self.t("channel-show")),
                     tooltip::Position::Bottom,
                 ),
@@ -1590,7 +1565,7 @@ impl App {
             .push(
                 row![
                     signal,
-                    column![self.markers_panel(), self.channel_panel()].width(250)
+                    column![self.markers_panel(), self.channel_panel()].width(310)
                 ]
                 .height(Fill),
             )
@@ -2297,6 +2272,21 @@ mod tests {
         ] {
             let _ = app.update(Message::Run(Command::EditConfig(edit)));
         }
+        // Names and colours do not wait for a capture.
+        let _ = app.update(Message::ChannelName(4, "SDA".into()));
+        let _ = app.update(Message::ChannelColour(4));
+        {
+            let style = app
+                .shell
+                .state()
+                .presentation
+                .channels
+                .iter()
+                .find(|c| c.index == 4)
+                .unwrap();
+            assert_eq!(style.name, "SDA");
+            assert_eq!(style.colour, Colour::Palette(5));
+        }
         // Start from nothing and tick channels 0, 2 and 5, as a person would.
         for channel in 0..32 {
             let _ = app.update(Message::RecordChannel(channel, false));
@@ -2318,10 +2308,6 @@ mod tests {
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
-        assert!(
-            ui.find("Choose which channels to record, in any combination.")
-                .is_ok()
-        );
         assert!(ui.find("Channel 31").is_ok());
         let snapshot = ui.snapshot(&app.theme()).unwrap();
         if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
@@ -2341,6 +2327,24 @@ mod tests {
         }
         let shown: Vec<u8> = app.plan.channels.iter().map(|c| c.channel).collect();
         assert_eq!(shown, [0, 2, 5]);
+
+        // With the capture on screen the same flags still choose what the next capture records,
+        // and names and colours can be changed whether or not there is a capture.
+        let _ = app.update(Message::RecordChannel(7, true));
+        assert_eq!(app.shell.state().config.enabled_channels, 0b1010_0101);
+        assert_eq!(shown, [0, 2, 5], "what is shown now does not change");
+        let _ = app.update(Message::ChannelName(2, "SCL".into()));
+        assert_eq!(
+            app.shell
+                .state()
+                .presentation
+                .channels
+                .iter()
+                .find(|c| c.index == 2)
+                .unwrap()
+                .name,
+            "SCL"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

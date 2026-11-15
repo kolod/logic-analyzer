@@ -55,6 +55,29 @@ impl Presentation {
         Self { channels }
     }
 
+    /// The defaults with every channel shown: whether a lane appears is decided by the channels
+    /// the capture on screen recorded, so the flag only needs to be turned off to hide one.
+    #[must_use]
+    pub fn all_visible(channel_count: u8) -> Self {
+        Self::defaults(channel_count, u32::MAX)
+    }
+
+    /// Makes the list exactly `channel_count` long, in index order where it is extended: what the
+    /// user set for the channels that stay (name, colour, order, visibility) is kept.
+    pub fn resize(&mut self, channel_count: u8) {
+        self.channels.retain(|s| s.index < channel_count);
+        for index in 0..channel_count {
+            if !self.channels.iter().any(|s| s.index == index) {
+                self.channels.push(ChannelStyle {
+                    index,
+                    name: String::new(),
+                    colour: Colour::Palette(index % PALETTE_SIZE),
+                    visible: true,
+                });
+            }
+        }
+    }
+
     fn style_mut(&mut self, channel: u8) -> Option<&mut ChannelStyle> {
         self.channels.iter_mut().find(|s| s.index == channel)
     }

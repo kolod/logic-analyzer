@@ -57,14 +57,21 @@ see nothing there is nothing, and if you see a band, zoom in and the edges appea
 
 ## Channels
 
-Before a capture, the **Channels** panel lists every channel of the device and a flag on each one
-chooses whether it is recorded; any combination works (for example channels 0, 2 and 5 only). With
-no channel ticked, Start stays unavailable and the toolbar says why.
+The **Channels** panel is always there, with or without a capture, and lists every channel of the
+device. Each row has two flags, a name, a colour and arrows:
 
-After a capture, the **Channels** panel lists every channel: a check box shows or hides it, the text field renames
-it, the colour square steps through the palette, and the arrows change the order. Names are yours:
-they are never translated and they are saved with the capture. **Reset channels** brings back the
-defaults.
+- **Rec.** (record): whether the *next* capture records this channel. Any combination works (for
+  example channels 0, 2 and 5 only). With no channel ticked, Start stays unavailable and the
+  toolbar says why. The flag is locked only while a capture is running.
+- **Show**: whether the channel is drawn. A lane appears only for a channel that was recorded and is
+  shown, so ticking Show for a channel that was not recorded draws nothing.
+- The text field names the channel, the colour square steps through the palette and the arrows
+  change the order.
+
+Names, colours, order and the two flags can be changed at any time, before the first capture
+included, and they stay for the next capture. They are saved with a capture (what is shown and in
+which order), while the Rec. flags are a setting for the next capture and are not part of the file.
+Names are yours: they are never translated. **Reset channels** brings back the defaults.
 
 ## Markers and measuring
 
