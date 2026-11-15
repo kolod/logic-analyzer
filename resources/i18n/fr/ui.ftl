@@ -86,3 +86,22 @@ notice-log = Afficher le dossier du journal
 notice-list = Messages
 menu-help = Aide
 menu-help-log = Afficher le dossier du journal
+
+### Repères et mesures
+
+menu-markers = Repères
+menu-markers-place = Placer un repère
+menu-markers-previous = Repère précédent
+menu-markers-next = Repère suivant
+menu-markers-remove = Supprimer le repère
+menu-markers-remove-all = Supprimer tous les repères
+menu-markers-snap = Aimanter aux transitions
+panel-markers = Repères
+marker-default = Repère { $number }
+marker-go = Aller au repère
+marker-remove = Supprimer
+marker-measure-first = Premier repère de la mesure
+marker-measure-second = Second repère de la mesure
+measure-distance = Écart
+measure-frequency = Fréquence
+measure-pick = Choisissez deux repères pour mesurer le temps qui les sépare.

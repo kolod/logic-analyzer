@@ -84,6 +84,16 @@ pub enum Action {
     About,
     /// Turn following the newest data of a running capture on or off.
     ToggleFollowLatest,
+    /// Place a marker at the pointer (or the centre of the view).
+    PlaceMarker,
+    /// Go to the previous marker.
+    PreviousMarker,
+    /// Go to the next marker.
+    NextMarker,
+    /// Remove the selected marker.
+    RemoveSelectedMarker,
+    /// Turn snapping of markers on or off.
+    ToggleSnap,
 }
 
 /// When an entry can be used.
@@ -97,6 +107,8 @@ pub enum EnabledWhen {
     Capturing,
     /// A capture is on screen.
     CaptureExists,
+    /// There is at least one marker.
+    MarkersExist,
     /// Idle, a device is selected and its configuration has no problem.
     CanStart,
 }
@@ -110,6 +122,7 @@ impl EnabledWhen {
             EnabledWhen::Idle => state.activity == Activity::Idle,
             EnabledWhen::Capturing => state.activity == Activity::Capturing,
             EnabledWhen::CaptureExists => state.capture.is_some(),
+            EnabledWhen::MarkersExist => !state.markers.list.is_empty(),
             EnabledWhen::CanStart => {
                 state.activity == Activity::Idle
                     && state.selected_device.is_some()
@@ -151,7 +164,7 @@ impl ShortcutEntry {
 /// The table: every action of the application with its menu path and shortcut.
 #[must_use]
 pub fn table() -> Vec<ShortcutEntry> {
-    vec![
+    let mut entries = vec![
         ShortcutEntry::new(
             Action::Command(Command::NewCapture),
             ["menu-file", "menu-file-new"],
@@ -175,6 +188,42 @@ pub fn table() -> Vec<ShortcutEntry> {
             ["menu-capture", "menu-capture-stop"],
             Some(Accelerator::shift("F5")),
             EnabledWhen::Capturing,
+        ),
+        ShortcutEntry::new(
+            Action::PlaceMarker,
+            ["menu-markers", "menu-markers-place"],
+            Some(Accelerator::key("M")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::PreviousMarker,
+            ["menu-markers", "menu-markers-previous"],
+            Some(Accelerator::key("[")),
+            EnabledWhen::MarkersExist,
+        ),
+        ShortcutEntry::new(
+            Action::NextMarker,
+            ["menu-markers", "menu-markers-next"],
+            Some(Accelerator::key("]")),
+            EnabledWhen::MarkersExist,
+        ),
+        ShortcutEntry::new(
+            Action::RemoveSelectedMarker,
+            ["menu-markers", "menu-markers-remove"],
+            Some(Accelerator::key("Delete")),
+            EnabledWhen::MarkersExist,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::RemoveAllMarkers),
+            ["menu-markers", "menu-markers-remove-all"],
+            None,
+            EnabledWhen::MarkersExist,
+        ),
+        ShortcutEntry::new(
+            Action::ToggleSnap,
+            ["menu-markers", "menu-markers-snap"],
+            Some(Accelerator::key("S")),
+            EnabledWhen::CaptureExists,
         ),
         ShortcutEntry::new(
             Action::ShowLog,
@@ -242,5 +291,16 @@ pub fn table() -> Vec<ShortcutEntry> {
             Some(Accelerator::shift("Right")),
             EnabledWhen::CaptureExists,
         ),
-    ]
+    ];
+    // The menus appear in this order; entries keep their order inside a menu.
+    let rank = |entry: &ShortcutEntry| match entry.menu[0] {
+        "menu-file" => 0,
+        "menu-capture" => 1,
+        "menu-view" => 2,
+        "menu-markers" => 3,
+        "menu-help" => 4,
+        _ => 5,
+    };
+    entries.sort_by_key(rank);
+    entries
 }

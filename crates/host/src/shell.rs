@@ -18,9 +18,11 @@ use crate::command::{
 };
 use crate::devices::{ConfigDraft, fresh_seed, problems};
 use crate::error;
+use crate::markers::{Markers, MeasurementText, measurement, measurement_text, nearest_transition};
 use crate::notices::{Notice, NoticeContent, NoticeId, NoticeList, Severity, notice_text};
-use crate::plan::{ChannelView, FramePlan, build_plan};
+use crate::plan::{ChannelView, FramePlan, MarkerPlan, build_plan};
 use crate::presentation::Presentation;
+use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
 use crate::settings::{RealSettingsFs, Settings, SettingsFs};
 use crate::state::{Activity, State, Unsaved, Versions};
 use crate::status::{StatusLine, status_line};
@@ -167,6 +169,8 @@ impl Shell {
             capture: None,
             progress: None,
             presentation: Presentation::default(),
+            markers: Markers::new(),
+            snap: loaded.settings.snap_markers,
             pending_decision: None,
             follow_latest: loaded.settings.follow_latest,
             notices: NoticeList::new(),
@@ -281,7 +285,33 @@ impl Shell {
         } else {
             Vec::new()
         };
-        build_plan(capture.map(|c| &c.snapshot), &window, pixels, &channels)
+        let mut plan = build_plan(capture.map(|c| &c.snapshot), &window, pixels, &channels);
+        if capture.is_some() && window.length > 0 {
+            let scale = f64::from(pixels) / window.length as f64;
+            plan.markers = self
+                .state
+                .markers
+                .list
+                .iter()
+                .filter(|m| m.position >= window.start && m.position < window.end())
+                .map(|m| MarkerPlan {
+                    id: m.id,
+                    position: m.position,
+                    x: m.position.saturating_sub(window.start) as f64 * scale,
+                    name: m.name.clone(),
+                })
+                .collect();
+        }
+        plan
+    }
+
+    /// The distance and frequency between the two selected markers, in the current language.
+    #[must_use]
+    pub fn measurement_text(&self) -> Option<MeasurementText> {
+        let capture = self.state.capture.as_ref()?;
+        let (a, b) = self.state.markers.measured_positions()?;
+        let m = measurement(capture.snapshot.sample_rate_hz(), a, b)?;
+        Some(measurement_text(&self.localizer, &m))
     }
 
     /// Collects what happened in the background since the last call: device changes, capture
@@ -613,6 +643,73 @@ impl Shell {
                 state.follow_latest = follow;
                 changed(Changes::WINDOW)
             }
+            Command::PlaceMarker { position, channel } => {
+                let (snapshot_length, position) = marker_target(state, position, channel)?;
+                let _ = snapshot_length;
+                if state.markers.place(position).is_none() {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                mark_dirty(state);
+                changed(Changes::MARKERS)
+            }
+            Command::MoveMarker {
+                id,
+                position,
+                channel,
+            } => {
+                if state.markers.get(id).is_none() {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                let (_, position) = marker_target(state, position, channel)?;
+                if let Some(marker) = state.markers.get_mut(id) {
+                    marker.position = position;
+                }
+                mark_dirty(state);
+                changed(Changes::MARKERS)
+            }
+            Command::RenameMarker { id, name } => {
+                let Some(marker) = state.markers.get_mut(id) else {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                };
+                marker.name = sanitize_text(&name, MAX_NAME_CHARS);
+                mark_dirty(state);
+                changed(Changes::MARKERS)
+            }
+            Command::RemoveMarker(id) => {
+                if !state.markers.remove(id) {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                mark_dirty(state);
+                changed(Changes::MARKERS)
+            }
+            Command::RemoveAllMarkers => {
+                state.markers.clear();
+                mark_dirty(state);
+                changed(Changes::MARKERS)
+            }
+            Command::SelectMarkers { first, second } => {
+                if !state.markers.select(first, second) {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                changed(Changes::MARKERS)
+            }
+            Command::GoToMarker(id) => {
+                let position = state
+                    .markers
+                    .get(id)
+                    .map(|m| m.position)
+                    .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                state.window = current_window(state, &limits).reveal(&limits, position);
+                state.auto_fit = false;
+                state.follow_latest = false;
+                changed(Changes::WINDOW)
+            }
+            Command::SetSnap(snap) => {
+                state.snap = snap;
+                changed(Changes::MARKERS)
+            }
             Command::RenameChannel { channel, name } => {
                 edit_presentation(state, |p| p.rename(channel, &name))
             }
@@ -765,6 +862,7 @@ impl Shell {
             .as_ref()
             .map(default_presentation)
             .unwrap_or_default();
+        state.markers = Markers::new();
         state.activity = Activity::Capturing;
         state.unsaved = Unsaved::Running;
         state.auto_fit = true;
@@ -823,6 +921,35 @@ fn revalidate(state: &mut State) {
         .unwrap_or_default();
 }
 
+/// Where a marker dropped at `position` ends up: clamped to the capture and, when snapping is
+/// on, moved to the nearest transition of `channel` within about twelve pixels. Returns the
+/// capture length too.
+fn marker_target(state: &State, position: u64, channel: u8) -> Result<(u64, u64), Reject> {
+    let capture = state
+        .capture
+        .as_ref()
+        .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+    let length = capture.snapshot.length();
+    if length == 0 {
+        return Err(Reject::Ignored(error::INVALID_COMMAND));
+    }
+    let mut position = position.min(length.saturating_sub(1));
+    if state.snap {
+        let limits = window_limits(length, plan_pixels(state));
+        let window = current_window(state, &limits);
+        let radius = window
+            .length
+            .saturating_mul(12)
+            .checked_div(u64::from(limits.pixels.max(1)))
+            .unwrap_or(1)
+            .max(1);
+        if let Some(near) = nearest_transition(&capture.snapshot, channel, position, radius) {
+            position = near.min(length.saturating_sub(1));
+        }
+    }
+    Ok((length, position))
+}
+
 /// The default presentation of a capture: its enabled channels, in index order.
 fn default_presentation(capture: &CaptureView) -> Presentation {
     Presentation::defaults(
@@ -875,6 +1002,7 @@ fn edit_presentation(
 /// Removes the capture and everything about it.
 fn clear_capture(state: &mut State) {
     state.presentation = Presentation::default();
+    state.markers = Markers::new();
     state.capture = None;
     state.progress = None;
     state.activity = Activity::Idle;

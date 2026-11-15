@@ -156,3 +156,38 @@ notice-list = Messages
 menu-help = Help
 # Open the folder with the log files.
 menu-help-log = Show log location
+
+### Markers and measurements
+
+# The Markers menu.
+menu-markers = Markers
+# Place a marker at the pointer, or at the centre of the view.
+menu-markers-place = Place marker
+# Go to the previous marker.
+menu-markers-previous = Previous marker
+# Go to the next marker.
+menu-markers-next = Next marker
+# Remove the selected marker.
+menu-markers-remove = Remove marker
+# Remove every marker.
+menu-markers-remove-all = Remove all markers
+# Turn snapping of markers to signal transitions on or off.
+menu-markers-snap = Snap to transitions
+# Title of the panel that lists the markers.
+panel-markers = Markers
+# The default name of a marker; the argument is its number.
+marker-default = Marker { $number }
+# Tooltip of the button that moves the view to a marker.
+marker-go = Go to marker
+# Tooltip of the button that removes a marker.
+marker-remove = Remove
+# Tooltip of the button that makes a marker the first one of the measurement.
+marker-measure-first = First of the measurement
+# Tooltip of the button that makes a marker the second one of the measurement.
+marker-measure-second = Second of the measurement
+# Label of the time between two markers.
+measure-distance = Distance
+# Label of the frequency of the time between two markers.
+measure-frequency = Frequency
+# Hint shown when fewer than two markers are chosen for a measurement.
+measure-pick = Choose two markers to measure the time between them.

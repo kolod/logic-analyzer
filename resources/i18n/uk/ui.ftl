@@ -86,3 +86,22 @@ notice-log = Показати розташування журналу
 notice-list = Повідомлення
 menu-help = Довідка
 menu-help-log = Показати розташування журналу
+
+### Позначки та вимірювання
+
+menu-markers = Позначки
+menu-markers-place = Поставити позначку
+menu-markers-previous = Попередня позначка
+menu-markers-next = Наступна позначка
+menu-markers-remove = Видалити позначку
+menu-markers-remove-all = Видалити всі позначки
+menu-markers-snap = Прилипати до переходів
+panel-markers = Позначки
+marker-default = Позначка { $number }
+marker-go = До позначки
+marker-remove = Видалити
+marker-measure-first = Перша позначка вимірювання
+marker-measure-second = Друга позначка вимірювання
+measure-distance = Відстань
+measure-frequency = Частота
+measure-pick = Виберіть дві позначки, щоб виміряти час між ними.

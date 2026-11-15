@@ -71,8 +71,29 @@ pub enum Message {
     ShowLog,
     /// Show or hide the list of recent messages.
     ToggleMessages,
+    /// A marker shortcut or menu entry: place, previous, next, remove selected, snap.
+    MarkerAction(MarkerAction),
+    /// A marker was renamed in the markers panel.
+    MarkerName(u32, String),
+    /// A marker becomes the first (0) or second (1) of the measurement.
+    MarkerMeasure(usize, u32),
     /// Nothing to do.
     Noop,
+}
+
+/// What a marker menu entry or shortcut asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerAction {
+    /// Place a marker at the centre of the view.
+    Place,
+    /// Go to the previous marker.
+    Previous,
+    /// Go to the next marker.
+    Next,
+    /// Remove the selected marker.
+    RemoveSelected,
+    /// Turn snapping on or off.
+    ToggleSnap,
 }
 
 /// A device in the device chooser.
@@ -187,7 +208,7 @@ pub struct App {
     variant: Variant,
     system_mode: theme::Mode,
     plan: la_host::plan::FramePlan,
-    plan_key: (u64, u64, u64, u32, bool),
+    plan_key: (u64, u64, u64, u64, u32, bool),
     cache: canvas::Cache,
     cache_key: (u64, Variant, la_i18n::Language),
     open_menu: Option<usize>,
@@ -195,6 +216,7 @@ pub struct App {
     length_text: String,
     seed_text: String,
     names: std::collections::BTreeMap<u8, String>,
+    marker_names: std::collections::BTreeMap<u32, String>,
     messages_open: bool,
 }
 
@@ -216,7 +238,7 @@ impl App {
             table,
             variant,
             system_mode: theme::Mode::Dark,
-            plan_key: (0, 0, 0, 0, false),
+            plan_key: (0, 0, 0, 0, 0, false),
             cache: canvas::Cache::new(),
             cache_key: (0, variant, la_i18n::Language::En),
             open_menu: None,
@@ -224,6 +246,7 @@ impl App {
             length_text: String::new(),
             seed_text: String::new(),
             names: std::collections::BTreeMap::new(),
+            marker_names: std::collections::BTreeMap::new(),
             messages_open: false,
         };
         app.sync_texts();
@@ -242,6 +265,77 @@ impl App {
         self.rate_text = config.sample_rate_hz.to_string();
         self.length_text = config.length.to_string();
         self.seed_text = config.seed.map_or_else(String::new, |s| s.to_string());
+    }
+
+    /// Runs a marker action chosen from a menu or a shortcut.
+    fn marker_action(&mut self, action: MarkerAction) -> Task<Message> {
+        let state = self.shell.state();
+        let window = state.window;
+        let limits_length = state.capture.as_ref().map_or(0, |c| c.snapshot.length());
+        let centre = if state.auto_fit {
+            limits_length / 2
+        } else {
+            window.start.saturating_add(window.length / 2)
+        };
+        match action {
+            MarkerAction::Place => {
+                let channel = self.plan.channels.first().map_or(0, |c| c.channel);
+                self.run(Command::PlaceMarker {
+                    position: centre,
+                    channel,
+                })
+            }
+            MarkerAction::Previous | MarkerAction::Next => {
+                let mut by_position: Vec<(u64, u32)> = state
+                    .markers
+                    .list
+                    .iter()
+                    .map(|m| (m.position, m.id))
+                    .collect();
+                by_position.sort_unstable();
+                let target = if action == MarkerAction::Next {
+                    by_position
+                        .iter()
+                        .find(|(p, _)| *p > centre)
+                        .or(by_position.first())
+                } else {
+                    by_position
+                        .iter()
+                        .rev()
+                        .find(|(p, _)| *p < centre)
+                        .or(by_position.last())
+                };
+                match target {
+                    Some((_, id)) => self.run(Command::GoToMarker(*id)),
+                    None => Task::none(),
+                }
+            }
+            MarkerAction::RemoveSelected => {
+                let id = state.markers.selected[1]
+                    .or(state.markers.selected[0])
+                    .or_else(|| state.markers.list.last().map(|m| m.id));
+                match id {
+                    Some(id) => self.run(Command::RemoveMarker(id)),
+                    None => Task::none(),
+                }
+            }
+            MarkerAction::ToggleSnap => {
+                let snap = !state.snap;
+                self.run(Command::SetSnap(snap))
+            }
+        }
+    }
+
+    /// Copies the marker names into the text fields.
+    fn sync_marker_names(&mut self) {
+        self.marker_names = self
+            .shell
+            .state()
+            .markers
+            .list
+            .iter()
+            .map(|m| (m.id, m.name.clone()))
+            .collect();
     }
 
     /// Copies the channel names of the presentation into the text fields.
@@ -263,6 +357,7 @@ impl App {
             state.versions.capture,
             state.versions.window,
             state.versions.presentation,
+            state.versions.markers,
             state.view_size.pixels,
             state.auto_fit,
         );
@@ -312,10 +407,14 @@ impl App {
 
     /// Runs a host command and turns its outcome into a task.
     fn run(&mut self, command: Command) -> Task<Message> {
-        let renames = matches!(command, Command::RenameChannel { .. });
+        let renames = matches!(
+            command,
+            Command::RenameChannel { .. } | Command::RenameMarker { .. }
+        );
         let outcome = self.shell.apply(command);
         if !renames {
             self.sync_names();
+            self.sync_marker_names();
         }
         self.after(&outcome)
     }
@@ -352,6 +451,21 @@ impl App {
                     Some(Action::Command(command)) => self.run(command),
                     Some(Action::ToggleFollowLatest) => self.update(Message::ToggleFollow),
                     Some(Action::ShowLog) => self.update(Message::ShowLog),
+                    Some(Action::PlaceMarker) => {
+                        self.update(Message::MarkerAction(MarkerAction::Place))
+                    }
+                    Some(Action::PreviousMarker) => {
+                        self.update(Message::MarkerAction(MarkerAction::Previous))
+                    }
+                    Some(Action::NextMarker) => {
+                        self.update(Message::MarkerAction(MarkerAction::Next))
+                    }
+                    Some(Action::RemoveSelectedMarker) => {
+                        self.update(Message::MarkerAction(MarkerAction::RemoveSelected))
+                    }
+                    Some(Action::ToggleSnap) => {
+                        self.update(Message::MarkerAction(MarkerAction::ToggleSnap))
+                    }
                     _ => Task::none(),
                 }
             }
@@ -362,6 +476,24 @@ impl App {
                     open_folder(path);
                 }
                 Task::none()
+            }
+            Message::MarkerAction(action) => {
+                self.open_menu = None;
+                self.marker_action(action)
+            }
+            Message::MarkerName(id, name) => {
+                self.marker_names.insert(id, name.clone());
+                self.run(Command::RenameMarker { id, name })
+            }
+            Message::MarkerMeasure(slot, id) => {
+                let mut pair = self.shell.state().markers.selected;
+                if let Some(entry) = pair.get_mut(slot) {
+                    *entry = Some(id);
+                }
+                self.run(Command::SelectMarkers {
+                    first: pair[0],
+                    second: pair[1],
+                })
             }
             Message::ToggleMessages => {
                 self.messages_open = !self.messages_open;
@@ -522,6 +654,21 @@ impl App {
                     }
                     Action::ToggleFollowLatest => item = item.on_press(Message::ToggleFollow),
                     Action::ShowLog => item = item.on_press(Message::ShowLog),
+                    Action::PlaceMarker => {
+                        item = item.on_press(Message::MarkerAction(MarkerAction::Place));
+                    }
+                    Action::PreviousMarker => {
+                        item = item.on_press(Message::MarkerAction(MarkerAction::Previous));
+                    }
+                    Action::NextMarker => {
+                        item = item.on_press(Message::MarkerAction(MarkerAction::Next));
+                    }
+                    Action::RemoveSelectedMarker => {
+                        item = item.on_press(Message::MarkerAction(MarkerAction::RemoveSelected));
+                    }
+                    Action::ToggleSnap => {
+                        item = item.on_press(Message::MarkerAction(MarkerAction::ToggleSnap));
+                    }
                     _ => {}
                 }
             }
@@ -643,6 +790,95 @@ impl App {
         toolbar.into()
     }
 
+    /// The panel with the markers and the measurement between two of them.
+    fn markers_panel(&self) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let mut list = column![].spacing(4).padding(iced::Padding {
+            top: 6.0,
+            right: 18.0,
+            bottom: 6.0,
+            left: 6.0,
+        });
+        list = list.push(text(self.t("panel-markers")).size(14));
+        for (position, marker) in state.markers.list.iter().enumerate() {
+            let default_label = localizer.message(
+                &Key::from_static("marker-default"),
+                &Args::new().uint("number", u64::from(marker.id)),
+            );
+            let name = self.marker_names.get(&marker.id).map_or("", String::as_str);
+            let id = marker.id;
+            let measured = |slot: usize, key: &'static str, label: &'static str| {
+                let chosen = state.markers.selected.get(slot).copied().flatten() == Some(id);
+                tooltip(
+                    button(text(label).size(11))
+                        .padding(3)
+                        .style(if chosen {
+                            button::primary
+                        } else {
+                            button::text
+                        })
+                        .on_press(Message::MarkerMeasure(slot, id)),
+                    text(self.t(key)),
+                    tooltip::Position::Bottom,
+                )
+            };
+            let _ = position;
+            list = list.push(
+                row![
+                    text_input(&default_label, name)
+                        .size(13)
+                        .width(Fill)
+                        .on_input(move |t| Message::MarkerName(id, t)),
+                    measured(0, "marker-measure-first", "1"),
+                    measured(1, "marker-measure-second", "2"),
+                    tooltip(
+                        button(text("\u{21e5}").size(12))
+                            .style(button::text)
+                            .padding(3)
+                            .on_press(Message::Run(Command::GoToMarker(id))),
+                        text(self.t("marker-go")),
+                        tooltip::Position::Bottom,
+                    ),
+                    tooltip(
+                        button(text("\u{d7}").size(12))
+                            .style(button::text)
+                            .padding(3)
+                            .on_press(Message::Run(Command::RemoveMarker(id))),
+                        text(self.t("marker-remove")),
+                        tooltip::Position::Bottom,
+                    ),
+                ]
+                .spacing(4)
+                .align_y(iced::Alignment::Center),
+            );
+        }
+        match self.shell.measurement_text() {
+            Some(measurement) => {
+                list = list.push(text(format!(
+                    "{}: {}",
+                    self.t("measure-distance"),
+                    measurement.distance
+                )));
+                if let Some(frequency) = measurement.frequency {
+                    list = list.push(text(format!(
+                        "{}: {frequency}",
+                        self.t("measure-frequency")
+                    )));
+                }
+            }
+            None if state.capture.is_some() => {
+                list = list.push(text(self.t("measure-pick")).size(12));
+            }
+            None => {}
+        }
+        container(scrollable(list))
+            .width(Fill)
+            .height(Length::FillPortion(2))
+            .style(container::bordered_box)
+            .into()
+    }
+
     /// The panel that lists the channels: show, name, colour and order.
     fn channel_panel(&self) -> Element<'_, Message> {
         let state = self.shell.state();
@@ -723,8 +959,8 @@ impl App {
                 .on_press(Message::Run(Command::ResetPresentation)),
         );
         container(scrollable(list))
-            .width(250)
-            .height(Fill)
+            .width(Fill)
+            .height(Length::FillPortion(3))
             .style(container::bordered_box)
             .into()
     }
@@ -856,7 +1092,13 @@ impl App {
             content = content.push(banner);
         }
         let content = content
-            .push(row![signal, self.channel_panel()].height(Fill))
+            .push(
+                row![
+                    signal,
+                    column![self.markers_panel(), self.channel_panel()].width(250)
+                ]
+                .height(Fill),
+            )
             .push(self.status_bar());
 
         let mut layers: Vec<Element<'_, Message>> = vec![content.into()];
@@ -1047,6 +1289,40 @@ mod tests {
         if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
             snapshot
                 .matches_image(std::path::Path::new(&directory).join("banner"))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn two_markers_show_their_distance_and_frequency() {
+        let mut app = app_with_capture("markers");
+        let _ = app.update(Message::Run(Command::SetSnap(false)));
+        let _ = app.update(Message::Run(Command::ZoomToRange {
+            start: 150_000,
+            end: 150_400,
+        }));
+        for position in [150_080, 150_280] {
+            let _ = app.update(Message::Run(Command::PlaceMarker {
+                position,
+                channel: 0,
+            }));
+        }
+        let _ = app.update(Message::AreaResized(1000.0));
+        assert_eq!(app.plan.markers.len(), 2);
+        let text = app.shell.measurement_text().unwrap();
+        assert!(text.distance.starts_with("200"), "{}", text.distance);
+        assert!(text.frequency.is_some());
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        let line = format!("Distance: {}", text.distance);
+        assert!(ui.find(line.as_str()).is_ok());
+        let snapshot = ui.snapshot(&app.theme()).unwrap();
+        if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+            snapshot
+                .matches_image(std::path::Path::new(&directory).join("markers"))
                 .unwrap();
         }
     }

@@ -112,6 +112,19 @@ pub struct ChannelPlan {
     pub segments: Vec<Segment>,
 }
 
+/// A marker inside the visible window.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkerPlan {
+    /// The marker's identity.
+    pub id: u32,
+    /// Its sample position.
+    pub position: u64,
+    /// Its horizontal position in pixels from the left of the signal area.
+    pub x: f64,
+    /// Its (sanitized) name.
+    pub name: String,
+}
+
 /// Cost counters of one plan, for the benchmarks and the frame log.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlanStats {
@@ -138,6 +151,8 @@ pub struct FramePlan {
     pub channels: Vec<ChannelPlan>,
     /// The time axis.
     pub axis: AxisPlan,
+    /// The markers inside the window (filled in by the shell; see `Shell::frame_plan`).
+    pub markers: Vec<MarkerPlan>,
     /// Cost counters.
     pub stats: PlanStats,
 }
@@ -152,6 +167,7 @@ impl FramePlan {
             capture_length: 0,
             channels: Vec::new(),
             axis: AxisPlan::empty(),
+            markers: Vec::new(),
             stats: PlanStats::default(),
         }
     }
@@ -206,6 +222,7 @@ fn build_inner(
         capture_length: length,
         channels: Vec::with_capacity(channels.len()),
         axis,
+        markers: Vec::new(),
         stats: PlanStats::default(),
     };
     if length == 0 {

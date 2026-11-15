@@ -31,3 +31,14 @@ recorded here with the platform, the date and the result. Anything not met is st
 | 2026-11-14 | Windows 11 | `logging.rs`: the log has command names, codes and technical detail, and a recognisable channel name never appears in it | passed |
 | 2026-11-14 | Windows 11 | Headless render with a damaged settings file (`a_damaged_settings_file_shows_a_localized_message_with_its_buttons`): the localized message, "Show log location" and "Dismiss" are on screen | passed |
 | 2026-11-14 | Windows 11 | The failure classes in the running window (unplug, corrupt file, read-only folder) | **pending**: needs a person; the session-file failures arrive with US4; no `LA_TEST_FAILURE` switch was built because the scripted-device tests above exercise the same paths |
+
+## US3: measure time between events
+
+| Date | Platform | Check | Result |
+|------|----------|-------|--------|
+| 2026-11-15 | Windows 11 | `markers.rs`: placement clamps to the capture, ids are unique and never reused, at most 64 markers, snapping to the nearest transition of a channel within about twelve pixels (from either side, none beyond), snap off keeps the exact sample, a marker keeps its sample's pixel position while zooming | passed |
+| 2026-11-15 | Windows 11 | `measurement.rs`: exact distance and frequency, 1.5 ms and 666.7 Hz in all six languages with their units and separators, the frequency keeps only the digits the distance resolves | passed |
+| 2026-11-15 | Windows 11 | Headless render with two markers 200 samples apart at 1 MHz: lines and labels in the view, panel with "Distance: 200 µs" and "Frequency: 5 kHz" | passed |
+| 2026-11-15 | Windows 11 | Right-click to place, dragging a marker line, and the menu with a known-period signal in two languages | **pending** (T061): needs a person at the window |
+
+A defect found by the render test and fixed: the plan refresh key lacked the marker version, so markers placed in the running window would not have been drawn.

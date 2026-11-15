@@ -9,6 +9,7 @@ use la_i18n::Language;
 use crate::capture::{CaptureView, ProgressView};
 use crate::command::{Changes, Guarded};
 use crate::devices::{ConfigDraft, ConfigProblem};
+use crate::markers::Markers;
 use crate::notices::NoticeList;
 use crate::presentation::Presentation;
 use crate::settings::Settings;
@@ -106,6 +107,10 @@ pub struct State {
     pub progress: Option<ProgressView>,
     /// How the channels of the capture are shown.
     pub presentation: Presentation,
+    /// The markers of the capture.
+    pub markers: Markers,
+    /// Whether markers snap to the nearest transition.
+    pub snap: bool,
     /// A command waiting for the user to decide what happens to unsaved data.
     pub pending_decision: Option<Guarded>,
     /// Whether the view follows the newest data of a running capture.

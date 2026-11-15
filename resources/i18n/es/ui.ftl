@@ -86,3 +86,22 @@ notice-log = Mostrar la carpeta del registro
 notice-list = Mensajes
 menu-help = Ayuda
 menu-help-log = Mostrar la carpeta del registro
+
+### Marcadores y mediciones
+
+menu-markers = Marcadores
+menu-markers-place = Colocar marcador
+menu-markers-previous = Marcador anterior
+menu-markers-next = Marcador siguiente
+menu-markers-remove = Quitar marcador
+menu-markers-remove-all = Quitar todos los marcadores
+menu-markers-snap = Ajustar a las transiciones
+panel-markers = Marcadores
+marker-default = Marcador { $number }
+marker-go = Ir al marcador
+marker-remove = Quitar
+marker-measure-first = Primero de la medición
+marker-measure-second = Segundo de la medición
+measure-distance = Distancia
+measure-frequency = Frecuencia
+measure-pick = Elija dos marcadores para medir el tiempo entre ellos.

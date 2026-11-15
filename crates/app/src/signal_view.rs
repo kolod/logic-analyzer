@@ -44,6 +44,8 @@ pub struct ViewState {
     modifiers: iced::keyboard::Modifiers,
     /// The x position where a drag last was, while the left button is down.
     drag_from: Option<f32>,
+    /// The marker being dragged and the channel under the pointer.
+    drag_marker: Option<u32>,
 }
 
 fn lane_height(total: f32, lanes: usize) -> f32 {
@@ -91,6 +93,25 @@ impl SignalView<'_> {
             align_y: Vertical::Center,
             ..Text::default()
         });
+    }
+
+    /// The sample under a pointer position (clamped to the window) and the channel of the lane
+    /// it is in (the first lane when the pointer is outside the lanes).
+    fn sample_and_channel(&self, position: Point, height: f32) -> Option<(u64, u8)> {
+        let plan = self.plan;
+        Some({
+            let columns = plan.pixels.max(1) as f64;
+            let x = f64::from((position.x - GUTTER).max(0.0)).min(columns);
+            let sample = plan
+                .window
+                .start
+                .saturating_add((x / columns * plan.window.length as f64) as u64);
+            let lane = lane_height(height, plan.channels.len());
+            let index = (((position.y - AXIS_HEIGHT) / lane).max(0.0) as usize)
+                .min(plan.channels.len().saturating_sub(1));
+            let channel = plan.channels.get(index).map_or(0, |c| c.channel);
+            (sample, channel)
+        })
     }
 
     fn draw_plan(&self, frame: &mut Frame, size: Size, theme: &Theme) {
@@ -178,6 +199,27 @@ impl SignalView<'_> {
                 &waveform(&channel.segments, scale, top + 7.0, top + lane - 7.0),
                 Stroke::default().with_color(colour).with_width(1.6),
             );
+        }
+        for marker in &plan.markers {
+            let x = GUTTER + marker.x as f32 * scale;
+            let accent = palette.primary;
+            frame.stroke(
+                &Path::line(Point::new(x, AXIS_HEIGHT - 6.0), Point::new(x, size.height)),
+                Stroke::default().with_color(accent).with_width(1.5),
+            );
+            let label = if marker.name.is_empty() {
+                format!("{}", marker.id)
+            } else {
+                marker.name.clone()
+            };
+            frame.fill_text(Text {
+                content: label,
+                position: Point::new(x + 4.0, AXIS_HEIGHT - 8.0),
+                color: accent,
+                size: Pixels(TEXT_SIZE),
+                align_y: Vertical::Bottom,
+                ..Text::default()
+            });
         }
         if plan.state == FrameState::Empty {
             frame.fill_text(Text {
@@ -374,9 +416,27 @@ impl canvas::Program<Message> for SignalView<'_> {
                 };
                 Some(canvas::Action::publish(Message::Run(command)).and_capture())
             }
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
+                let position = cursor.position_in(bounds)?;
+                let (sample, channel) = self.sample_and_channel(position, bounds.height)?;
+                Some(
+                    canvas::Action::publish(Message::Run(Command::PlaceMarker {
+                        position: sample,
+                        channel,
+                    }))
+                    .and_capture(),
+                )
+            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = cursor.position_in(bounds)?;
                 if position.x >= GUTTER {
+                    let scale = (bounds.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+                    state.drag_marker = self
+                        .plan
+                        .markers
+                        .iter()
+                        .find(|m| (GUTTER + m.x as f32 * scale - position.x).abs() <= 4.0)
+                        .map(|m| m.id);
                     state.drag_from = Some(position.x);
                     return Some(canvas::Action::capture());
                 }
@@ -385,6 +445,17 @@ impl canvas::Program<Message> for SignalView<'_> {
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 let from = state.drag_from?;
                 let position = cursor.position_in(bounds)?;
+                if let Some(id) = state.drag_marker {
+                    let (sample, channel) = self.sample_and_channel(position, bounds.height)?;
+                    return Some(
+                        canvas::Action::publish(Message::Run(Command::MoveMarker {
+                            id,
+                            position: sample,
+                            channel,
+                        }))
+                        .and_capture(),
+                    );
+                }
                 let moved = (from - position.x) as i64;
                 if moved == 0 {
                     return None;
@@ -397,6 +468,7 @@ impl canvas::Program<Message> for SignalView<'_> {
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                 state.drag_from = None;
+                state.drag_marker = None;
                 None
             }
             _ => None,

@@ -86,3 +86,22 @@ notice-log = Protokollordner anzeigen
 notice-list = Meldungen
 menu-help = Hilfe
 menu-help-log = Protokollordner anzeigen
+
+### Markierungen und Messungen
+
+menu-markers = Markierungen
+menu-markers-place = Markierung setzen
+menu-markers-previous = Vorherige Markierung
+menu-markers-next = Nächste Markierung
+menu-markers-remove = Markierung entfernen
+menu-markers-remove-all = Alle Markierungen entfernen
+menu-markers-snap = An Flanken einrasten
+panel-markers = Markierungen
+marker-default = Markierung { $number }
+marker-go = Zur Markierung
+marker-remove = Entfernen
+marker-measure-first = Erste Messmarke
+marker-measure-second = Zweite Messmarke
+measure-distance = Abstand
+measure-frequency = Frequenz
+measure-pick = Wählen Sie zwei Markierungen, um die Zeit dazwischen zu messen.

@@ -86,3 +86,22 @@ notice-log = ログの場所を表示
 notice-list = メッセージ
 menu-help = ヘルプ
 menu-help-log = ログの場所を表示
+
+### マーカーと測定
+
+menu-markers = マーカー
+menu-markers-place = マーカーを置く
+menu-markers-previous = 前のマーカー
+menu-markers-next = 次のマーカー
+menu-markers-remove = マーカーを削除
+menu-markers-remove-all = すべてのマーカーを削除
+menu-markers-snap = エッジに吸着
+panel-markers = マーカー
+marker-default = マーカー { $number }
+marker-go = マーカーへ移動
+marker-remove = 削除
+marker-measure-first = 測定の始点
+marker-measure-second = 測定の終点
+measure-distance = 間隔
+measure-frequency = 周波数
+measure-pick = 2つのマーカーを選ぶと、その間の時間を測定できます。

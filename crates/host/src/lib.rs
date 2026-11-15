@@ -16,6 +16,7 @@ pub mod capture;
 mod command;
 pub mod devices;
 pub mod error;
+pub mod markers;
 pub mod notices;
 pub mod plan;
 pub mod presentation;
