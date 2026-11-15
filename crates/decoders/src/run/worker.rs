@@ -6,7 +6,7 @@
 //! progress through atomics. The host polls the [`Job`]: it asks for progress and results, cancels
 //! it, and collects what it ended with.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -24,6 +24,48 @@ const PUBLISH_EVERY: Duration = Duration::from_millis(25);
 /// How long the worker sleeps when it has caught up with a capture that is still growing.
 const FOLLOW_PAUSE: Duration = Duration::from_millis(2);
 
+/// How long a decoder may take before the supervisor gives up on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Deadlines {
+    /// The longest a chunk (or a wait for data) may go without a sign of life.
+    pub chunk: Duration,
+    /// The longest a worker may take to stop after a cancel.
+    pub cancel: Duration,
+}
+
+impl Default for Deadlines {
+    fn default() -> Self {
+        Self {
+            chunk: Duration::from_secs(5),
+            cancel: Duration::from_secs(1),
+        }
+    }
+}
+
+/// How many abandoned workers are still running (a decoder that never returns keeps its thread).
+static ABANDONED_ALIVE: AtomicUsize = AtomicUsize::new(0);
+/// With this many stuck workers new passes are refused.
+pub const MAX_STUCK_WORKERS: usize = 4;
+
+/// The number of abandoned workers that are still running.
+#[must_use]
+pub fn stuck_workers() -> usize {
+    ABANDONED_ALIVE.load(Ordering::Acquire)
+}
+
+/// Why the supervisor gave up on a job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Overdue {
+    /// A chunk took longer than its deadline.
+    Chunk,
+    /// The worker did not stop in time after a cancel.
+    Cancel,
+}
+
+const RUNNING: u8 = 0;
+const ABANDONED: u8 = 1;
+const ENDED: u8 = 2;
+
 /// Everything a pass needs.
 pub struct JobSpec {
     /// The decoder.
@@ -40,6 +82,8 @@ pub struct JobSpec {
     pub limits: Limits,
     /// The memory budget shared by all instances.
     pub budget: Arc<Budget>,
+    /// The deadlines the supervisor enforces.
+    pub deadlines: Deadlines,
 }
 
 /// How a pass ended.
@@ -79,6 +123,11 @@ struct Shared {
     covered: AtomicU64,
     length: AtomicU64,
     ended: AtomicBool,
+    /// Running, abandoned by the supervisor, or ended (decides who counts a stuck worker).
+    life: AtomicU8,
+    /// Milliseconds since the start when a cancel was asked for, plus one (0: not asked).
+    cancelled_at: AtomicU64,
+    deadlines: Deadlines,
     /// Milliseconds since the start at the last sign of life (a chunk done).
     beat: AtomicU64,
     started: Instant,
@@ -91,6 +140,9 @@ struct EndFlag(Arc<Shared>);
 impl Drop for EndFlag {
     fn drop(&mut self) {
         self.0.ended.store(true, Ordering::Release);
+        if self.0.life.swap(ENDED, Ordering::AcqRel) == ABANDONED {
+            ABANDONED_ALIVE.fetch_sub(1, Ordering::AcqRel);
+        }
     }
 }
 
@@ -109,6 +161,9 @@ impl Job {
             covered: AtomicU64::new(0),
             length: AtomicU64::new(0),
             ended: AtomicBool::new(false),
+            life: AtomicU8::new(RUNNING),
+            cancelled_at: AtomicU64::new(0),
+            deadlines: spec.deadlines,
             beat: AtomicU64::new(0),
             started: Instant::now(),
             latest: Mutex::new(None),
@@ -124,7 +179,51 @@ impl Job {
 
     /// Asks the pass to stop at the next chunk boundary.
     pub fn cancel(&self) {
+        let now = u64::try_from(self.shared.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let _ = self.shared.cancelled_at.compare_exchange(
+            0,
+            now.saturating_add(1),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
         self.shared.cancel.store(true, Ordering::Release);
+    }
+
+    /// Whether the supervisor must give up on this job now: a chunk has gone on too long, or the
+    /// worker did not stop in time after a cancel.
+    #[must_use]
+    pub fn overdue(&self) -> Option<Overdue> {
+        if self.is_finished() {
+            return None;
+        }
+        let now = u64::try_from(self.shared.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let asked = self.shared.cancelled_at.load(Ordering::Acquire);
+        if asked > 0 {
+            let waited = now.saturating_sub(asked.saturating_sub(1));
+            if u128::from(waited) > self.shared.deadlines.cancel.as_millis() {
+                return Some(Overdue::Cancel);
+            }
+        }
+        if self.silent_for() > self.shared.deadlines.chunk {
+            return Some(Overdue::Chunk);
+        }
+        None
+    }
+
+    /// Gives up on the worker: whatever it still does is ignored and its thread is left to end by
+    /// itself. It counts as stuck until it does.
+    pub fn abandon(mut self) {
+        self.shared.cancel.store(true, Ordering::Release);
+        if self
+            .shared
+            .life
+            .compare_exchange(RUNNING, ABANDONED, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            ABANDONED_ALIVE.fetch_add(1, Ordering::AcqRel);
+        }
+        // Dropping the handle detaches the thread.
+        self.handle = None;
     }
 
     /// How far the pass has got.
@@ -181,31 +280,45 @@ fn work(spec: JobSpec, shared: Arc<Shared>) -> JobEnd {
         chunk_limits,
         limits,
         budget,
+        deadlines: _,
     } = spec;
     let mut pass = Pass::new(descriptor, setup, run, Sink::new(limits, budget));
     let mut last_publish = Instant::now();
-    let outcome = run_pass(
-        &mut pass,
-        capture.as_ref(),
-        &chunk_limits,
-        &shared.cancel,
-        &mut || {
-            std::thread::sleep(FOLLOW_PAUSE);
-            beat(&shared);
-            !shared.cancel.load(Ordering::Acquire)
-        },
-        &mut |position, sink| {
-            shared.covered.store(position, Ordering::Release);
-            shared
-                .length
-                .store(capture.snapshot().length(), Ordering::Release);
-            beat(&shared);
-            if last_publish.elapsed() >= PUBLISH_EVERY {
-                last_publish = Instant::now();
-                publish(&shared, sink.results());
-            }
-        },
-    );
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_pass(
+            &mut pass,
+            capture.as_ref(),
+            &chunk_limits,
+            &shared.cancel,
+            &mut || {
+                std::thread::sleep(FOLLOW_PAUSE);
+                beat(&shared);
+                !shared.cancel.load(Ordering::Acquire)
+            },
+            &mut |position, sink| {
+                shared.covered.store(position, Ordering::Release);
+                shared
+                    .length
+                    .store(capture.snapshot().length(), Ordering::Release);
+                beat(&shared);
+                if last_publish.elapsed() >= PUBLISH_EVERY {
+                    last_publish = Instant::now();
+                    publish(&shared, sink.results());
+                }
+            },
+        )
+    }));
+    let outcome = match ran {
+        Ok(outcome) => outcome,
+        Err(payload) => {
+            // What was found before the panic is kept, marked incomplete, before the panic goes on
+            // to the supervision of the worker thread.
+            let position = pass.position();
+            pass.sink().set_coverage(position, true);
+            publish(&shared, pass.sink().results());
+            std::panic::resume_unwind(payload);
+        }
+    };
     pass.sink().compact();
     let results = pass.sink().results();
     publish(&shared, results.clone());

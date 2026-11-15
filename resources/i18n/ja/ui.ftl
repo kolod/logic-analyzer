@@ -188,3 +188,9 @@ decoder-detail-position = 位置: { $first } から { $second }
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = シミュレートした信号にわざとエラーを入れる
 decoder-generator-rate = おおよそこの数に 1 バイトが途中で切れます
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = もう一度実行
+decoder-cancel = キャンセル
+settings-decoder-memory = デコーダーの結果のメモリ上限
+settings-decoder-memory-note = すべてのデコーダーで共有します。次の実行から有効です。

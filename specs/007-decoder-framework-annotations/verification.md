@@ -27,3 +27,10 @@ Design note: `AddDecoder` needs a capture on screen, so a decoder is added to a 
 for the next one: `StartCapture` keeps the instances and restarts their passes on the new capture
 (`NewCapture`, opening a file and closing remove them). This is how a simulated capture can be made
 valid for a configured decoder.
+
+## Phase 5 (User Story 2): a broken decoder never harms the session
+
+| Date | Platform | Step | Result |
+|------|----------|------|--------|
+| 2026-11-15 | Windows 11 (automated) | `fault_injection`, `decoder_faults`, `decoder_log`, `decoder_settings`: an error, a panic, a decoder that never returns, memory and annotation limits and invalid output next to a healthy decoder | Pass. |
+| pending | Windows 11 and Debian, running application | a person reads the six-language fault messages in the panel | **Not done yet**; the translations are machine drafts. |

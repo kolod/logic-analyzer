@@ -188,3 +188,9 @@ decoder-detail-position = Position: { $first } bis { $second }
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Absichtlich Fehler in die simulierten Signale einbauen
 decoder-generator-rate = Etwa jedes so viele Byte wird abgebrochen
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = Erneut ausführen
+decoder-cancel = Abbrechen
+settings-decoder-memory = Speicherlimit der Decoder-Ergebnisse
+settings-decoder-memory-note = Gilt für alle Decoder zusammen und für den nächsten Durchlauf.

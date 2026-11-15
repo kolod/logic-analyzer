@@ -263,15 +263,27 @@ pub(crate) struct DecoderRuntime {
     pub(crate) budget: Arc<Budget>,
     jobs: BTreeMap<u32, Job>,
     results: BTreeMap<u32, Results>,
+    /// A new memory limit that waits for the running passes to end.
+    pub(crate) pending_limit: Option<u64>,
+    /// The deadlines the supervisor enforces.
+    pub(crate) deadlines: la_decoders::run::Deadlines,
+    /// How big a chunk may be.
+    pub(crate) chunk_limits: ChunkLimits,
 }
 
 impl DecoderRuntime {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(memory_limit: u64) -> Self {
         Self {
             registry: Registry::builtin(),
-            budget: Budget::new(DEFAULT_MEMORY_LIMIT),
+            budget: Budget::new(memory_limit),
             jobs: BTreeMap::new(),
             results: BTreeMap::new(),
+            pending_limit: None,
+            deadlines: la_decoders::run::Deadlines::default(),
+            chunk_limits: ChunkLimits {
+                max_edges: DEFAULT_CHUNK_EDGES,
+                max_span: DEFAULT_CHUNK_SPAN,
+            },
         }
     }
 
@@ -409,6 +421,7 @@ impl Shell {
         if let Some(job) = self.decoders.jobs.remove(&id) {
             job.cancel();
         }
+        self.apply_pending_decoder_limit();
         self.decoders.results.remove(&id);
         let Some(instance) = state.decoders.instance(id).cloned() else {
             return;
@@ -417,6 +430,18 @@ impl Shell {
         let Some(descriptor) = self.decoders.registry.get(&instance.setup.decoder) else {
             return;
         };
+        if ready && la_decoders::run::stuck_workers() >= la_decoders::run::MAX_STUCK_WORKERS {
+            // Too many workers are stuck: new passes are refused until the application restarts.
+            let error = la_decoders::error::too_many_stuck("stuck workers are still running");
+            report_into(state, Severity::Error, &error);
+            if let Some(slot) = state.decoders.instance_mut(id) {
+                slot.ready = true;
+                slot.state = InstanceState::Failed;
+                slot.fault = Some(error.code());
+                slot.incomplete = true;
+            }
+            return;
+        }
         let source = self.decoder_source(state);
         let started = match (ready, source) {
             (true, Some(source)) => Some((source, descriptor)),
@@ -440,14 +465,12 @@ impl Shell {
                         setup: view.setup.clone(),
                         run,
                         capture: source,
-                        chunk_limits: ChunkLimits {
-                            max_edges: DEFAULT_CHUNK_EDGES,
-                            max_span: DEFAULT_CHUNK_SPAN,
-                        },
+                        chunk_limits: self.decoders.chunk_limits,
                         limits: StoreLimits {
                             max_annotations: state.decoders.limits.annotations,
                         },
                         budget: Arc::clone(&self.decoders.budget),
+                        deadlines: self.decoders.deadlines,
                     });
                     self.decoders.jobs.insert(id, job);
                     view.state = InstanceState::Running;
@@ -496,6 +519,42 @@ impl Shell {
         for id in ids {
             self.start_pass(state, id);
         }
+    }
+
+    /// Applies a new memory limit as soon as no pass is running.
+    pub(crate) fn apply_pending_decoder_limit(&mut self) {
+        if self.decoders.jobs.is_empty() {
+            if let Some(limit) = self.decoders.pending_limit.take() {
+                self.decoders.budget.set_limit(limit);
+            }
+        }
+    }
+
+    pub(crate) fn run_decoder(&mut self, state: &mut State, id: u32) -> Result<Executed, Reject> {
+        let Some(instance) = state.decoders.instance(id) else {
+            return Err(Reject::Ignored(crate::error::INVALID_COMMAND));
+        };
+        if instance.state == InstanceState::Running || state.capture.is_none() {
+            return Err(Reject::Ignored(crate::error::INVALID_COMMAND));
+        }
+        state.decoders.refusal = None;
+        self.start_pass(state, id);
+        Ok(Executed::Changed(Changes::DECODERS))
+    }
+
+    pub(crate) fn cancel_decoder(
+        &mut self,
+        state: &mut State,
+        id: u32,
+    ) -> Result<Executed, Reject> {
+        let job = self
+            .decoders
+            .jobs
+            .get(&id)
+            .ok_or(Reject::Ignored(crate::error::INVALID_COMMAND))?;
+        job.cancel();
+        let _ = state;
+        Ok(Executed::Changed(Changes::NONE))
     }
 
     /// Cancels the passes and removes the results of instances that are gone.
@@ -751,11 +810,33 @@ impl Shell {
     /// Follows the passes: progress, results and the end of each.
     pub(crate) fn poll_decoders(&mut self, state: &mut State) -> Changes {
         let mut changes = Changes::NONE;
+        self.apply_pending_decoder_limit();
         let ids: Vec<u32> = self.decoders.jobs.keys().copied().collect();
         for id in ids {
             let Some(job) = self.decoders.jobs.get_mut(&id) else {
                 continue;
             };
+            // The supervisor: a decoder that does not answer in time is abandoned; its thread is left
+            // alone and nothing it still does is read.
+            if let Some(why) = job.overdue() {
+                tracing::error!(target: "la_host", ?why, "a decoder is not responding");
+                if let Some(stuck) = self.decoders.jobs.remove(&id) {
+                    if let Some(latest) = stuck.latest() {
+                        self.decoders.results.insert(id, latest);
+                    }
+                    stuck.abandon();
+                }
+                let error =
+                    la_decoders::error::not_responding("the decoder did not answer in time");
+                report_into(state, Severity::Error, &error);
+                changes.insert(Changes::NOTICES | Changes::DECODERS);
+                if let Some(view) = state.decoders.instance_mut(id) {
+                    view.state = InstanceState::Failed;
+                    view.fault = Some(error.code());
+                    view.incomplete = true;
+                }
+                continue;
+            }
             let progress = job.progress();
             let latest = job.latest();
             let ended = job.poll();
@@ -930,6 +1011,18 @@ impl Shell {
         self.state.decoders.catalogue = catalogue(&self.decoders.registry, &self.localizer);
         self.state.versions.bump(Changes::DECODERS);
         Ok(())
+    }
+
+    /// Sets the size of a chunk (tests: many small chunks make a fault happen part way).
+    #[cfg(feature = "test-support")]
+    pub fn set_decoder_chunk_limits(&mut self, limits: ChunkLimits) {
+        self.decoders.chunk_limits = limits;
+    }
+
+    /// Sets the deadlines of the supervisor (tests: fail faster than the 5 s of a real run).
+    #[cfg(feature = "test-support")]
+    pub fn set_decoder_deadlines(&mut self, deadlines: la_decoders::run::Deadlines) {
+        self.decoders.deadlines = deadlines;
     }
 
     /// The results of an instance so far (a pass in progress has some), for the interface and

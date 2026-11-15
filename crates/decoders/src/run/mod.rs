@@ -9,7 +9,9 @@ pub use job::{
     Advance, ChunkLimits, DEFAULT_CHUNK_EDGES, DEFAULT_CHUNK_SPAN, Outcome, Pass, run_pass,
 };
 pub use sink::{Limit, Refused, Results, Sink};
-pub use worker::{Ended, Job, JobEnd, JobSpec, Progress};
+pub use worker::{
+    Deadlines, Ended, Job, JobEnd, JobSpec, MAX_STUCK_WORKERS, Overdue, Progress, stuck_workers,
+};
 
 use crate::input::{Chunk, SignalReader};
 

@@ -308,3 +308,9 @@ decoder-detail-position = Position: { $first } to { $second }
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Plant deliberate errors in the simulated signals
 decoder-generator-rate = About one byte in this many is cut short
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = Run again
+decoder-cancel = Cancel
+settings-decoder-memory = Memory limit of decoder results
+settings-decoder-memory-note = Shared by all decoders. Applies to the next pass.

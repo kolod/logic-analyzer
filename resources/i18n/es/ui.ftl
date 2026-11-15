@@ -188,3 +188,9 @@ decoder-detail-position = Posición: de { $first } a { $second }
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Introducir errores a propósito en las señales simuladas
 decoder-generator-rate = Aproximadamente uno de cada tantos bytes se corta
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = Ejecutar de nuevo
+decoder-cancel = Cancelar
+settings-decoder-memory = Límite de memoria de los resultados de los decodificadores
+settings-decoder-memory-note = Compartido por todos los decodificadores. Se aplica a la próxima pasada.

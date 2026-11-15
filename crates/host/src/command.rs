@@ -279,6 +279,12 @@ pub enum Command {
     },
     /// Removes an instance and its results.
     RemoveDecoder(u32),
+    /// Starts a new pass of an instance that is not running.
+    RunDecoder(u32),
+    /// Stops the running pass of an instance within a second, keeping its results (incomplete).
+    CancelDecoder(u32),
+    /// Sets the memory limit of decoder results in bytes (for passes that start afterwards).
+    SetDecoderMemoryLimit(u64),
     /// Selects an annotation.
     SelectAnnotation {
         /// The instance.
@@ -360,6 +366,7 @@ impl Command {
                 | Command::RenameDecoder { .. }
                 | Command::ShowDecoderLane { .. }
                 | Command::RemoveDecoder(_)
+                | Command::RunDecoder(_)
                 | Command::Decide(Decision::Save | Decision::Discard)
         )
     }
@@ -404,6 +411,9 @@ impl Command {
             Command::RenameDecoder { .. } => "rename_decoder",
             Command::ShowDecoderLane { .. } => "show_decoder_lane",
             Command::RemoveDecoder(_) => "remove_decoder",
+            Command::RunDecoder(_) => "run_decoder",
+            Command::CancelDecoder(_) => "cancel_decoder",
+            Command::SetDecoderMemoryLimit(_) => "set_decoder_memory_limit",
             Command::SelectAnnotation { .. } => "select_annotation",
             Command::GoToAnnotation(_) => "go_to_annotation",
             Command::ClearAnnotationSelection => "clear_annotation_selection",

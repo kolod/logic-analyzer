@@ -117,6 +117,9 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `RenameDecoder { id, name }` | sanitized, at most 64 characters |
 | | `ShowDecoderLane { id, visible }` | shows or hides the lane and its overlays |
 | | `RemoveDecoder(id)` | removes the instance, its pass and its results |
+| | `RunDecoder(id)` | starts a new pass of an instance that is not running (finished, cancelled, failed) |
+| | `CancelDecoder(id)` | stops the running pass within a second; what it found is kept and marked incomplete; a decoder that does not stop in time is abandoned (`decoder.not_responding`) |
+| | `SetDecoderMemoryLimit(bytes)` | 16 MiB to 4 GiB, remembered; applies to passes that start afterwards, never to a running one |
 | Annotations | `SelectAnnotation { instance, annotation }` | selects it and fills `decoders.selection` with its details |
 | | `GoToAnnotation(AnnotationTarget)` | `Selected`, `Next` or `Previous` by start in the store of the selected annotation; moves the window so that it is shown whole and centred; costs O(log n) |
 | | `ClearAnnotationSelection` | |

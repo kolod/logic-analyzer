@@ -88,6 +88,8 @@ pub enum Message {
     ScaleStep(i8),
     /// The text of the memory limit field changed.
     MemoryText(String),
+    /// The text of the decoder memory limit field changed.
+    DecoderMemoryText(String),
     /// The window moved or changed size.
     WindowEvent(window::Event),
     /// Ask for a file and open it.
@@ -320,6 +322,7 @@ pub struct App {
     settings_open: bool,
     about_open: bool,
     memory_text: String,
+    decoder_memory_text: String,
     window_rect: [i32; 4],
 }
 
@@ -356,6 +359,7 @@ impl App {
             settings_open: false,
             about_open: false,
             memory_text: String::new(),
+            decoder_memory_text: String::new(),
             window_rect: [0, 0, 0, 0],
         };
         app.sync_texts();
@@ -380,6 +384,12 @@ impl App {
     fn memory_limit_ok(&self, mib: u64) -> bool {
         mib.checked_mul(1 << 20)
             .is_some_and(la_host::settings::memory_limit_is_valid)
+    }
+
+    /// Whether `mib` is a decoder memory limit the host accepts.
+    fn decoder_memory_ok(mib: u64) -> bool {
+        mib.checked_mul(1 << 20)
+            .is_some_and(la_host::settings::decoder_memory_limit_is_valid)
     }
 
     /// The settings dialog: language, theme, interface scale and memory limit. Every choice
@@ -459,9 +469,37 @@ impl App {
                 .into()
             ),
             text(self.t("settings-memory-note")).size(12),
+            labelled(
+                self.t("settings-decoder-memory"),
+                row![
+                    text_input("", &self.decoder_memory_text)
+                        .on_input(Message::DecoderMemoryText)
+                        .width(110),
+                    text(self.t("settings-memory-unit")),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+                .into()
+            ),
+            text(self.t("settings-decoder-memory-note")).size(12),
         ]
         .spacing(10)
         .max_width(460);
+        let (decoder_low, decoder_high) = la_host::settings::DECODER_MEMORY_LIMIT_RANGE;
+        let decoder_memory_valid = self
+            .decoder_memory_text
+            .trim()
+            .parse::<u64>()
+            .is_ok_and(Self::decoder_memory_ok);
+        if !decoder_memory_valid {
+            let message = self.shell.localizer().message(
+                &Key::from_static("settings-memory-invalid"),
+                &Args::new()
+                    .uint("min", decoder_low >> 20)
+                    .uint("max", decoder_high >> 20),
+            );
+            body = body.push(text(message).size(13).style(text::danger));
+        }
         if !memory_valid {
             let message = self.shell.localizer().message(
                 &Key::from_static("settings-memory-invalid"),
@@ -835,6 +873,8 @@ impl App {
                 self.about_open = false;
                 self.memory_text =
                     (self.shell.state().settings.memory_limit_bytes >> 20).to_string();
+                self.decoder_memory_text =
+                    (self.shell.state().settings.decoder_memory_limit_bytes >> 20).to_string();
                 self.settings_open = true;
                 Task::none()
             }
@@ -871,6 +911,15 @@ impl App {
                 match self.memory_text.trim().parse::<u64>() {
                     Ok(mib) if self.memory_limit_ok(mib) => {
                         self.run(Command::SetMemoryLimit(mib << 20))
+                    }
+                    _ => Task::none(),
+                }
+            }
+            Message::DecoderMemoryText(text) => {
+                self.decoder_memory_text = text;
+                match self.decoder_memory_text.trim().parse::<u64>() {
+                    Ok(mib) if Self::decoder_memory_ok(mib) => {
+                        self.run(Command::SetDecoderMemoryLimit(mib << 20))
                     }
                     _ => Task::none(),
                 }
@@ -1544,6 +1593,25 @@ impl App {
         );
         if !instance.ready {
             block = block.push(text(self.t("decoder-needs-channels")).size(12));
+        } else {
+            // Stop a pass that runs; run a new one when nothing does.
+            let running = instance.state == InstanceState::Running;
+            block = block.push(
+                button(
+                    text(self.t(if running {
+                        "decoder-cancel"
+                    } else {
+                        "decoder-run"
+                    }))
+                    .size(12),
+                )
+                .padding([2, 8])
+                .on_press(Message::Run(if running {
+                    Command::CancelDecoder(id)
+                } else {
+                    Command::RunDecoder(id)
+                })),
+            );
         }
         if let Some(code) = instance.fault {
             block = block.push(

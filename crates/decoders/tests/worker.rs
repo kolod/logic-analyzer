@@ -55,6 +55,7 @@ fn spec(run: Box<dyn Run>, capture: &la_storage::Capture, chunk: ChunkLimits) ->
         chunk_limits: chunk,
         limits: Limits::default(),
         budget: Budget::new(1 << 30),
+        deadlines: la_decoders::run::Deadlines::default(),
     }
 }
 

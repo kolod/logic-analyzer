@@ -115,6 +115,12 @@ the next capture: the decoder stays and decodes it from the start. Tick **Plant 
 simulated signals** in the decoder's block to cut some bytes short on purpose and look for the red
 marks where they were planted.
 
+A decoder that fails never harms anything else: its block says what happened and what to do, the
+results it had found before the failure stay (marked incomplete), the other decoders and the capture
+are untouched, and **Run again** starts it again. **Cancel** stops a running pass. A decoder that does
+not answer in time is given up on after a few seconds; if several are stuck, restart the application.
+The memory the results of all decoders may use is set in the settings (16 MiB to 4 GiB).
+
 Decoding never changes the capture. A dashed line along the bottom of a lane means that its results
 are not whole (the decoder was cancelled or stopped).
 

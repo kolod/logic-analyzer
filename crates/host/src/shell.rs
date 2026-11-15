@@ -162,8 +162,9 @@ impl Shell {
                 || ConfigDraft::for_device(&la_devices::virtual_descriptor().capabilities),
                 |d| ConfigDraft::for_device(&d.capabilities),
             );
-        let decoders = DecoderRuntime::new();
-        let decoder_state = DecoderState::new(catalogue(&decoders.registry, &localizer));
+        let decoders = DecoderRuntime::new(loaded.settings.decoder_memory_limit_bytes);
+        let mut decoder_state = DecoderState::new(catalogue(&decoders.registry, &localizer));
+        decoder_state.limits.memory_bytes = loaded.settings.decoder_memory_limit_bytes;
         let mut state = State {
             version: 0,
             versions: Versions::default(),
@@ -673,6 +674,20 @@ impl Shell {
                 self.edit_decoder(state, id, |setup| setup.lane_visible = visible)
             }
             Command::RemoveDecoder(id) => self.remove_decoder(state, id),
+            Command::RunDecoder(id) => self.run_decoder(state, id),
+            Command::CancelDecoder(id) => self.cancel_decoder(state, id),
+            Command::SetDecoderMemoryLimit(bytes) => {
+                if !crate::settings::decoder_memory_limit_is_valid(bytes) {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                state.settings.decoder_memory_limit_bytes = bytes;
+                state.decoders.limits.memory_bytes = bytes;
+                // A pass that is running keeps the limit it started with.
+                self.decoders.pending_limit = Some(bytes);
+                self.apply_pending_decoder_limit();
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | Changes::DECODERS | saved)
+            }
             Command::SelectAnnotation {
                 instance,
                 annotation,

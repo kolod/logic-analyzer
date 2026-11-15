@@ -73,10 +73,15 @@ fn table_commands() -> BTreeSet<String> {
 }
 
 /// Reached through the settings dialog, which the table opens.
-const SETTINGS_DIALOG: [&str; 3] = ["SetLanguage", "SetTheme", "SetMemoryLimit"];
+const SETTINGS_DIALOG: [&str; 4] = [
+    "SetLanguage",
+    "SetTheme",
+    "SetMemoryLimit",
+    "SetDecoderMemoryLimit",
+];
 
 /// Controls of the side panels and the toolbar: reachable with Tab and the keyboard in them.
-const FOCUSABLE_CONTROLS: [&str; 21] = [
+const FOCUSABLE_CONTROLS: [&str; 23] = [
     "RefreshDevices",
     "SelectDevice",
     "EditConfig",
@@ -96,6 +101,8 @@ const FOCUSABLE_CONTROLS: [&str; 21] = [
     "RenameDecoder",
     "ShowDecoderLane",
     "RemoveDecoder",
+    "RunDecoder",
+    "CancelDecoder",
     "SelectAnnotation",
     "ClearAnnotationSelection",
 ];

@@ -188,3 +188,9 @@ decoder-detail-position = Позиція: від { $first } до { $second }
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Навмисно додавати помилки в змодельовані сигнали
 decoder-generator-rate = Приблизно кожен такий за рахунком байт обривається
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = Запустити знову
+decoder-cancel = Скасувати
+settings-decoder-memory = Обмеження пам'яті для результатів декодерів
+settings-decoder-memory-note = Спільне для всіх декодерів. Діє з наступного проходу.
