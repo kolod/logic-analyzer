@@ -690,7 +690,14 @@ impl App {
             keyboard::listen().map(Message::Key),
             iced::time::every(period).map(Message::Tick),
             window::close_requests().map(|_| Message::CloseRequested),
-            window::events().map(|(_, event)| Message::WindowEvent(event)),
+            // Only the moves and size changes are wanted: turning every window event (redraw
+            // requests included) into a message would make the toolkit redraw for each of them.
+            iced::event::listen_with(|event, _status, _window| match event {
+                iced::Event::Window(
+                    moved @ (window::Event::Moved(_) | window::Event::Resized(_)),
+                ) => Some(Message::WindowEvent(moved)),
+                _ => None,
+            }),
             iced::system::theme_changes().map(Message::SystemTheme),
         ])
     }
@@ -2047,6 +2054,202 @@ mod tests {
         let _ = app.update(Message::MemoryText("512".into()));
         assert_eq!(app.shell.state().settings.memory_limit_bytes, 512 << 20);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Responsiveness on a capture of 100 million samples over 16 channels (spec SC-002, SC-004,
+    /// SC-009). Run in release mode:
+    /// `cargo test -p la-app --release -- --ignored measure --nocapture`.
+    ///
+    /// It measures the work the interface thread does for each action (the update, the plan, the
+    /// widget tree) and, as an upper bound for a frame, a full render to a picture that includes
+    /// creating a software renderer. The time the graphics card needs is not in these numbers.
+    #[test]
+    #[ignore = "a measurement, not a check; run it on purpose"]
+    fn measure_responsiveness_on_a_hundred_million_samples() {
+        use std::time::Duration;
+
+        fn pct(mut v: Vec<Duration>, p: usize) -> Duration {
+            v.sort_unstable();
+            v.get((v.len().saturating_sub(1)) * p / 100)
+                .copied()
+                .unwrap_or_default()
+        }
+        fn row(label: &str, v: &[Duration]) {
+            println!(
+                "{label:<34} n={:<4} p50 {:>7.2} ms  p95 {:>7.2} ms  max {:>7.2} ms",
+                v.len(),
+                pct(v.to_vec(), 50).as_secs_f64() * 1e3,
+                pct(v.to_vec(), 95).as_secs_f64() * 1e3,
+                pct(v.to_vec(), 100).as_secs_f64() * 1e3
+            );
+        }
+
+        let _turn = render_turn();
+        let dir = std::env::temp_dir().join(format!("la-app-measure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        for edit in [
+            ConfigEdit::Realtime(false),
+            ConfigEdit::Channels(0xffff),
+            ConfigEdit::SampleRate(100_000_000),
+            ConfigEdit::Length(100_000_000),
+            ConfigEdit::Seed(Some(5)),
+            ConfigEdit::AcceptBudgetRisk(true),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        let _ = app.update(Message::AreaResized(1900.0));
+
+        // A capture: the longest time the interface thread is busy with one call.
+        let mut busy = Vec::new();
+        let started = Instant::now();
+        let _ = app.update(Message::Run(Command::StartCapture));
+        while app.shell.state().activity != Activity::Idle {
+            let t = Instant::now();
+            let _ = app.update(Message::Tick(Instant::now()));
+            let _ = app.view();
+            busy.push(t.elapsed());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        println!(
+            "capture of {} samples took {:.1} s",
+            app.shell
+                .state()
+                .capture
+                .as_ref()
+                .unwrap()
+                .snapshot
+                .length(),
+            started.elapsed().as_secs_f64()
+        );
+        row("during the capture (tick + view)", &busy);
+
+        // Zoom and pan: the update (with the frame plan) and the widget tree.
+        let mut update = Vec::new();
+        let mut views = Vec::new();
+        for i in 0..400 {
+            let message = match i % 4 {
+                0 => Message::Run(Command::Zoom {
+                    factor: la_host::ZoomFactor {
+                        numerator: 4,
+                        denominator: 5,
+                    },
+                    anchor: la_host::ZoomAnchor::Column(900),
+                }),
+                1 => Message::Run(Command::Pan { pixels: 120 }),
+                2 => Message::Run(Command::Pan { pixels: -300 }),
+                _ => Message::Run(Command::Zoom {
+                    factor: la_host::ZoomFactor {
+                        numerator: 5,
+                        denominator: 4,
+                    },
+                    anchor: la_host::ZoomAnchor::Column(400),
+                }),
+            };
+            let t = Instant::now();
+            let _ = app.update(message);
+            update.push(t.elapsed());
+            let t = Instant::now();
+            let _ = app.view();
+            views.push(t.elapsed());
+        }
+        row("zoom and pan: update + plan", &update);
+        row("zoom and pan: widget tree", &views);
+
+        // A frame drawn to a picture: the renderer setup apart from the drawing and the readback
+        // of the picture (the readback is not part of a frame on screen).
+        let mut setups = Vec::new();
+        let mut frames = Vec::new();
+        for _ in 0..6 {
+            let _ = app.update(Message::Run(Command::Pan { pixels: 200 }));
+            let t = Instant::now();
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(1900.0, 720.0),
+                app.view(),
+            );
+            setups.push(t.elapsed());
+            let t = Instant::now();
+            let _ = ui.snapshot(&app.theme()).unwrap();
+            frames.push(t.elapsed());
+        }
+        row("renderer setup (once per window)", &setups);
+        row("draw + picture readback", &frames);
+
+        // Save and open: the interface thread while the background operation runs.
+        let path = dir.join("big.lasession");
+        let mut worst_busy = Duration::ZERO;
+        for (label, command) in [
+            ("save", Command::SaveSessionAs(path.clone())),
+            ("open", Command::OpenSession(path.clone())),
+        ] {
+            let started = Instant::now();
+            let _ = app.update(Message::Run(command));
+            let mut ticks = Vec::new();
+            while app.shell.operation_running() {
+                let t = Instant::now();
+                let _ = app.update(Message::Tick(Instant::now()));
+                let _ = app.view();
+                ticks.push(t.elapsed());
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            println!("{label} took {:.2} s", started.elapsed().as_secs_f64());
+            row(&format!("during {label} (tick + view)"), &ticks);
+            worst_busy = worst_busy.max(pct(ticks, 100));
+        }
+        assert!(
+            app.shell.state().notices.is_empty(),
+            "a failure was reported during the measurement"
+        );
+
+        // Changing the language: the update and a full repaint.
+        let mut language = Vec::new();
+        let mut language_total = Vec::new();
+        for l in la_i18n::Language::ALL {
+            let t = Instant::now();
+            let _ = app.update(Message::Run(Command::SetLanguage(l)));
+            let view = app.view();
+            let done_view = t.elapsed();
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(1900.0, 720.0),
+                view,
+            );
+            let t2 = Instant::now();
+            let _ = ui.snapshot(&app.theme()).unwrap();
+            language.push(done_view + t2.elapsed());
+            language_total.push(done_view);
+        }
+        row("language change: update + widgets", &language_total);
+        row("language change + draw (no setup)", &language);
+        println!(
+            "worst single call of the interface thread during save and open: {:.2} ms",
+            worst_busy.as_secs_f64() * 1e3
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// How long the work before the first window takes. Run in release mode:
+    /// `cargo test -p la-app --release -- --ignored startup --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check; run it on purpose"]
+    fn measure_startup() {
+        let dir = std::env::temp_dir().join(format!("la-app-startup-{}", std::process::id()));
+        for round in 0..3 {
+            let t = Instant::now();
+            let shell = Shell::new(ShellConfig::for_user());
+            let shell_time = t.elapsed();
+            let t = Instant::now();
+            let app = App::with_shell(shell);
+            let app_time = t.elapsed();
+            let _ = &dir;
+            println!(
+                "round {round}: Shell::new {:.1} ms, App::with_shell {:.1} ms ({} devices)",
+                shell_time.as_secs_f64() * 1e3,
+                app_time.as_secs_f64() * 1e3,
+                app.shell.state().devices.len()
+            );
+        }
     }
 
     #[test]

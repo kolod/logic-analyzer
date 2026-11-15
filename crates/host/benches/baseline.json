@@ -1,28 +1,156 @@
 {
   "frame_plan": {
-    "1M sparse / whole capture / 2000px": {"plan_us": 513, "probes": 248708},
-    "1M sparse / 1 % window / 2000px": {"plan_us": 385, "probes": 247574},
-    "1M sparse / 4 px per sample / 2000px": {"plan_us": 379, "probes": 246139},
-    "1M sparse / whole capture / 4000px": {"plan_us": 895, "probes": 494358},
-    "1M sparse / 1 % window / 4000px": {"plan_us": 747, "probes": 494976},
-    "1M sparse / 4 px per sample / 4000px": {"plan_us": 749, "probes": 490332},
-    "10M sparse / whole capture / 2000px": {"plan_us": 1565, "probes": 353066},
-    "10M sparse / 1 % window / 2000px": {"plan_us": 467, "probes": 345964},
-    "10M sparse / 4 px per sample / 2000px": {"plan_us": 468, "probes": 348193},
-    "10M sparse / whole capture / 4000px": {"plan_us": 2879, "probes": 695340},
-    "10M sparse / 1 % window / 4000px": {"plan_us": 1090, "probes": 691395},
-    "10M sparse / 4 px per sample / 4000px": {"plan_us": 928, "probes": 696198},
-    "100M sparse / whole capture / 2000px": {"plan_us": 1529, "probes": 350759},
-    "100M sparse / 1 % window / 2000px": {"plan_us": 696, "probes": 355362},
-    "100M sparse / 4 px per sample / 2000px": {"plan_us": 475, "probes": 352290},
-    "100M sparse / whole capture / 4000px": {"plan_us": 2881, "probes": 701186},
-    "100M sparse / 1 % window / 4000px": {"plan_us": 1186, "probes": 707457},
-    "100M sparse / 4 px per sample / 4000px": {"plan_us": 958, "probes": 704290},
-    "10M normal / whole capture / 2000px": {"plan_us": 1751, "probes": 355021},
-    "10M normal / 1 % window / 2000px": {"plan_us": 1431, "probes": 369912},
-    "10M normal / 4 px per sample / 2000px": {"plan_us": 474, "probes": 352534},
-    "10M normal / whole capture / 4000px": {"plan_us": 3274, "probes": 706943},
-    "10M normal / 1 % window / 4000px": {"plan_us": 2548, "probes": 729120},
-    "10M normal / 4 px per sample / 4000px": {"plan_us": 953, "probes": 704696}
+    "1M sparse / whole capture / 2000px": {
+      "plan_us": 513,
+      "probes": 248708
+    },
+    "1M sparse / 1 % window / 2000px": {
+      "plan_us": 385,
+      "probes": 247574
+    },
+    "1M sparse / 4 px per sample / 2000px": {
+      "plan_us": 379,
+      "probes": 246139
+    },
+    "1M sparse / whole capture / 4000px": {
+      "plan_us": 895,
+      "probes": 494358
+    },
+    "1M sparse / 1 % window / 4000px": {
+      "plan_us": 747,
+      "probes": 494976
+    },
+    "1M sparse / 4 px per sample / 4000px": {
+      "plan_us": 749,
+      "probes": 490332
+    },
+    "10M sparse / whole capture / 2000px": {
+      "plan_us": 1565,
+      "probes": 353066
+    },
+    "10M sparse / 1 % window / 2000px": {
+      "plan_us": 467,
+      "probes": 345964
+    },
+    "10M sparse / 4 px per sample / 2000px": {
+      "plan_us": 468,
+      "probes": 348193
+    },
+    "10M sparse / whole capture / 4000px": {
+      "plan_us": 2879,
+      "probes": 695340
+    },
+    "10M sparse / 1 % window / 4000px": {
+      "plan_us": 1090,
+      "probes": 691395
+    },
+    "10M sparse / 4 px per sample / 4000px": {
+      "plan_us": 928,
+      "probes": 696198
+    },
+    "100M sparse / whole capture / 2000px": {
+      "plan_us": 1529,
+      "probes": 350759
+    },
+    "100M sparse / 1 % window / 2000px": {
+      "plan_us": 696,
+      "probes": 355362
+    },
+    "100M sparse / 4 px per sample / 2000px": {
+      "plan_us": 475,
+      "probes": 352290
+    },
+    "100M sparse / whole capture / 4000px": {
+      "plan_us": 2881,
+      "probes": 701186
+    },
+    "100M sparse / 1 % window / 4000px": {
+      "plan_us": 1186,
+      "probes": 707457
+    },
+    "100M sparse / 4 px per sample / 4000px": {
+      "plan_us": 958,
+      "probes": 704290
+    },
+    "10M normal / whole capture / 2000px": {
+      "plan_us": 1751,
+      "probes": 355021
+    },
+    "10M normal / 1 % window / 2000px": {
+      "plan_us": 1431,
+      "probes": 369912
+    },
+    "10M normal / 4 px per sample / 2000px": {
+      "plan_us": 474,
+      "probes": 352534
+    },
+    "10M normal / whole capture / 4000px": {
+      "plan_us": 3274,
+      "probes": 706943
+    },
+    "10M normal / 1 % window / 4000px": {
+      "plan_us": 2548,
+      "probes": 729120
+    },
+    "10M normal / 4 px per sample / 4000px": {
+      "plan_us": 953,
+      "probes": 704696
+    }
+  },
+  "machine": {
+    "os": "windows 11",
+    "arch": "x86_64",
+    "cpu": "Intel Core i9-14900KF",
+    "cores": 32,
+    "date": "2026-11-15"
+  },
+  "long_variants_release": {
+    "random_walk_actions": 2000000,
+    "random_walk_seconds": 510,
+    "view_section_mutations": 1000000,
+    "view_section_seconds": 20
+  },
+  "responsiveness_release_100m_samples_16ch": {
+    "capture_100m_samples_s": 0.7,
+    "ui_thread_during_capture_ms": {
+      "p50": 3.8,
+      "p95": 4.7,
+      "max": 5.0
+    },
+    "zoom_pan_update_and_plan_ms": {
+      "p50": 4.2,
+      "p95": 4.6,
+      "max": 5.3
+    },
+    "widget_tree_ms": {
+      "p50": 0.1,
+      "p95": 0.12,
+      "max": 0.21
+    },
+    "draw_and_picture_readback_ms": {
+      "p50": 20.9,
+      "p95": 21.3,
+      "max": 21.7
+    },
+    "renderer_setup_once_ms": {
+      "p50": 181,
+      "max": 291
+    },
+    "save_s": 0.29,
+    "open_s": 0.41,
+    "ui_thread_longest_call_during_save_and_open_ms": 21.1,
+    "language_change_update_and_widgets_ms": {
+      "p50": 4.9,
+      "p95": 6.2
+    },
+    "language_change_with_draw_ms": {
+      "p50": 25.1,
+      "p95": 30.2
+    },
+    "idle_cpu_percent_of_one_core": [
+      0.81,
+      0.6,
+      0.26
+    ]
   }
 }

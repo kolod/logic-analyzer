@@ -73,3 +73,107 @@ A defect found and fixed on the way: the dimmed backdrop behind dialogs was opaq
 | 2026-11-15 | Windows 11 | That the Japanese interface renders on a machine with no CJK font (a Debian container), Japanese IME entry of a channel name, the high-contrast theme, 150 % and 200 % scale, and restoring the window on a second monitor | **pending** (T080, T084): needs a person and a clean Debian machine |
 
 Notes: the settings are written at once and not in the background (the file is a few hundred bytes), which keeps a failure visible immediately; ellipsis with a hover text was not needed because channel and marker names live in editable fields. No separate UI-font subset was built: iced bundles Fira Sans, which already covers Latin, Greek and Cyrillic. `cargo deny` is checked by the CI job only (not installed locally); `rfd` and `read-fonts` are new dependencies.
+
+
+## Phase 9: stability, measurements and traceability
+
+### Long runs and measurements (T085, T090, T091)
+
+Machine: Windows 11, Intel Core i9-14900KF (32 threads), release profile, 2026-11-15. Numbers
+are also in `crates/host/benches/baseline.json`.
+
+| Check | Result |
+|-------|--------|
+| `random_walk` (SC-005), 100,000 actions in the normal tests, seeds 2026, 1, 2 and 3 | passed (about 29 s each in debug) |
+| `random_walk`, the ignored variant, 2,000,000 actions in release | passed in 510 s |
+| `view_section` random mutation fuzzer, 1,000,000 mutations in release | passed in 20 s |
+| Frame plan benchmark (`cargo bench -p la-host --bench frame_plan`) | plan for the whole 100 M-sample, 16-channel capture: 1.5 ms at 2000 px, 2.9 ms at 4000 px; probes grow x1.41 for a 100 times longer capture (limit 2.0); unchanged from the baseline |
+| Responsiveness test on 100 M samples x 16 channels (`measure_responsiveness_on_a_hundred_million_samples`, ignored) | the capture takes 0.7 s; the interface thread is busy at most 5.0 ms per call during the capture; zoom and pan take 4.2 ms at the median and 4.6 ms at the 95th percentile (update and frame plan), the widget tree 0.1 ms; the longest single call during save and open is 21 ms |
+| Language change on that capture (SC-009) | 4.9 ms of work plus 20 ms of drawing, about 25 ms in total, against 200 ms |
+| Idle CPU (SC-010), the real window with nothing running, 60 s, three runs | 0.81 %, 0.60 % and 0.26 % of one core, against 1 % |
+
+What these numbers do not show: the drawing figure (21 ms) is a render to a picture with a 2x
+readback, so it is an upper bound for a frame on screen and not a measurement of the graphics card;
+the 16 ms frame budget of SC-002 is met by the plan and widget stages (under 5 ms) but **a measured
+frame on screen at the 95th percentile during continuous zoom and pan has not been recorded**
+(`LA_FRAME_STATS=1` in the running window is the way, and needs a person). **No Debian
+measurement was made** (no Debian machine here): SC-002, SC-004, SC-009 and SC-010 are pending
+there. The idle CPU was 1.6 % to 4 % before the fix below, and 0.3 % to 0.8 % after it.
+
+Found and fixed by this phase's work:
+
+- The random walk found three inconsistencies: the window was computed from an unclamped pixel
+  width, a window made for an empty capture outlived it when the capture stayed short, and a
+  command that waited for a save and then failed cleared the capture on screen (the capture now
+  stays and only the message is new). A fourth, found by the CI before: discarding a running
+  capture left the shell blocked.
+- The idle redraw: subscribing to all window events turned every redraw request into a message,
+  which made the toolkit redraw again and again (1.6 % to 5 % idle CPU). Only moves and size
+  changes are listened to now.
+- Every window move and resize was written to the log as an info-level command; high-frequency
+  commands are logged at debug level now.
+
+About the report that the window "starts and for a long time nothing happens": the host's own
+startup takes 2 ms, the window handle exists 0.3 s after launch and the interface is fully drawn
+1.5 s after launch on this machine, in the debug and the release build alike. It could not be
+reproduced here; see the open question in the final report.
+
+### Traceability (T092)
+
+Automated checks are in `crates/host/tests`, `crates/session/tests` and the tests of `la-app`
+(`app::tests`, `fonts::tests`) unless named otherwise. "Manual pending" means it needs a person at
+the window and is listed in the sections above.
+
+| Requirement | Proved by | Status |
+|-------------|-----------|--------|
+| FR-001 window, menu, toolbar, view, status, messages on both systems | `app::tests` renders; CI test jobs on both systems; the window started and drew on Windows | Windows met; Debian window **pending** |
+| FR-002 devices through the abstraction, virtual always, hot plug | `capture_scenarios`, `containment` (a plugged scripted device) | met |
+| FR-003 configuration within the capabilities, invalid refused with a reason | `capture_scenarios` | met |
+| FR-004 start, progress, stop within one second, background | `capture_scenarios`, the 100 M measurement | met |
+| FR-005 end reasons, data always kept | `capture_scenarios`, `containment` | met |
+| FR-006 simulated mark everywhere, not removable | `session_scenarios`, status line render, `la-session` compile-fail test | met |
+| FR-007 waveforms, names, axis with units, time under the pointer | `plan`, `axis`, `app::tests` renders; the hover readout is drawn by `signal_view` | met in tests; the pointer readout **manual pending** |
+| FR-008 zoom, pan, jumps, zoom to a range, all from the keyboard | `view_commands`, `shortcut_coverage` | **partly met**: no scroll bar and no gesture to select a range with the mouse (the `ZoomToRange` command exists and is tested) |
+| FR-009 cost independent of the capture length | `plan`, `frame_scaling`, the benchmark (x1.41 for 100 times longer) | met |
+| FR-010 dense columns marked, glitches never lost | `glitch_sweep` (with a mutation check) | met |
+| FR-011 gaps drawn as gaps, incomplete captures marked | `plan`, `capture_scenarios` | met |
+| FR-012 live follow without jumping or slowing | `view_commands` (follow test), the 100 M capture (0.7 s, no samples lost) | met |
+| FR-013 rename, reorder, hide, colours, legible palette | `presentation`; three themes in `theme.rs` | met for the editing; legibility on light and high contrast **manual pending** |
+| FR-014 zoom bounded at both ends | `window`, `view_commands`, `random_walk` invariants | met |
+| FR-015 redraw only on change, idle CPU | idle measurement (0.26 to 0.81 %) | met on Windows; Debian **pending** |
+| FR-016 markers: place, drag, snap, rename, remove, jump, attached | `markers`; drag and right-click in the window | met in tests; the gestures **manual pending** |
+| FR-017 times, distance, frequency in the language's format, honest precision | `measurement` (six languages) | met |
+| FR-018 markers saved; a file without them opens | `session_scenarios`, `view_section` | met |
+| FR-019 save and open in the background with progress and Cancel, failures leave the old file | `session_scenarios`, `save_interruptions` (114 fault points) | met |
+| FR-020 names, order, visibility, colours, markers, description, simulated flag, unknown sections kept | `session_scenarios`, `view_section`, `view_section_carried` | met |
+| FR-021 unsaved data protected, running capture stopped first, unsaved shown | `unsaved_guard` (with a mutation check), `random_walk`, `app::tests` | met |
+| FR-022 damaged, truncated, foreign, newer files refused with a message | `session_scenarios` (damaged, truncated, empty, foreign, unknown critical section), `la-session` tests for the newer major version and the size limit | met |
+| FR-023 all text from the resources, no key shown, fallback logged, six languages | `parity` (`la-i18n`), `language`, `string_budget`; the five translations are drafts marked as such | met; native-speaker review **pending** |
+| FR-024 language changes at once and is remembered | `language`, `settings_commands`, `app::tests` | met |
+| FR-025 Japanese correct, German fits at the minimum size, mixed-direction text harmless | `string_budget`, renders of every screen in six languages at 800 x 560, `fonts::tests`, `sanitize` | met on Windows; Japanese on a machine without CJK fonts and right-to-left text in the window **manual pending** |
+| FR-026 user text as typed, limited, sanitized | `sanitize`, `presentation`, `language` | met |
+| FR-027 numbers, units and dates follow the language; the axis is relative | `measurement`, `la-i18n` format tests, `axis` | met |
+| FR-028 every failure shown as the message of its code | `error_sweep` (every stable code, six languages), `containment` | met |
+| FR-029 failures and panics contained | `containment`, `panic_boundary`, `random_walk` (scripted failures and panics) | met |
+| FR-030 repeats grouped, recent messages, log location | `notices`, `containment`, `app::tests` (banner and buttons) | met |
+| FR-031 the log has commands, lifecycle, codes, details and no signal data or names | `logging` | met |
+| FR-032 never blocks over 100 ms, never crashes, memory bounded by the visible limit | the longest interface-thread call is 21 ms; `random_walk`; `settings_commands` | met on Windows; Debian **pending** |
+| FR-033 only the documented versioned host API, display-less tests | `docs/host-api.md`, `host_api_doc`; every host test runs without a display | met |
+| FR-034 toolkit chosen with alternatives recorded | `research.md` (R1 and the toolkit decision) | met |
+| FR-035 original design | no code, assets, names or layouts of other products were used; the palette and layout are our own (`theme.rs`) | met (a statement, not a test) |
+| FR-036 keyboard operation of every command, labels for assistive technology, display scale | `shortcut_coverage`, the scale setting | **partly met**: every command is reachable from the keyboard and the scale follows the setting; labels for assistive technology and the system text size are **not provided** (the toolkit offers little here) |
+| FR-037 a place for later panels, commands and decoder lanes | the side panels and the menus exist | **not met as specified**: there is no registration mechanism and no decoder lane area; the panels are fixed in `app.rs` |
+
+| Criterion | Proved by | Status |
+|-----------|-----------|--------|
+| SC-001 a new user sees a waveform within 30 s | not measured with a person | **manual pending** |
+| SC-002 frames under 16 ms (p95) and 50 ms at 100 M x 16, independent of the length | the plan and widget stages are under 5 ms; the plan cost grows x1.41 for 100 times the length | **partly proved**: the frame on screen was not measured; draw 21 ms in the picture test |
+| SC-003 a planted glitch at every zoom | `glitch_sweep` | met |
+| SC-004 never unresponsive over 100 ms on both systems | the longest call 21 ms | Windows met; Debian **pending** |
+| SC-005 100,000 random actions, no crash, hang or loss | `random_walk` (100,000 in the tests, 2,000,000 nightly and run once) | met |
+| SC-006 every error code, one localized message and a log entry | `error_sweep` | met |
+| SC-007 exact round trip, 100 interruption points | `session_scenarios`, `save_interruptions` (114) | met |
+| SC-008 zero clipped, overlapping or missing text on both systems | `string_budget`, renders at 800 x 560, `fonts::tests` | Windows met by these checks; missing glyphs on Debian **pending** |
+| SC-009 language change repaints in under 200 ms | 25 ms | Windows met; Debian **pending** |
+| SC-010 idle under 1 % of a core | 0.26 to 0.81 % | Windows met; Debian **pending** |
+| SC-011 the question in 100 % of the scripted cases | `unsaved_guard` | met |

@@ -486,7 +486,20 @@ impl Shell {
     /// user gets a `host.internal` notice.
     pub fn apply(&mut self, command: Command) -> Outcome {
         let name = command.name();
-        tracing::info!(target: "la_host", command = name, "command");
+        // Commands that arrive many times a second (a drag, a resize, the wheel) are logged at
+        // debug level, so they do not fill the log.
+        if matches!(
+            command,
+            Command::SetViewSize(_)
+                | Command::SetWindowGeometry(_)
+                | Command::Pan { .. }
+                | Command::Zoom { .. }
+                | Command::MoveMarker { .. }
+        ) {
+            tracing::debug!(target: "la_host", command = name, "command");
+        } else {
+            tracing::info!(target: "la_host", command = name, "command");
+        }
         let mut working = self.state.clone();
         let result = catch_unwind(AssertUnwindSafe(|| self.execute(&mut working, command)));
         match result {
