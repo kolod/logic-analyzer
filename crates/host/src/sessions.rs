@@ -250,13 +250,18 @@ impl Shell {
                 if let Some(guarded) = waiting {
                     state.pending_decision = None;
                     changes.insert(Changes::DECISION);
+                    // The data is saved. If the command that waited then fails, the capture on
+                    // screen stays as it was (like a refused command): only the message is new.
+                    let saved_state = state.clone();
                     match self.continue_guarded(state, guarded) {
                         Ok(more) => changes.insert(more),
-                        Err(Reject::Failed(e)) => {
-                            report_into(state, Severity::Error, &e);
-                            changes.insert(Changes::NOTICES);
+                        Err(rejected) => {
+                            *state = saved_state;
+                            if let Reject::Failed(e) = rejected {
+                                report_into(state, Severity::Error, &e);
+                                changes.insert(Changes::NOTICES);
+                            }
                         }
-                        Err(Reject::Ignored(_)) => {}
                     }
                 }
             }

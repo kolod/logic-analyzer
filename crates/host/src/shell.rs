@@ -132,10 +132,12 @@ pub(crate) fn capture_limits(settings: &Settings) -> Limits {
     }
 }
 
+/// The limits of the window for a signal area `pixels` wide. The width is kept within what a plan
+/// is built for, so every window the shell stores is valid for the same limits.
 pub(crate) fn window_limits(capture_length: u64, pixels: u32) -> WindowLimits {
     WindowLimits {
         capture_length,
-        pixels,
+        pixels: pixels.clamp(1, MAX_PLAN_PIXELS),
     }
 }
 
@@ -454,10 +456,15 @@ impl Shell {
             if state.auto_fit {
                 state.window = ViewWindow::fit_all(&limits);
                 changes.insert(Changes::WINDOW);
-            } else if state.follow_latest && outcome_is_none {
-                let followed = state.window.go_to_end(&limits);
-                if followed != state.window {
-                    state.window = followed;
+            } else {
+                // A window made for a shorter (or empty) capture may no longer fit it: keep the
+                // stored window valid, and follow the newest data when asked to.
+                let mut next = state.window.clamp(&limits);
+                if state.follow_latest && outcome_is_none {
+                    next = next.go_to_end(&limits);
+                }
+                if next != state.window {
+                    state.window = next;
                     changes.insert(Changes::WINDOW);
                 }
             }

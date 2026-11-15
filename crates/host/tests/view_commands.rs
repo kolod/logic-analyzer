@@ -224,3 +224,52 @@ fn following_the_newest_data_tracks_the_end_until_the_user_pans() {
     assert_eq!(shell.state().window, kept);
     shell.apply(Command::StopCapture);
 }
+
+#[test]
+fn a_huge_window_size_and_a_new_short_capture_keep_the_stored_window_valid() {
+    let dir = TempDir::new("view-huge");
+    let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
+    for edit in [
+        ConfigEdit::Realtime(false),
+        ConfigEdit::Channels(0b1),
+        ConfigEdit::SampleRate(1_000_000),
+        ConfigEdit::Length(10),
+        ConfigEdit::Seed(Some(61)),
+    ] {
+        shell.apply(Command::EditConfig(edit));
+    }
+    shell.apply(Command::SetViewSize(ViewSize {
+        pixels: u32::MAX,
+        scale: 1.0,
+    }));
+    // Zoomed by hand (so the window does not follow "fit all"), then a capture of 10 samples.
+    shell.apply(Command::StartCapture);
+    // Right after the start, before anything was polled, the window is already valid.
+    let state = shell.state();
+    let limits = la_host::window::WindowLimits {
+        capture_length: state.capture.as_ref().map_or(0, |c| c.snapshot.length()),
+        pixels: state.view_size.pixels.clamp(1, 16_384),
+    };
+    assert!(
+        state.window.is_valid(&limits),
+        "{:?} for {limits:?}",
+        state.window
+    );
+    shell.apply(Command::GoToStart);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while shell.state().activity != la_host::Activity::Idle {
+        shell.poll(Instant::now());
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let state = shell.state();
+    let limits = la_host::window::WindowLimits {
+        capture_length: state.capture.as_ref().unwrap().snapshot.length(),
+        pixels: state.view_size.pixels.clamp(1, 16_384),
+    };
+    assert!(
+        state.window.is_valid(&limits),
+        "{:?} for {limits:?}",
+        state.window
+    );
+}
