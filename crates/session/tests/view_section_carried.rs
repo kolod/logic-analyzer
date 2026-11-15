@@ -1,5 +1,5 @@
 //! The `VIEW` section of feature 006 travels through the session library untouched, and the writer
-//! now emits format minor 1 (spec 006, task T063).
+//! emits the current format minor, 2 since feature 007 (spec 006, task T063).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -22,7 +22,7 @@ fn view_section(payload: Vec<u8>) -> Section {
 }
 
 #[test]
-fn a_view_section_round_trips_unchanged_and_the_minor_is_one() {
+fn a_view_section_round_trips_unchanged_and_the_minor_is_two() {
     let dir = TempDir::new("view-carried");
     let capture = record(3, 20, &[(None, 5_000)], End::Closed, 9, Limits::default());
     let payload: Vec<u8> = (0..=255).collect();
@@ -35,7 +35,7 @@ fn a_view_section_round_trips_unchanged_and_the_minor_is_one() {
     // Header: magic (8), major (2), minor (2).
     let bytes = std::fs::read(&path).unwrap();
     assert_eq!(u16::from_le_bytes([bytes[8], bytes[9]]), 1, "major");
-    assert_eq!(u16::from_le_bytes([bytes[10], bytes[11]]), 1, "minor");
+    assert_eq!(u16::from_le_bytes([bytes[10], bytes[11]]), 2, "minor");
 
     let loaded = load_blocking(&path, &LoadLimits::default(), &Control::new()).unwrap();
     let extras = loaded.extras();

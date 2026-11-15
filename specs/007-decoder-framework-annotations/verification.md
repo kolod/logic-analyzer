@@ -55,3 +55,16 @@ The bench uses 5 M annotations as the large case because that is the most an ins
 There is no manual step: the one shipped decoder has nothing to stack, so the tests are the proof
 (`stacking` in `la-decoders` with the fixtures `lower_bytes` and `upper_words`, `decoder_stack` in
 `la-host`). Automated result on 2026-11-15 (Windows 11): pass.
+
+## Phase 8 (User Story 5): save and open a capture with its decoders
+
+| Date | Platform | Step | Result |
+|------|----------|------|--------|
+| 2026-11-15 | Windows 11 (automated) | quickstart 8.5 as tests: `decoder_sessions` saves and reopens a stack and the sample decoder with and without results, a file without decoder sections, damaged `DECO` and `DANN`, an unknown decoder's record byte for byte, a newer version, and 156 fault points of a save; `deco_section` and `dann_section` read hand-written bytes and run mutation fuzzers | Pass. |
+| pending | Windows 11, running application | save, close, reopen with and without saved results | **Not done yet**: needs a person at the window. |
+| pending | Debian | the same | **Not done yet**: asked of the user. |
+
+The contract was tightened while implementing it (`contracts/deco-section.md`): entries are in
+ascending order, a role without a channel has no entry, the start of an item is a signed delta from the
+previous end (items may overlap), and the string table lists distinct strings in order of first use. All
+of these make "an accepted payload writes back unchanged" true.

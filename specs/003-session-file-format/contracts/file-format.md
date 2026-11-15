@@ -14,7 +14,7 @@ A session file is exactly: **header, sections, footer**, with nothing before or 
 |--------|------|-------|------|
 | 0 | 8 | magic | `89 4C 41 53 0D 0A 1A 0A` (`\x89LAS\r\n\x1a\n`) |
 | 8 | 2 | major | 1 |
-| 10 | 2 | minor | any (the writer emits 1 since feature 006, which added the `VIEW` section; 1.0 files remain valid) |
+| 10 | 2 | minor | any (the writer emits 2 since feature 007, which added the `DECO` and `DANN` sections; it emitted 1 after feature 006 added `VIEW`; 1.0 and 1.1 files remain valid) |
 | 12 | 4 | reserved flags | 0 |
 | 16 | 8 | file length | total bytes of the file, equal to the real size |
 | 24 | 4 | section count | `2..=64` |
@@ -99,7 +99,8 @@ The channel count of `META` equals that of `CAPT`, and the applied sample rate o
 4. Optional sections defined later (decoder settings `DECO`, annotations, notes) are specified in the
    spec of the feature that adds them; this document defines only the framing they use. The view state
    (channel names, colours, order, visibility, markers, window) is the `VIEW` section, defined by
-   `specs/006-ui-shell-signal-view/contracts/view-section.md`, which is why the writer emits minor 1.
+   `specs/006-ui-shell-signal-view/contracts/view-section.md`, which is why the writer emitted minor 1. The decoder setup and results are the `DECO` and `DANN` sections, defined by
+   `specs/007-decoder-framework-annotations/contracts/deco-section.md`, which is why the writer now emits minor 2.
 
 ## Errors a reader reports
 

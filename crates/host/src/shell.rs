@@ -166,6 +166,7 @@ impl Shell {
         let decoders = DecoderRuntime::new(loaded.settings.decoder_memory_limit_bytes);
         let mut decoder_state = DecoderState::new(catalogue(&decoders.registry, &localizer));
         decoder_state.limits.memory_bytes = loaded.settings.decoder_memory_limit_bytes;
+        decoder_state.save_results = loaded.settings.save_decoder_results;
         let mut state = State {
             version: 0,
             versions: Versions::default(),
@@ -694,6 +695,12 @@ impl Shell {
             }
             Command::RunDecoder(id) => self.run_decoder(state, id),
             Command::CancelDecoder(id) => self.cancel_decoder(state, id),
+            Command::SetSaveDecoderResults(save) => {
+                state.settings.save_decoder_results = save;
+                state.decoders.save_results = save;
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | Changes::DECODERS | saved)
+            }
             Command::SetDecoderMemoryLimit(bytes) => {
                 if !crate::settings::decoder_memory_limit_is_valid(bytes) {
                     return Err(Reject::Ignored(error::INVALID_COMMAND));

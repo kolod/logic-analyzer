@@ -321,3 +321,8 @@ decoder-source-capture = The capture
 dialog-remove-decoder-title = Remove decoder
 dialog-remove-decoder-body = Other decoders read from this one. Removing it removes them too. The capture is not affected.
 dialog-remove-decoder-confirm = Remove them all
+
+### Decoders: saving and opening
+notice-decoders-newer = This file has decoders from a newer version of the application. They are kept as they are and not shown; the capture opens normally.
+settings-save-decoder-results = Save decoded results with the session
+settings-save-decoder-results-note = Makes the file larger. Without it the decoders run again when the file is opened.

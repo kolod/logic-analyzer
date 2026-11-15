@@ -201,3 +201,8 @@ decoder-source-capture = Захоплення
 dialog-remove-decoder-title = Прибрати декодер
 dialog-remove-decoder-body = Інші декодери читають з цього. Якщо його прибрати, їх буде прибрано теж. Захоплення це не зачіпає.
 dialog-remove-decoder-confirm = Прибрати всі
+
+### Decoders: saving and opening
+notice-decoders-newer = У цьому файлі є декодери з новішої версії застосунку. Їх збережено як є й не показано; захоплення відкривається як зазвичай.
+settings-save-decoder-results = Зберігати результати декодування разом із сеансом
+settings-save-decoder-results-note = Файл стає більшим. Без цього декодери запускаються знову, коли файл відкривають.

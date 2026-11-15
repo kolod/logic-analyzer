@@ -82,6 +82,8 @@ pub struct Settings {
     pub memory_limit_bytes: u64,
     /// The memory limit of the results of all decoders together, in bytes.
     pub decoder_memory_limit_bytes: u64,
+    /// Whether the results of the decoders are saved with the session.
+    pub save_decoder_results: bool,
     /// Whether markers snap to transitions.
     pub snap_markers: bool,
     /// Whether the view follows the newest data of a running capture.
@@ -108,6 +110,7 @@ impl Default for Settings {
             ui_scale_percent: 100,
             memory_limit_bytes: default_memory_limit(),
             decoder_memory_limit_bytes: la_decoders::store::DEFAULT_MEMORY_LIMIT,
+            save_decoder_results: false,
             snap_markers: true,
             follow_latest: true,
             recent_files: Vec::new(),

@@ -73,7 +73,8 @@ fn table_commands() -> BTreeSet<String> {
 }
 
 /// Reached through the settings dialog, which the table opens.
-const SETTINGS_DIALOG: [&str; 4] = [
+const SETTINGS_DIALOG: [&str; 5] = [
+    "SetSaveDecoderResults",
     "SetLanguage",
     "SetTheme",
     "SetMemoryLimit",

@@ -220,6 +220,8 @@ pub struct DecoderState {
     pub limits: DecoderLimits,
     /// The id the next instance gets (ids are never reused).
     pub(crate) next_id: u32,
+    /// Records of the opened file that are written back as they were read.
+    pub(crate) kept: Vec<crate::decoder_sessions::Kept>,
 }
 
 impl DecoderState {
@@ -237,6 +239,7 @@ impl DecoderState {
                 memory_bytes: DEFAULT_MEMORY_LIMIT,
             },
             next_id: 1,
+            kept: Vec::new(),
         }
     }
 
@@ -246,13 +249,14 @@ impl DecoderState {
         self.instances.iter().find(|i| i.id == id)
     }
 
-    fn instance_mut(&mut self, id: u32) -> Option<&mut InstanceView> {
+    pub(crate) fn instance_mut(&mut self, id: u32) -> Option<&mut InstanceView> {
         self.instances.iter_mut().find(|i| i.id == id)
     }
 
     /// Forgets every instance (the capture they belong to is gone).
     pub(crate) fn reset(&mut self) {
         self.instances.clear();
+        self.kept.clear();
         self.selection = None;
         self.refusal = None;
     }
@@ -262,10 +266,10 @@ impl DecoderState {
 pub(crate) struct DecoderRuntime {
     pub(crate) registry: Registry,
     pub(crate) budget: Arc<Budget>,
-    jobs: BTreeMap<u32, Job>,
-    results: BTreeMap<u32, Results>,
+    pub(crate) jobs: BTreeMap<u32, Job>,
+    pub(crate) results: BTreeMap<u32, Results>,
     /// The items of the latest pass of each instance, read by the instances stacked on it.
-    streams: BTreeMap<u32, ItemStream>,
+    pub(crate) streams: BTreeMap<u32, ItemStream>,
     /// A new memory limit that waits for the running passes to end.
     pub(crate) pending_limit: Option<u64>,
     /// The deadlines the supervisor enforces.
@@ -306,6 +310,12 @@ impl DecoderRuntime {
             thread_cap: default_thread_cap(),
             queue: std::collections::VecDeque::new(),
         }
+    }
+
+    /// Puts results that were read from a file in place of a pass.
+    pub(crate) fn install_loaded(&mut self, id: u32, results: Results, stream: ItemStream) {
+        self.results.insert(id, results);
+        self.streams.insert(id, stream);
     }
 
     /// Cancels and forgets what belongs to instances that no longer exist.
@@ -593,6 +603,11 @@ impl Shell {
         }
     }
 
+    /// Forgets every pass and result (a capture is replaced).
+    pub(crate) fn clear_decoder_runtime(&mut self) {
+        self.decoders.retain(&|_| false);
+    }
+
     /// Applies a new memory limit as soon as no pass is running.
     pub(crate) fn apply_pending_decoder_limit(&mut self) {
         if self.decoders.jobs.is_empty() {
@@ -722,7 +737,13 @@ impl Shell {
         }
         let id = state.decoders.next_id;
         let setup = Setup::new(id, decoder);
-        if state.decoders.instances.len() >= MAX_INSTANCES {
+        if state
+            .decoders
+            .instances
+            .len()
+            .saturating_add(state.decoders.kept.len())
+            >= MAX_INSTANCES
+        {
             let error = la_decoders::error::too_many_instances("the instance limit is reached");
             return Ok(Self::refuse(state, &error));
         }

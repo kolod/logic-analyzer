@@ -121,6 +121,11 @@ are untouched, and **Run again** starts it again. **Cancel** stops a running pas
 not answer in time is given up on after a few seconds; if several are stuck, restart the application.
 The memory the results of all decoders may use is set in the settings (16 MiB to 4 GiB).
 
+**Saving.** The decoders you set up are saved with the session and decode again when it is opened. The
+setting **Save decoded results with the session** also saves what they found, so that it shows at once
+when the file is opened (the file is larger); press **Run again** to decode anew. A file from a newer
+version keeps decoders this version does not have, and they are written back unchanged.
+
 Decoding never changes the capture. A dashed line along the bottom of a lane means that its results
 are not whole (the decoder was cancelled or stopped).
 

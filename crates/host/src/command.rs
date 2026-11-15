@@ -294,6 +294,8 @@ pub enum Command {
     CancelDecoder(u32),
     /// Sets the memory limit of decoder results in bytes (for passes that start afterwards).
     SetDecoderMemoryLimit(u64),
+    /// Chooses whether the results of the decoders are saved with the session.
+    SetSaveDecoderResults(bool),
     /// Selects an annotation.
     SelectAnnotation {
         /// The instance.
@@ -425,6 +427,7 @@ impl Command {
             Command::RunDecoder(_) => "run_decoder",
             Command::CancelDecoder(_) => "cancel_decoder",
             Command::SetDecoderMemoryLimit(_) => "set_decoder_memory_limit",
+            Command::SetSaveDecoderResults(_) => "set_save_decoder_results",
             Command::SelectAnnotation { .. } => "select_annotation",
             Command::GoToAnnotation(_) => "go_to_annotation",
             Command::ClearAnnotationSelection => "clear_annotation_selection",

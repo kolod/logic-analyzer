@@ -42,13 +42,13 @@ repeat instance_count times, a record whose content is:
     channel_count  varint      0..=16
     repeat channel_count times:
         role       string      1..=48 bytes
-        channel    varint      0..=31, or 32 meaning "none"
-    option_count   varint      0..=16
+        channel    varint      0..=31 (a role without a channel has no entry); entries in ascending role order
+    option_count   varint      0..=16, entries in ascending id order
     repeat option_count times:
         id         string      1..=48 bytes
         kind       u8          0 integer (i64 as zigzag varint), 1 boolean (u8), 2 choice (string)
         value      by kind
-    generator      record      the generator's options, same option encoding, may be empty
+    generator      record      the generator's options: a count 0..=16, then ascending ids with kind 0 (integer) values; may be empty
 ```
 
 A record whose `decoder` this version does not register, or whose `decoder_ver` is newer than the
@@ -62,7 +62,7 @@ only to an earlier record).
 
 ```text
 version            u8          = 1
-string_table       varint count (0..=4096) then that many strings (message keys, 1..=96 bytes each)
+string_table       varint count (0..=4096) then that many distinct strings (message keys, 1..=96 bytes each), in order of first use
 block_count        varint      0..=8
 repeat block_count times, a record whose content is:
     instance       varint      id of an instance in DECO
@@ -81,7 +81,7 @@ repeat block_count times, a record whose content is:
         text_data  literal: string 0..=256 bytes; message: varint table index, varint arg_count 0..=4, args as strings 0..=64
     items          items_count entries, ordered by end, each:
         kind       string      1..=48 bytes
-        start      varint      delta from the previous end
+        start      zigzag      signed delta from the previous end (items may overlap)
         length     varint
         flags      u8          bit 0 error
         payload    u8 kind (0 integer varint, 1 bytes string 0..=64, 2 text string 0..=64) and its value

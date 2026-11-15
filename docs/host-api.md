@@ -120,6 +120,7 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `StackDecoder { id, source }` | makes `source` (the capture or another instance) the input of `id`; refused with `decoder.stack_incompatible`, `decoder.stack_cycle` or `decoder.stack_too_deep` (in `decoders.refusal`); a valid change starts a new pass, and the instances stacked on `id` start again after it |
 | | `RunDecoder(id)` | starts a new pass of an instance that is not running (finished, cancelled, failed) |
 | | `CancelDecoder(id)` | stops the running pass within a second; what it found is kept and marked incomplete; a decoder that does not stop in time is abandoned (`decoder.not_responding`) |
+| | `SetSaveDecoderResults(bool)` | whether the results of the decoders are saved with the session (the setup is always saved); remembered |
 | | `SetDecoderMemoryLimit(bytes)` | 16 MiB to 4 GiB, remembered; applies to passes that start afterwards, never to a running one |
 | Annotations | `SelectAnnotation { instance, annotation }` | selects it and fills `decoders.selection` with its details |
 | | `GoToAnnotation(AnnotationTarget)` | `Selected`, `Next` or `Previous` by start in the store of the selected annotation; moves the window so that it is shown whole and centred; costs O(log n) |
@@ -198,6 +199,21 @@ turn. A pass yields after every chunk and follows a capture that is still growin
 the capture is closed. A change of the setup that alters results starts a new pass and keeps the old
 results, flagged `outdated`, until the new pass publishes its first results, which replace them at
 once. The decoder side of the contract is `docs/decoder-api.md`.
+
+## The `DECO` and `DANN` sections of a session file
+
+Saving writes `DECO` (the setup of every instance, in stack order) when there are instances, and `DANN`
+(the annotations and items) only when `SetSaveDecoderResults` is on and results exist; the writer emits
+format minor 2. The payloads are defined by `specs/007-decoder-framework-annotations/contracts/deco-section.md`
+(canonical varints, every value validated, the same state giving the same bytes). Opening restores the
+instances and starts their passes again, or, when the file has valid results, shows them at once flagged
+`loaded` without starting a pass until the user runs one or changes the setup. A damaged section never
+fails the open: the capture opens, a warning with `decoder.section_invalid` is shown and the section is
+dropped (a damaged `DANN` keeps the setup, and the decoders run again). A record of a decoder this
+version does not know, or an option it does not know, is kept as it was read and written back byte for
+byte (`decoder.unknown_decoder`, `decoder.options_skipped`); a section of a newer version is kept
+untouched with an information notice. `Unsaved` becomes `Dirty` when a setup changes, not when a pass
+finishes.
 
 ## Text and localization
 

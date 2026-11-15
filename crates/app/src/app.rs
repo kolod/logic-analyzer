@@ -484,6 +484,10 @@ impl App {
                 .into()
             ),
             text(self.t("settings-decoder-memory-note")).size(12),
+            checkbox(self.shell.state().decoders.save_results)
+                .label(self.t("settings-save-decoder-results"))
+                .on_toggle(|save| Message::Run(Command::SetSaveDecoderResults(save))),
+            text(self.t("settings-save-decoder-results-note")).size(12),
         ]
         .spacing(10)
         .max_width(460);
