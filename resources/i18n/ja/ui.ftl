@@ -119,3 +119,26 @@ dialog-save-title = セッションを保存
 dialog-filter-session = ロジックアナライザのセッション
 title-untitled = 無題のキャプチャ
 notice-view-newer = このファイルの表示設定は新しいバージョンのものなので適用されませんでした。設定はファイル内にそのまま残ります。
+
+### 設定とバージョン情報
+
+menu-file-settings = 設定…
+menu-view-scale-up = 表示を拡大
+menu-view-scale-down = 表示を縮小
+menu-help-about = バージョン情報
+settings-title = 設定
+settings-language = 言語
+settings-theme = テーマ
+theme-system = システムに合わせる
+theme-light = ライト
+theme-dark = ダーク
+theme-high-contrast = ハイコントラスト
+settings-scale = 表示倍率
+settings-memory = キャプチャのメモリ上限
+settings-memory-unit = MiB
+settings-memory-note = 次のキャプチャから有効になります。
+settings-memory-invalid = { $min } から { $max } までの整数（MiB）を入力してください。
+dialog-close = 閉じる
+about-title = バージョン情報
+about-body = Logic Analyzer { $version }。デジタル信号を記録してタイムライン上に表示します。シミュレーションデバイスで、ハードウェアなしで試せます。
+about-license = GNU General Public License バージョン3のもとで公開されている自由ソフトウェアです。

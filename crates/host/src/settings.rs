@@ -38,6 +38,8 @@ pub enum Theme {
     Light,
     /// Always dark.
     Dark,
+    /// Maximum contrast: black and white with bright signal colours.
+    HighContrast,
 }
 
 /// Where the window was.
@@ -56,7 +58,9 @@ pub struct WindowGeometry {
 }
 
 impl WindowGeometry {
-    fn is_usable(&self) -> bool {
+    /// Whether the size is one a window can have.
+    #[must_use]
+    pub fn is_usable(&self) -> bool {
         let (low, high) = WINDOW_SIZE_RANGE;
         (low..=high).contains(&self.width) && (low..=high).contains(&self.height)
     }
@@ -116,8 +120,18 @@ fn default_memory_limit() -> u64 {
     la_storage::Limits::default().memory_budget_bytes
 }
 
+/// The smallest and the largest memory limit a capture accepts, in bytes.
+#[must_use]
+pub fn memory_limit_bounds() -> (u64, u64) {
+    let mut low = 1_u64 << 20;
+    while !memory_limit_is_valid(low) && low < MAX_MEMORY_LIMIT_BYTES {
+        low = low.saturating_mul(2);
+    }
+    (low, MAX_MEMORY_LIMIT_BYTES)
+}
+
 /// Whether `bytes` is an acceptable memory limit for a capture.
-fn memory_limit_is_valid(bytes: u64) -> bool {
+pub fn memory_limit_is_valid(bytes: u64) -> bool {
     bytes <= MAX_MEMORY_LIMIT_BYTES
         && la_storage::Limits {
             memory_budget_bytes: bytes,

@@ -366,15 +366,22 @@ impl Shell {
         recent.retain(|r| *r != text);
         recent.insert(0, text);
         recent.truncate(MAX_RECENT_FILES);
-        let mut changes = Changes::SETTINGS;
-        if let Err(e) = state
+        Changes::SETTINGS | self.persist_settings(state)
+    }
+
+    /// Writes the settings file; a failure becomes a warning (the choice stays in effect).
+    /// Returns what changed besides the settings themselves.
+    pub(crate) fn persist_settings(&self, state: &mut State) -> Changes {
+        match state
             .settings
             .save(self.settings_fs.as_ref(), &self.config.settings_path)
         {
-            report_into(state, Severity::Warning, &e);
-            changes.insert(Changes::NOTICES);
+            Ok(()) => Changes::NONE,
+            Err(e) => {
+                report_into(state, Severity::Warning, &e);
+                Changes::NOTICES
+            }
         }
-        changes
     }
 
     /// The recent files that still exist, newest first.

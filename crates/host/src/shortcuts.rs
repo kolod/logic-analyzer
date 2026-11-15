@@ -84,6 +84,10 @@ pub enum Action {
     ShowLog,
     /// Show the about dialog.
     About,
+    /// Make the interface larger.
+    UiScaleUp,
+    /// Make the interface smaller.
+    UiScaleDown,
     /// Turn following the newest data of a running capture on or off.
     ToggleFollowLatest,
     /// Place a marker at the pointer (or the centre of the view).
@@ -202,6 +206,12 @@ pub fn table() -> Vec<ShortcutEntry> {
             EnabledWhen::CanSave,
         ),
         ShortcutEntry::new(
+            Action::Settings,
+            ["menu-file", "menu-file-settings"],
+            Some(Accelerator::ctrl(",")),
+            EnabledWhen::Always,
+        ),
+        ShortcutEntry::new(
             Action::Command(Command::Quit),
             ["menu-file", "menu-file-quit"],
             Some(Accelerator::ctrl("Q")),
@@ -254,6 +264,24 @@ pub fn table() -> Vec<ShortcutEntry> {
             ["menu-markers", "menu-markers-snap"],
             Some(Accelerator::key("S")),
             EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::UiScaleUp,
+            ["menu-view", "menu-view-scale-up"],
+            Some(Accelerator::ctrl("=")),
+            EnabledWhen::Always,
+        ),
+        ShortcutEntry::new(
+            Action::UiScaleDown,
+            ["menu-view", "menu-view-scale-down"],
+            Some(Accelerator::ctrl("-")),
+            EnabledWhen::Always,
+        ),
+        ShortcutEntry::new(
+            Action::About,
+            ["menu-help", "menu-help-about"],
+            Some(Accelerator::key("F1")),
+            EnabledWhen::Always,
         ),
         ShortcutEntry::new(
             Action::ShowLog,

@@ -8,13 +8,15 @@ use iced::{Color, Theme, theme};
 use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::settings::Theme as ThemeChoice;
 
-/// Which of the two variants is in use.
+/// Which of the variants is in use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Variant {
     /// Dark background.
     Dark,
     /// Light background.
     Light,
+    /// Black background, white text, full-strength lines.
+    HighContrast,
 }
 
 impl Variant {
@@ -24,6 +26,7 @@ impl Variant {
         match choice {
             ThemeChoice::Light => Variant::Light,
             ThemeChoice::Dark => Variant::Dark,
+            ThemeChoice::HighContrast => Variant::HighContrast,
             ThemeChoice::System => match system {
                 theme::Mode::Light => Variant::Light,
                 _ => Variant::Dark,
@@ -46,6 +49,17 @@ impl Variant {
                     danger: rgb(0xef, 0x6a, 0x6a),
                 },
             ),
+            Variant::HighContrast => Theme::custom(
+                "Logic high contrast".to_owned(),
+                theme::Palette {
+                    background: rgb(0x00, 0x00, 0x00),
+                    text: rgb(0xff, 0xff, 0xff),
+                    primary: rgb(0xff, 0xe0, 0x00),
+                    success: rgb(0x40, 0xff, 0x70),
+                    warning: rgb(0xff, 0xc0, 0x20),
+                    danger: rgb(0xff, 0x70, 0x70),
+                },
+            ),
             Variant::Light => Theme::custom(
                 "Logic light".to_owned(),
                 theme::Palette {
@@ -65,6 +79,7 @@ impl Variant {
     pub fn hairline(self) -> Color {
         match self {
             Variant::Dark => Color::from_rgba8(0xe4, 0xe9, 0xf0, 0.16),
+            Variant::HighContrast => Color::from_rgba8(0xff, 0xff, 0xff, 0.45),
             Variant::Light => Color::from_rgba8(0x1a, 0x22, 0x2e, 0.18),
         }
     }
@@ -74,6 +89,7 @@ impl Variant {
     pub fn no_data(self) -> Color {
         match self {
             Variant::Dark => Color::from_rgba8(0xe4, 0xe9, 0xf0, 0.10),
+            Variant::HighContrast => Color::from_rgba8(0xff, 0xff, 0xff, 0.28),
             Variant::Light => Color::from_rgba8(0x1a, 0x22, 0x2e, 0.10),
         }
     }
@@ -85,7 +101,7 @@ impl Variant {
             Colour::Rgb(r, g, b) => Color::from_rgb8(r, g, b),
             Colour::Palette(index) => {
                 let table = match self {
-                    Variant::Dark => &DARK,
+                    Variant::Dark | Variant::HighContrast => &DARK,
                     Variant::Light => &LIGHT,
                 };
                 let at = usize::from(index % PALETTE_SIZE);

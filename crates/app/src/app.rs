@@ -71,6 +71,24 @@ pub enum Message {
     ShowLog,
     /// Show or hide the list of recent messages.
     ToggleMessages,
+    /// Open or close the settings dialog.
+    OpenSettings,
+    /// Close the settings dialog.
+    CloseSettings,
+    /// Open the about dialog.
+    ShowAbout,
+    /// Close the about dialog.
+    CloseAbout,
+    /// A language was chosen in the settings.
+    LanguagePicked(Choice<la_i18n::Language>),
+    /// A theme was chosen in the settings.
+    ThemePicked(Choice<la_host::settings::Theme>),
+    /// The interface scale goes to the next larger (+1) or smaller (-1) step.
+    ScaleStep(i8),
+    /// The text of the memory limit field changed.
+    MemoryText(String),
+    /// The window moved or changed size.
+    WindowEvent(window::Event),
     /// Ask for a file and open it.
     OpenFile,
     /// Save to the current file, or ask for a name when there is none.
@@ -88,6 +106,47 @@ pub enum Message {
     /// Nothing to do.
     Noop,
 }
+
+/// A value in a chooser with the text to show for it (the text is computed when the view is
+/// built, so it is in the language in use).
+#[derive(Debug, Clone)]
+pub struct Choice<T> {
+    value: T,
+    label: String,
+}
+
+impl<T: PartialEq> PartialEq for Choice<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<T> fmt::Display for Choice<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.label)
+    }
+}
+
+/// The name of a language in that language (a proper name: it does not follow the language in
+/// use).
+fn autonym(localizer: &la_i18n::Localizer, language: la_i18n::Language) -> String {
+    use la_i18n::Language;
+    let key = match language {
+        Language::En => Key::from_static("language-name-en"),
+        Language::De => Key::from_static("language-name-de"),
+        Language::Fr => Key::from_static("language-name-fr"),
+        Language::Es => Key::from_static("language-name-es"),
+        Language::Ja => Key::from_static("language-name-ja"),
+        Language::Uk => Key::from_static("language-name-uk"),
+    };
+    localizer.message_in(language, &key, &Args::new())
+}
+
+/// The interface scales the shortcuts and the settings step through, in percent.
+const SCALE_STEPS: [u16; 6] = [75, 100, 125, 150, 175, 200];
+/// The smallest and the largest step.
+const SCALE_MIN: u16 = 75;
+const SCALE_MAX: u16 = 200;
 
 /// What a file chooser was opened for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,8 +236,6 @@ fn key_name(key: &keyboard::Key) -> Option<String> {
             };
             Some(name.to_owned())
         }
-        // The plus key is a shifted `=` on many layouts: accept both for zooming in.
-        keyboard::Key::Character(text) if text.as_str() == "=" => Some("+".to_owned()),
         keyboard::Key::Character(text) => Some(text.to_uppercase()),
         keyboard::Key::Unidentified => None,
     }
@@ -208,12 +265,26 @@ pub fn entry_for<'a>(
     modifiers: keyboard::Modifiers,
 ) -> Option<&'a ShortcutEntry> {
     let (pressed, name) = accelerator_of(key, modifiers)?;
-    table.iter().find(|entry| {
+    let exact = table.iter().find(|entry| {
         entry.accelerator.is_some_and(|a| {
             a.key == name
                 && a.ctrl == pressed.ctrl
                 && a.shift == pressed.shift
                 && a.alt == pressed.alt
+        })
+    });
+    // The plus key is a shifted `=` on many layouts: either one stands for the other, with
+    // Shift not counting.
+    exact.or_else(|| {
+        let alias = match name.as_str() {
+            "=" => "+",
+            "+" => "=",
+            _ => return None,
+        };
+        table.iter().find(|entry| {
+            entry
+                .accelerator
+                .is_some_and(|a| a.key == alias && a.ctrl == pressed.ctrl && a.alt == pressed.alt)
         })
     })
 }
@@ -235,6 +306,10 @@ pub struct App {
     names: std::collections::BTreeMap<u8, String>,
     marker_names: std::collections::BTreeMap<u32, String>,
     messages_open: bool,
+    settings_open: bool,
+    about_open: bool,
+    memory_text: String,
+    window_rect: [i32; 4],
 }
 
 impl App {
@@ -265,6 +340,10 @@ impl App {
             names: std::collections::BTreeMap::new(),
             marker_names: std::collections::BTreeMap::new(),
             messages_open: false,
+            settings_open: false,
+            about_open: false,
+            memory_text: String::new(),
+            window_rect: [0, 0, 0, 0],
         };
         app.sync_texts();
         app.sync_names();
@@ -282,6 +361,130 @@ impl App {
         self.rate_text = config.sample_rate_hz.to_string();
         self.length_text = config.length.to_string();
         self.seed_text = config.seed.map_or_else(String::new, |s| s.to_string());
+    }
+
+    /// Whether `mib` is a memory limit the host accepts.
+    fn memory_limit_ok(&self, mib: u64) -> bool {
+        mib.checked_mul(1 << 20)
+            .is_some_and(la_host::settings::memory_limit_is_valid)
+    }
+
+    /// The settings dialog: language, theme, interface scale and memory limit. Every choice
+    /// applies at once, so the dialog itself changes language when the language does.
+    fn settings_dialog(&self) -> Element<'_, Message> {
+        let settings = &self.shell.state().settings;
+        let languages: Vec<Choice<la_i18n::Language>> = la_i18n::Language::ALL
+            .iter()
+            .map(|l| Choice {
+                value: *l,
+                label: autonym(self.shell.localizer(), *l),
+            })
+            .collect();
+        let current_language = languages
+            .iter()
+            .find(|c| c.value == self.shell.state().language)
+            .cloned();
+        let themes: Vec<Choice<la_host::settings::Theme>> = [
+            (la_host::settings::Theme::System, "theme-system"),
+            (la_host::settings::Theme::Light, "theme-light"),
+            (la_host::settings::Theme::Dark, "theme-dark"),
+            (
+                la_host::settings::Theme::HighContrast,
+                "theme-high-contrast",
+            ),
+        ]
+        .into_iter()
+        .map(|(value, key)| Choice {
+            value,
+            label: self.t(key),
+        })
+        .collect();
+        let current_theme = themes.iter().find(|c| c.value == settings.theme).cloned();
+        let scale = settings.ui_scale_percent;
+        let (low, high) = la_host::settings::memory_limit_bounds();
+        let (low_mib, high_mib) = (low >> 20, high >> 20);
+        let memory_valid = self
+            .memory_text
+            .trim()
+            .parse::<u64>()
+            .is_ok_and(|mib| self.memory_limit_ok(mib));
+        let mut body = column![
+            text(self.t("settings-title")).size(18),
+            labelled(
+                self.t("settings-language"),
+                pick_list(languages, current_language, Message::LanguagePicked).into()
+            ),
+            labelled(
+                self.t("settings-theme"),
+                pick_list(themes, current_theme, Message::ThemePicked).into()
+            ),
+            labelled(
+                self.t("settings-scale"),
+                row![
+                    button(text("\u{2212}").size(14))
+                        .on_press_maybe((scale > SCALE_MIN).then_some(Message::ScaleStep(-1))),
+                    text(format!("{scale} %"))
+                        .width(60)
+                        .align_x(iced::alignment::Horizontal::Center),
+                    button(text("+").size(14))
+                        .on_press_maybe((scale < SCALE_MAX).then_some(Message::ScaleStep(1))),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+                .into()
+            ),
+            labelled(
+                self.t("settings-memory"),
+                row![
+                    text_input("", &self.memory_text)
+                        .on_input(Message::MemoryText)
+                        .width(110),
+                    text(self.t("settings-memory-unit")),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+                .into()
+            ),
+            text(self.t("settings-memory-note")).size(12),
+        ]
+        .spacing(10)
+        .max_width(460);
+        if !memory_valid {
+            let message = self.shell.localizer().message(
+                &Key::from_static("settings-memory-invalid"),
+                &Args::new().uint("min", low_mib).uint("max", high_mib),
+            );
+            body = body.push(text(message).size(13).style(text::danger));
+        }
+        body = body.push(
+            button(text(self.t("dialog-close")))
+                .style(button::secondary)
+                .on_press(Message::CloseSettings),
+        );
+        container(container(body).padding(20).style(container::bordered_box))
+            .center(Fill)
+            .into()
+    }
+
+    /// The about dialog.
+    fn about_dialog(&self) -> Element<'_, Message> {
+        let version = self.shell.localizer().message(
+            &Key::from_static("about-body"),
+            &Args::new().text("version", env!("CARGO_PKG_VERSION")),
+        );
+        let body = column![
+            text(self.t("about-title")).size(18),
+            text(version),
+            text(self.t("about-license")).size(13),
+            button(text(self.t("dialog-close")))
+                .style(button::secondary)
+                .on_press(Message::CloseAbout),
+        ]
+        .spacing(12)
+        .max_width(460);
+        container(container(body).padding(20).style(container::bordered_box))
+            .center(Fill)
+            .into()
     }
 
     /// Opens the file chooser for `intent` without blocking the window.
@@ -465,6 +668,12 @@ impl App {
         format!("{name}{mark} \u{2014} {}", self.t("app-title"))
     }
 
+    /// The interface scale as a factor.
+    #[must_use]
+    pub fn scale_factor(&self) -> f32 {
+        f32::from(self.shell.state().settings.ui_scale_percent) / 100.0
+    }
+
     /// The theme in use.
     #[must_use]
     pub fn theme(&self) -> Theme {
@@ -481,6 +690,7 @@ impl App {
             keyboard::listen().map(Message::Key),
             iced::time::every(period).map(Message::Tick),
             window::close_requests().map(|_| Message::CloseRequested),
+            window::events().map(|(_, event)| Message::WindowEvent(event)),
             iced::system::theme_changes().map(Message::SystemTheme),
         ])
     }
@@ -502,7 +712,11 @@ impl App {
     fn after(&mut self, outcome: &Outcome) -> Task<Message> {
         self.sync_after_command();
         match outcome {
-            Outcome::Done(changes) if changes.contains(Changes::QUIT) => iced::exit(),
+            Outcome::Done(changes) if changes.contains(Changes::QUIT) => {
+                // What is only kept in memory while running (the window place) is remembered.
+                self.shell.save_settings();
+                iced::exit()
+            }
             // Saving was asked for but the capture has no file yet: ask for a name.
             Outcome::Ignored(reason) if *reason == la_host::NEEDS_PATH => {
                 self.choose_file(FileIntent::SaveAs)
@@ -527,6 +741,14 @@ impl App {
                 self.sync_after_command();
                 Task::none()
             }
+            Message::Key(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
+            }) if self.settings_open || self.about_open => {
+                self.settings_open = false;
+                self.about_open = false;
+                Task::none()
+            }
             Message::Key(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
                 let action = entry_for(&self.table, &key, modifiers)
                     .filter(|entry| entry.enabled_when.is_enabled(self.shell.state()))
@@ -536,6 +758,10 @@ impl App {
                     Some(Action::ToggleFollowLatest) => self.update(Message::ToggleFollow),
                     Some(Action::ShowLog) => self.update(Message::ShowLog),
                     Some(Action::OpenFile) => self.update(Message::OpenFile),
+                    Some(Action::Settings) => self.update(Message::OpenSettings),
+                    Some(Action::About) => self.update(Message::ShowAbout),
+                    Some(Action::UiScaleUp) => self.update(Message::ScaleStep(1)),
+                    Some(Action::UiScaleDown) => self.update(Message::ScaleStep(-1)),
                     Some(Action::SaveFile) => self.update(Message::SaveFile),
                     Some(Action::SaveFileAs) => self.update(Message::SaveFileAs),
                     Some(Action::PlaceMarker) => {
@@ -581,6 +807,76 @@ impl App {
                     first: pair[0],
                     second: pair[1],
                 })
+            }
+            Message::OpenSettings => {
+                self.open_menu = None;
+                self.about_open = false;
+                self.memory_text =
+                    (self.shell.state().settings.memory_limit_bytes >> 20).to_string();
+                self.settings_open = true;
+                Task::none()
+            }
+            Message::CloseSettings => {
+                self.settings_open = false;
+                Task::none()
+            }
+            Message::ShowAbout => {
+                self.open_menu = None;
+                self.settings_open = false;
+                self.about_open = true;
+                Task::none()
+            }
+            Message::CloseAbout => {
+                self.about_open = false;
+                Task::none()
+            }
+            Message::LanguagePicked(choice) => self.run(Command::SetLanguage(choice.value)),
+            Message::ThemePicked(choice) => self.run(Command::SetTheme(choice.value)),
+            Message::ScaleStep(direction) => {
+                let current = self.shell.state().settings.ui_scale_percent;
+                let next = if direction > 0 {
+                    SCALE_STEPS.iter().copied().find(|s| *s > current)
+                } else {
+                    SCALE_STEPS.iter().rev().copied().find(|s| *s < current)
+                };
+                match next {
+                    Some(percent) => self.run(Command::SetUiScale(percent)),
+                    None => Task::none(),
+                }
+            }
+            Message::MemoryText(text) => {
+                self.memory_text = text;
+                match self.memory_text.trim().parse::<u64>() {
+                    Ok(mib) if self.memory_limit_ok(mib) => {
+                        self.run(Command::SetMemoryLimit(mib << 20))
+                    }
+                    _ => Task::none(),
+                }
+            }
+            Message::WindowEvent(event) => {
+                match event {
+                    window::Event::Resized(size) => {
+                        self.window_rect[2] = size.width.round() as i32;
+                        self.window_rect[3] = size.height.round() as i32;
+                    }
+                    window::Event::Moved(point) => {
+                        self.window_rect[0] = point.x.round() as i32;
+                        self.window_rect[1] = point.y.round() as i32;
+                    }
+                    _ => return Task::none(),
+                }
+                let [x, y, width, height] = self.window_rect;
+                if width > 0 && height > 0 {
+                    let geometry = la_host::settings::WindowGeometry {
+                        x,
+                        y,
+                        width: u32::try_from(width).unwrap_or(0),
+                        height: u32::try_from(height).unwrap_or(0),
+                        maximized: false,
+                    };
+                    let _ = self.shell.apply(Command::SetWindowGeometry(geometry));
+                }
+                Task::none()
             }
             Message::OpenFile => {
                 self.open_menu = None;
@@ -765,6 +1061,10 @@ impl App {
                     Action::ToggleFollowLatest => item = item.on_press(Message::ToggleFollow),
                     Action::ShowLog => item = item.on_press(Message::ShowLog),
                     Action::OpenFile => item = item.on_press(Message::OpenFile),
+                    Action::Settings => item = item.on_press(Message::OpenSettings),
+                    Action::About => item = item.on_press(Message::ShowAbout),
+                    Action::UiScaleUp => item = item.on_press(Message::ScaleStep(1)),
+                    Action::UiScaleDown => item = item.on_press(Message::ScaleStep(-1)),
                     Action::SaveFile => item = item.on_press(Message::SaveFile),
                     Action::SaveFileAs => item = item.on_press(Message::SaveFileAs),
                     Action::PlaceMarker => {
@@ -782,7 +1082,6 @@ impl App {
                     Action::ToggleSnap => {
                         item = item.on_press(Message::MarkerAction(MarkerAction::ToggleSnap));
                     }
-                    _ => {}
                 }
             }
             items = items.push(item);
@@ -907,7 +1206,8 @@ impl App {
             start,
         ]
         .spacing(12)
-        .align_y(iced::Alignment::End);
+        .align_y(iced::Alignment::End)
+        .wrap();
 
         let mut toolbar = column![container(controls).padding([6, 8])];
         for problem in &state.config_problems {
@@ -1272,6 +1572,21 @@ impl App {
                 mouse_area(container(Space::new().width(Fill).height(Fill)).style(backdrop)).into(),
             );
             layers.push(self.progress_dialog(progress));
+        } else if self.settings_open || self.about_open {
+            layers.push(
+                mouse_area(container(Space::new().width(Fill).height(Fill)).style(backdrop))
+                    .on_press(if self.settings_open {
+                        Message::CloseSettings
+                    } else {
+                        Message::CloseAbout
+                    })
+                    .into(),
+            );
+            layers.push(if self.settings_open {
+                self.settings_dialog()
+            } else {
+                self.about_dialog()
+            });
         } else if self.shell.state().pending_decision.is_some() {
             layers.push(
                 mouse_area(container(Space::new().width(Fill).height(Fill)).style(backdrop)).into(),
@@ -1399,7 +1714,7 @@ mod tests {
         let app = app_with_capture("render");
         assert!(!app.plan.channels.is_empty());
         let mut ui = iced_test::Simulator::with_size(
-            iced::Settings::default(),
+            crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
@@ -1430,7 +1745,7 @@ mod tests {
                 .any(|s| matches!(s, la_host::plan::Segment::Edge { .. }))
         }));
         let mut ui = iced_test::Simulator::with_size(
-            iced::Settings::default(),
+            crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
@@ -1455,7 +1770,7 @@ mod tests {
         assert_eq!(app.shell.state().notices.len(), 1);
         assert!(app.banner().is_some());
         let mut ui = iced_test::Simulator::with_size(
-            iced::Settings::default(),
+            crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
@@ -1495,7 +1810,7 @@ mod tests {
         assert!(text.distance.starts_with("200"), "{}", text.distance);
         assert!(text.frequency.is_some());
         let mut ui = iced_test::Simulator::with_size(
-            iced::Settings::default(),
+            crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
@@ -1552,7 +1867,7 @@ mod tests {
         let _ = app.update(Message::CloseRequested);
         assert!(app.shell.state().pending_decision.is_some());
         let mut ui = iced_test::Simulator::with_size(
-            iced::Settings::default(),
+            crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
@@ -1577,7 +1892,7 @@ mod tests {
             total_bytes: 1_000,
         };
         let mut ui = iced_test::Simulator::with_size(
-            iced::Settings::default(),
+            crate::fonts::settings(),
             iced::Size::new(600.0, 300.0),
             app.progress_dialog(view),
         );
@@ -1613,6 +1928,125 @@ mod tests {
         };
         assert_eq!(enabled("menu-file-save"), Some(false), "nothing to save");
         assert_eq!(enabled("menu-file-open"), Some(true));
+    }
+
+    #[test]
+    fn every_screen_renders_in_every_language_at_the_minimum_window_size() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("languages");
+        let _ = app.update(Message::Run(Command::SetSnap(false)));
+        let _ = app.update(Message::Run(Command::PlaceMarker {
+            position: 100_000,
+            channel: 0,
+        }));
+        let _ = app.update(Message::Run(Command::TestError("session.damaged")));
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            assert_eq!(app.shell.state().language, language);
+            let size = iced::Size::new(800.0, 560.0);
+            let menu = app.t("menu-file");
+            let settings_title = app.t("settings-title");
+            let about_title = app.t("about-title");
+            // The main window, the settings dialog and the about dialog.
+            let mut ui =
+                iced_test::Simulator::with_size(crate::fonts::settings(), size, app.view());
+            assert!(ui.find(menu.as_str()).is_ok(), "{language:?}: {menu}");
+            let main_shot = ui.snapshot(&app.theme()).unwrap();
+            if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+                main_shot
+                    .matches_image(
+                        std::path::Path::new(&directory).join(format!("main-{}", language.tag())),
+                    )
+                    .unwrap();
+            }
+            let mut ui = iced_test::Simulator::with_size(
+                iced::Settings::default(),
+                size,
+                app.settings_dialog(),
+            );
+            assert!(ui.find(settings_title.as_str()).is_ok(), "{language:?}");
+            for key in [
+                "settings-language",
+                "settings-theme",
+                "settings-scale",
+                "settings-memory",
+            ] {
+                let label = app.t(key);
+                assert!(
+                    ui.find(label.as_str()).is_ok(),
+                    "{language:?} {key}: {label}"
+                );
+            }
+            let shot = ui.snapshot(&app.theme()).unwrap();
+            let mut ui = iced_test::Simulator::with_size(
+                iced::Settings::default(),
+                size,
+                app.about_dialog(),
+            );
+            assert!(ui.find(about_title.as_str()).is_ok(), "{language:?}");
+            let _ = ui.snapshot(&app.theme()).unwrap();
+            if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+                shot.matches_image(
+                    std::path::Path::new(&directory).join(format!("settings-{}", language.tag())),
+                )
+                .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn the_interface_scale_steps_and_follows_the_setting() {
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(
+            &std::env::temp_dir().join(format!("la-app-scale-{}", std::process::id())),
+        )));
+        assert!((app.scale_factor() - 1.0).abs() < f32::EPSILON);
+        let _ = app.update(Message::ScaleStep(1));
+        assert!((app.scale_factor() - 1.25).abs() < f32::EPSILON);
+        for _ in 0..10 {
+            let _ = app.update(Message::ScaleStep(1));
+        }
+        assert!(
+            (app.scale_factor() - 2.0).abs() < f32::EPSILON,
+            "the largest step is 200 %"
+        );
+        for _ in 0..10 {
+            let _ = app.update(Message::ScaleStep(-1));
+        }
+        assert!(
+            (app.scale_factor() - 0.75).abs() < f32::EPSILON,
+            "the smallest step is 75 %"
+        );
+    }
+
+    #[test]
+    fn ctrl_equals_and_ctrl_minus_change_the_scale_and_plain_plus_still_zooms() {
+        let table = table();
+        let ctrl = Modifiers::CTRL;
+        let up = entry_for(&table, &Key::Character("=".into()), ctrl).unwrap();
+        assert_eq!(up.action, Action::UiScaleUp);
+        // Ctrl+Shift+= is Ctrl and the plus sign on many layouts.
+        let up = entry_for(&table, &Key::Character("+".into()), ctrl | Modifiers::SHIFT).unwrap();
+        assert_eq!(up.action, Action::UiScaleUp);
+        let down = entry_for(&table, &Key::Character("-".into()), ctrl).unwrap();
+        assert_eq!(down.action, Action::UiScaleDown);
+        let zoom = entry_for(&table, &Key::Character("=".into()), Modifiers::empty()).unwrap();
+        assert_eq!(
+            zoom.action,
+            Action::Command(Command::ZoomStep(la_host::ZoomDirection::In))
+        );
+    }
+
+    #[test]
+    fn a_memory_limit_typed_in_the_settings_applies_only_when_valid() {
+        let dir = std::env::temp_dir().join(format!("la-app-memory-{}", std::process::id()));
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        let before = app.shell.state().settings.memory_limit_bytes;
+        let _ = app.update(Message::MemoryText("abc".into()));
+        let _ = app.update(Message::MemoryText("0".into()));
+        assert_eq!(app.shell.state().settings.memory_limit_bytes, before);
+        let _ = app.update(Message::MemoryText("512".into()));
+        assert_eq!(app.shell.state().settings.memory_limit_bytes, 512 << 20);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

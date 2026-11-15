@@ -119,3 +119,26 @@ dialog-save-title = Зберегти сесію
 dialog-filter-session = Сесії логічного аналізатора
 title-untitled = Захоплення без назви
 notice-view-newer = Налаштування вигляду в цьому файлі походять із новішої версії й не були застосовані. Вони залишаються у файлі без змін.
+
+### Налаштування та інформація
+
+menu-file-settings = Налаштування…
+menu-view-scale-up = Збільшити інтерфейс
+menu-view-scale-down = Зменшити інтерфейс
+menu-help-about = Про програму
+settings-title = Налаштування
+settings-language = Мова
+settings-theme = Тема
+theme-system = Як у системі
+theme-light = Світла
+theme-dark = Темна
+theme-high-contrast = Висока контрастність
+settings-scale = Масштаб інтерфейсу
+settings-memory = Ліміт пам’яті захоплення
+settings-memory-unit = МіБ
+settings-memory-note = Застосовується до наступного захоплення.
+settings-memory-invalid = Введіть ціле число МіБ від { $min } до { $max }.
+dialog-close = Закрити
+about-title = Про програму
+about-body = Logic Analyzer { $version }. Записує цифрові сигнали та показує їх на часовій шкалі; змодельований пристрій дозволяє спробувати програму без обладнання.
+about-license = Вільне програмне забезпечення за ліцензією GNU General Public License, версія 3.

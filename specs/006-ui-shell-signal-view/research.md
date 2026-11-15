@@ -345,3 +345,13 @@ container smaller than its text. Missing glyphs are checked separately and witho
 character of every message and of the bundled sample user texts must have a glyph in the bundled
 fonts or be covered by the declared system fallback list (task T080). The resource-length lint of
 option (b) is not needed. `iced_test` becomes a dev-dependency of `la-app`.
+
+## R5 addendum: the fonts as built (feature 006, US5)
+
+iced already bundles Fira Sans (Latin, Latin Extended, Greek, Cyrillic, OFL), so no second UI
+font is embedded; only Japanese needs one. `tools/build-font-subsets.py` pins Noto Sans JP to a
+commit of github.com/google/fonts (checksum checked), fixes the weight at 400 and keeps 3,415
+characters: all of `resources/i18n/ja/*.ftl`, basic Latin, kana, Japanese punctuation, full-width
+forms and the JIS X 0208 level 1 kanji. Result: `NotoSansJP-subset.ttf`, 970,976 bytes, well under
+the 1.5 MB target. A test (`fonts::tests`) checks that every Japanese-block character of the
+resources is in the font. Licences are in `docs/third-party-notices.md`.

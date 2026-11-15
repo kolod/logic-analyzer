@@ -249,6 +249,25 @@ impl Shell {
         }
     }
 
+    /// Writes the settings file now. A failure becomes a notice. The application calls this
+    /// before it exits, so that what is only kept in memory while it runs (the window geometry)
+    /// is remembered.
+    pub fn save_settings(&mut self) {
+        let mut working = self.state.clone();
+        let changes = self.persist_settings(&mut working);
+        if !changes.is_empty() {
+            working.version = working.version.saturating_add(1);
+            working.versions.bump(changes);
+            self.state = working;
+        }
+    }
+
+    /// Replaces the file system of the settings (tests: a disk that cannot be written).
+    #[cfg(feature = "test-support")]
+    pub fn set_settings_fs(&mut self, fs: Arc<dyn SettingsFs>) {
+        self.settings_fs = fs;
+    }
+
     /// Where the log files are, if known.
     #[must_use]
     pub fn log_location(&self) -> Option<&Path> {
@@ -553,6 +572,40 @@ impl Shell {
             Command::RequestClose => self.quit_or_guard(state, Guarded::Close),
             Command::Quit => self.quit_or_guard(state, Guarded::Quit),
             Command::Decide(decision) => self.decide(state, decision),
+            Command::SetLanguage(language) => {
+                self.localizer.set_language(language);
+                state.language = language;
+                state.settings.language = Some(language.tag().to_owned());
+                let saved = self.persist_settings(state);
+                changed(Changes::LANGUAGE | Changes::SETTINGS | saved)
+            }
+            Command::SetTheme(theme) => {
+                state.settings.theme = theme;
+                let saved = self.persist_settings(state);
+                changed(Changes::THEME | Changes::SETTINGS | saved)
+            }
+            Command::SetUiScale(percent) => {
+                let (low, high) = crate::settings::UI_SCALE_RANGE;
+                state.settings.ui_scale_percent = percent.clamp(low, high);
+                let saved = self.persist_settings(state);
+                changed(Changes::THEME | Changes::SETTINGS | saved)
+            }
+            Command::SetMemoryLimit(bytes) => {
+                if !crate::settings::memory_limit_is_valid(bytes) {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                // A running capture keeps the limit it started with.
+                state.settings.memory_limit_bytes = bytes;
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | saved)
+            }
+            Command::SetWindowGeometry(geometry) => {
+                if !geometry.is_usable() {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                state.settings.window = Some(geometry);
+                changed(Changes::SETTINGS)
+            }
             Command::SaveSession => {
                 let path = state
                     .session_path
@@ -777,10 +830,6 @@ impl Shell {
                 code,
                 "provoked failure",
             ))),
-            _ => {
-                let _ = &self.settings_fs;
-                Err(Reject::Ignored(error::INVALID_COMMAND))
-            }
         }
     }
 

@@ -216,3 +216,46 @@ dialog-filter-session = Logic analyzer sessions
 title-untitled = Untitled capture
 # Information: the file stores view settings written by a newer version.
 notice-view-newer = The view settings in this file come from a newer version and were not applied. They stay in the file as they are.
+
+### Settings and About
+
+# Open the settings dialog.
+menu-file-settings = Settings…
+# Make the whole interface larger.
+menu-view-scale-up = Larger interface
+# Make the whole interface smaller.
+menu-view-scale-down = Smaller interface
+# Open the about dialog.
+menu-help-about = About
+# Title of the settings dialog.
+settings-title = Settings
+# Label of the language choice.
+settings-language = Language
+# Label of the colour theme choice.
+settings-theme = Theme
+# Theme choice: follow the operating system.
+theme-system = Follow the system
+# Theme choice: light colours.
+theme-light = Light
+# Theme choice: dark colours.
+theme-dark = Dark
+# Theme choice: maximum contrast.
+theme-high-contrast = High contrast
+# Label of the interface scale choice (a percentage follows).
+settings-scale = Interface scale
+# Label of the memory limit of one capture.
+settings-memory = Memory limit of a capture
+# The unit after the memory limit field (mebibytes).
+settings-memory-unit = MiB
+# Note under the memory limit: when it takes effect.
+settings-memory-note = Applies to the next capture.
+# Validation message of the memory limit; the arguments are the smallest and the largest value in MiB.
+settings-memory-invalid = Enter a whole number of MiB from { $min } to { $max }.
+# Button: close a dialog.
+dialog-close = Close
+# Title of the about dialog.
+about-title = About
+# Text of the about dialog; the argument is the version number.
+about-body = Logic Analyzer { $version }. Records digital signals and shows them on a timeline; a simulated device lets you try it without hardware.
+# License line of the about dialog.
+about-license = Free software under the GNU General Public License, version 3.

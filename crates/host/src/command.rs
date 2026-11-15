@@ -237,6 +237,9 @@ pub enum Command {
     SetUiScale(u16),
     /// Sets the memory limit of captures in bytes.
     SetMemoryLimit(u64),
+    /// Remembers where the window is (written to the settings file when the application
+    /// saves its settings, not on every move).
+    SetWindowGeometry(crate::settings::WindowGeometry),
     /// Removes one notice.
     DismissNotice(NoticeId),
     /// Removes every notice.
@@ -325,6 +328,7 @@ impl Command {
             Command::SetTheme(_) => "set_theme",
             Command::SetUiScale(_) => "set_ui_scale",
             Command::SetMemoryLimit(_) => "set_memory_limit",
+            Command::SetWindowGeometry(_) => "set_window_geometry",
             Command::DismissNotice(_) => "dismiss_notice",
             Command::DismissAllNotices => "dismiss_all_notices",
             Command::RequestClose => "request_close",

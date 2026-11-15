@@ -1672,6 +1672,7 @@ dependencies = [
  "la-diagnostics",
  "la-host",
  "la-i18n",
+ "read-fonts 0.35.0",
  "rfd",
  "tracing",
 ]

@@ -119,3 +119,26 @@ dialog-save-title = Enregistrer la session
 dialog-filter-session = Sessions de l’analyseur logique
 title-untitled = Capture sans titre
 notice-view-newer = Les réglages d’affichage de ce fichier viennent d’une version plus récente et n’ont pas été appliqués. Ils restent tels quels dans le fichier.
+
+### Paramètres et à propos
+
+menu-file-settings = Paramètres…
+menu-view-scale-up = Interface plus grande
+menu-view-scale-down = Interface plus petite
+menu-help-about = À propos
+settings-title = Paramètres
+settings-language = Langue
+settings-theme = Thème
+theme-system = Suivre le système
+theme-light = Clair
+theme-dark = Sombre
+theme-high-contrast = Contraste élevé
+settings-scale = Échelle de l’interface
+settings-memory = Limite de mémoire d’une capture
+settings-memory-unit = Mio
+settings-memory-note = S’applique à la prochaine capture.
+settings-memory-invalid = Saisissez un nombre entier de Mio entre { $min } et { $max }.
+dialog-close = Fermer
+about-title = À propos
+about-body = Logic Analyzer { $version }. Enregistre des signaux numériques et les affiche sur une ligne de temps ; un appareil simulé permet de l’essayer sans matériel.
+about-license = Logiciel libre sous licence GNU General Public License, version 3.

@@ -46,6 +46,9 @@ fn every_message_of_every_language_formats_without_a_problem() {
             .trusted("second", "2")
             .trusted("used", "1")
             .trusted("limit", "2")
+            .uint("min", 1)
+            .uint("max", 2)
+            .text("version", "0.1.0")
             .text("text", "t");
         for id in &ids {
             let text = l.message(

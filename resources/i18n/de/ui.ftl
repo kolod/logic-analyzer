@@ -119,3 +119,26 @@ dialog-save-title = Sitzung speichern
 dialog-filter-session = Logikanalysator-Sitzungen
 title-untitled = Unbenannte Aufnahme
 notice-view-newer = Die Ansichtseinstellungen dieser Datei stammen aus einer neueren Version und wurden nicht angewendet. Sie bleiben unverändert in der Datei.
+
+### Einstellungen und Info
+
+menu-file-settings = Einstellungen…
+menu-view-scale-up = Größere Oberfläche
+menu-view-scale-down = Kleinere Oberfläche
+menu-help-about = Über
+settings-title = Einstellungen
+settings-language = Sprache
+settings-theme = Farbschema
+theme-system = Wie das System
+theme-light = Hell
+theme-dark = Dunkel
+theme-high-contrast = Hoher Kontrast
+settings-scale = Skalierung
+settings-memory = Speichergrenze einer Aufnahme
+settings-memory-unit = MiB
+settings-memory-note = Gilt für die nächste Aufnahme.
+settings-memory-invalid = Geben Sie eine ganze Zahl in MiB von { $min } bis { $max } ein.
+dialog-close = Schließen
+about-title = Über
+about-body = Logic Analyzer { $version }. Zeichnet digitale Signale auf und zeigt sie auf einer Zeitleiste; ein simuliertes Gerät erlaubt das Ausprobieren ohne Hardware.
+about-license = Freie Software unter der GNU General Public License, Version 3.
