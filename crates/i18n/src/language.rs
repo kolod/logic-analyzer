@@ -101,8 +101,16 @@ impl Language {
     /// The user's language according to the operating system, or English.
     #[must_use]
     pub fn from_system() -> Language {
-        let tags = sys_locale::get_locales().collect::<Vec<String>>();
+        let tags = Language::system_tags();
         Language::negotiate(tags.iter().map(String::as_str))
+    }
+
+    /// The language tags the operating system lists in the user's order of preference (possibly
+    /// none). They are plain text: [`Language::negotiate`] or [`Localizer::from_settings`](crate::Localizer::from_settings)
+    /// chooses among them.
+    #[must_use]
+    pub fn system_tags() -> Vec<String> {
+        sys_locale::get_locales().collect()
     }
 }
 

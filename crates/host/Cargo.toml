@@ -1,0 +1,37 @@
+[package]
+name = "la-host"
+version = "0.1.0"
+description = "Host API: shell state, commands, frame plan and settings for the user interface"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+directories = "6.0.0"
+la-core = { path = "../core" }
+la-devices = { path = "../devices" }
+la-diagnostics = { path = "../diagnostics" }
+la-i18n = { path = "../i18n" }
+la-session = { path = "../session" }
+la-storage = { path = "../storage" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1.44"
+
+[features]
+# Commands and helpers that provoke failures, for tests and the manual failure checks.
+test-support = ["la-session/test-support"]
+
+[dev-dependencies]
+la-host = { path = ".", features = ["test-support"] }
+la-devices = { path = "../devices", features = ["test-support"] }
+la-i18n = { path = "../i18n", features = ["test-support"] }
+la-session = { path = "../session", features = ["test-support"] }
+
+[[bench]]
+name = "frame_plan"
+harness = false
+
+[lints]
+workspace = true

@@ -180,6 +180,12 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/v1_0")
 }
 
+/// The files the writer produced at format 1.1 (the current writer); the 1.0 files above stay as
+/// they are and must keep loading.
+fn writer_fixtures_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/v1_1")
+}
+
 /// The sessions behind the committed version 1.0 fixtures (fixed seeds, integer-only generators).
 fn fixture_sessions() -> Vec<(&'static str, SessionData)> {
     let plain = record(4, 40, &[(None, 5_000)], End::Closed, 101, Limits::default());
@@ -218,23 +224,23 @@ fn fixture_sessions() -> Vec<(&'static str, SessionData)> {
 #[test]
 #[ignore = "writes the committed fixtures; run only to create them"]
 fn regenerate_fixtures() {
-    std::fs::create_dir_all(fixtures_dir()).unwrap();
+    std::fs::create_dir_all(writer_fixtures_dir()).unwrap();
     for (name, session) in fixture_sessions() {
-        save_blocking(&fixtures_dir().join(name), &session, &Control::new()).unwrap();
+        save_blocking(&writer_fixtures_dir().join(name), &session, &Control::new()).unwrap();
     }
 }
 
 #[test]
-fn the_writer_still_produces_the_committed_version_1_0_files() {
+fn the_writer_still_produces_the_committed_version_1_1_files() {
     let dir = TempDir::new("regen");
     for (name, session) in fixture_sessions() {
         let produced = dir.join(name);
         save_blocking(&produced, &session, &Control::new()).unwrap();
         assert_eq!(
             std::fs::read(&produced).unwrap(),
-            std::fs::read(fixtures_dir().join(name)).unwrap(),
+            std::fs::read(writer_fixtures_dir().join(name)).unwrap(),
             "{name}: the writer's output changed. A format change needs a new format version and a \
-             new fixture directory (tests/fixtures/v<major>_<minor>); version 1.0 files must stay as they are."
+             new fixture directory (tests/fixtures/v<major>_<minor>); older fixtures must stay as they are."
         );
     }
 }

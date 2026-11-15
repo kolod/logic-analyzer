@@ -56,3 +56,13 @@ error-storage-invalid_sample_rate = La fréquence d'échantillonnage doit être 
 error-storage-invalid_window = La partie de l'acquisition à afficher n'est pas valide. Sélectionnez une plage dont le début précède la fin.
 error-storage-memory_limit = L'acquisition a atteint la limite de mémoire et s'est arrêtée. Tout ce qui a été acquis jusqu'ici est conservé. Enregistrez-la, puis augmentez la limite de mémoire ou acquérez moins de données.
 error-storage-position_overflow = L'acquisition est devenue plus longue que ce que le programme peut gérer et a été arrêtée. Tout ce qui a été acquis jusqu'ici est conservé. Enregistrez-la et acquérez par parties plus courtes.
+
+### Application et paramètres
+
+error-host-settings_unreadable = Le fichier des paramètres n'a pas pu être lu ; les paramètres par défaut sont utilisés. Vérifiez que vous avez le droit de lire le fichier ; vos choix seront de nouveau enregistrés dès que vous les modifierez.
+error-host-settings_invalid = Le fichier des paramètres est endommagé ou provient d'une autre version ; les paramètres par défaut sont utilisés. Choisissez de nouveau vos paramètres ; ils seront enregistrés dès que vous les modifierez.
+error-host-settings_write = Vos paramètres n'ont pas pu être enregistrés et seront perdus à la fermeture du programme. Vérifiez que le dossier des paramètres existe et que vous pouvez y écrire.
+error-host-view_invalid = L'affichage enregistré de cette session (noms des canaux, couleurs et repères) n'a pas pu être restauré ; les valeurs par défaut sont affichées. Les signaux capturés ne sont pas affectés. Choisissez de nouveau les noms et les couleurs si vous en avez besoin.
+error-host-render_failed = Les signaux n'ont pas pu être dessinés. La capture n'est pas affectée et peut toujours être enregistrée. Modifiez le zoom ou la taille de la fenêtre ; si le problème persiste, signalez-le en joignant le fichier journal.
+error-host-internal = Un problème inattendu est survenu lors de l'exécution de votre commande, qui n'a pas été exécutée. Votre capture n'est pas affectée. Réessayez ; si le problème persiste, signalez-le en joignant le fichier journal.
+error-host-invalid_command = Cette action n'est pas possible pour le moment. Attendez la fin de l'opération en cours, puis réessayez.

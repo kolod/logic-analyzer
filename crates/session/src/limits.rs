@@ -8,7 +8,7 @@ use crate::error;
 /// The major version this crate reads and writes.
 pub const FORMAT_MAJOR: u16 = 1;
 /// The minor version this crate writes.
-pub const FORMAT_MINOR: u16 = 0;
+pub const FORMAT_MINOR: u16 = 1;
 /// Size of the file header in bytes.
 pub const HEADER_LEN: usize = 32;
 /// Size of the file footer in bytes.

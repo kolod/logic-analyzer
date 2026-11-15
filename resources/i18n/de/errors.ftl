@@ -56,3 +56,13 @@ error-storage-invalid_sample_rate = Die Abtastrate muss größer als null sein. 
 error-storage-invalid_window = Der anzuzeigende Teil der Aufnahme ist ungültig. Wählen Sie einen Bereich, dessen Anfang vor seinem Ende liegt.
 error-storage-memory_limit = Die Aufnahme hat die Speichergrenze erreicht und wurde beendet. Alles bisher Aufgenommene bleibt erhalten. Speichern Sie sie und erhöhen Sie dann die Speichergrenze oder nehmen Sie weniger Daten auf.
 error-storage-position_overflow = Die Aufnahme wurde länger, als das Programm verarbeiten kann, und wurde beendet. Alles bisher Aufgenommene bleibt erhalten. Speichern Sie sie und nehmen Sie in kürzeren Abschnitten auf.
+
+### Anwendung und Einstellungen
+
+error-host-settings_unreadable = Die Einstellungsdatei konnte nicht gelesen werden, daher gelten die Standardeinstellungen. Prüfen Sie, ob Sie die Datei lesen dürfen; Ihre Auswahl wird wieder gespeichert, sobald Sie etwas ändern.
+error-host-settings_invalid = Die Einstellungsdatei ist beschädigt oder stammt aus einer anderen Version, daher gelten die Standardeinstellungen. Wählen Sie Ihre Einstellungen erneut; sie werden gespeichert, sobald Sie etwas ändern.
+error-host-settings_write = Ihre Einstellungen konnten nicht gespeichert werden und gehen beim Schließen des Programms verloren. Prüfen Sie, ob der Einstellungsordner existiert und ob Sie darin schreiben dürfen.
+error-host-view_invalid = Die gespeicherte Ansicht dieser Sitzung (Kanalnamen, Farben und Markierungen) konnte nicht wiederhergestellt werden, daher werden die Standardwerte angezeigt. Die aufgenommenen Signale sind nicht betroffen. Wählen Sie Namen und Farben erneut, wenn Sie sie brauchen.
+error-host-render_failed = Die Signale konnten nicht gezeichnet werden. Die Aufnahme ist nicht betroffen und lässt sich weiterhin speichern. Ändern Sie den Zoom oder die Fenstergröße; wenn das Problem bestehen bleibt, melden Sie es mit der Protokolldatei.
+error-host-internal = Beim Ausführen Ihres Befehls ist ein unerwartetes Problem aufgetreten, und der Befehl wurde nicht ausgeführt. Ihre Aufnahme ist nicht betroffen. Versuchen Sie es erneut; wenn das Problem bestehen bleibt, melden Sie es mit der Protokolldatei.
+error-host-invalid_command = Diese Aktion ist im Moment nicht möglich. Warten Sie, bis der aktuelle Vorgang beendet ist, und versuchen Sie es erneut.

@@ -38,11 +38,18 @@ fn every_message_of_every_language_formats_without_a_problem() {
         assert!(!ids.is_empty(), "{language:?} has no messages");
         let args = Args::new()
             .uint("count", 3)
+            .uint("number", 4)
             .trusted("code", "x.y")
             .text("name", "n")
             .trusted("value", "1")
             .trusted("first", "1")
-            .trusted("second", "2");
+            .trusted("second", "2")
+            .trusted("used", "1")
+            .trusted("limit", "2")
+            .uint("min", 1)
+            .uint("max", 2)
+            .text("version", "0.1.0")
+            .text("text", "t");
         for id in &ids {
             let text = l.message(
                 &Key::from_static(Box::leak(id.clone().into_boxed_str())),
