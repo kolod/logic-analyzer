@@ -1685,6 +1685,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "la-decoders"
+version = "0.1.0"
+dependencies = [
+ "la-core",
+ "la-decoders",
+ "la-devices",
+ "la-diagnostics",
+ "la-storage",
+ "tracing",
+]
+
+[[package]]
 name = "la-devices"
 version = "0.1.0"
 dependencies = [
@@ -1711,6 +1723,7 @@ version = "0.1.0"
 dependencies = [
  "directories",
  "la-core",
+ "la-decoders",
  "la-devices",
  "la-diagnostics",
  "la-host",

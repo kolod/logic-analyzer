@@ -66,3 +66,20 @@ error-host-view_invalid = Die gespeicherte Ansicht dieser Sitzung (Kanalnamen, F
 error-host-render_failed = Die Signale konnten nicht gezeichnet werden. Die Aufnahme ist nicht betroffen und lässt sich weiterhin speichern. Ändern Sie den Zoom oder die Fenstergröße; wenn das Problem bestehen bleibt, melden Sie es mit der Protokolldatei.
 error-host-internal = Beim Ausführen Ihres Befehls ist ein unerwartetes Problem aufgetreten, und der Befehl wurde nicht ausgeführt. Ihre Aufnahme ist nicht betroffen. Versuchen Sie es erneut; wenn das Problem bestehen bleibt, melden Sie es mit der Protokolldatei.
 error-host-invalid_command = Diese Aktion ist im Moment nicht möglich. Warten Sie, bis der aktuelle Vorgang beendet ist, und versuchen Sie es erneut.
+
+# Decoders: faults, refused choices and the saved decoder setup.
+error-decoder-failed = Ein Decoder wurde mit einem Fehler beendet. Die bis dahin erzeugten Annotationen bleiben erhalten und sind als unvollständig markiert. Ändern Sie seine Einstellungen oder starten Sie ihn erneut; die Aufnahme ist nicht betroffen.
+error-decoder-panicked = Ein Decoder ist unerwartet ausgefallen. Die bis dahin erzeugten Annotationen bleiben erhalten und sind als unvollständig markiert. Starten Sie ihn erneut; wenn das Problem bestehen bleibt, melden Sie es mit der Protokolldatei. Die Aufnahme ist nicht betroffen.
+error-decoder-not_responding = Ein Decoder antwortet nicht mehr und wurde aufgegeben. Was er zuvor erzeugt hat, bleibt erhalten und ist als unvollständig markiert. Starten Sie ihn erneut oder entfernen Sie ihn; die Aufnahme ist nicht betroffen.
+error-decoder-memory_limit = Die Decoder-Ergebnisse haben das Speicherlimit erreicht, deshalb wurde das Decodieren beendet. Alles bisher Gefundene bleibt erhalten und ist als unvollständig markiert. Entfernen Sie andere Decoder oder erhöhen Sie das Limit in den Einstellungen.
+error-decoder-annotation_limit = Ein Decoder hat das Limit für die Anzahl der Annotationen erreicht und wurde beendet. Alles bisher Gefundene bleibt erhalten und ist als unvollständig markiert. Decodieren Sie einen kürzeren Teil der Aufnahme oder wählen Sie strengere Einstellungen.
+error-decoder-invalid_output = Ein Decoder hat einige ungültige Ergebnisse erzeugt. Sie wurden übersprungen; die gültigen Ergebnisse werden angezeigt. Wenn das Problem bestehen bleibt, melden Sie es mit der Protokolldatei.
+error-decoder-invalid_setup = Diese Einstellung ist für diesen Decoder nicht gültig, deshalb wurde nichts geändert. Wählen Sie einen anderen Kanal oder Wert.
+error-decoder-stack_cycle = Diese Auswahl würde Decoder im Kreis voneinander abhängig machen, deshalb wurde nichts geändert. Wählen Sie eine andere Quelle.
+error-decoder-stack_incompatible = Dieser Decoder kann die Ergebnisse des gewählten Decoders nicht lesen, deshalb wurde nichts geändert. Wählen Sie eine andere Quelle.
+error-decoder-stack_too_deep = Diese Decoder-Kette wäre zu lang, deshalb wurde nichts geändert. Verwenden Sie eine kürzere Kette.
+error-decoder-too_many_instances = Das Limit für Decoder pro Aufnahme ist erreicht, deshalb wurde kein Decoder hinzugefügt. Entfernen Sie zuerst einen.
+error-decoder-too_many_stuck = Mehrere Decoder antworten nicht mehr und hängen noch, deshalb wird kein neues Decodieren gestartet. Starten Sie die Anwendung neu, um sie freizugeben; die Aufnahme ist nicht betroffen.
+error-decoder-section_invalid = Der Decoder-Teil dieser Sitzungsdatei ist beschädigt. Die lesbaren Decoder wurden wiederhergestellt; die Aufnahme und der Rest der Sitzung sind nicht betroffen.
+error-decoder-unknown_decoder = Diese Sitzung verwendet einen Decoder, den diese Version der Anwendung nicht hat. Er wurde übersprungen und der Rest der Sitzung wurde wiederhergestellt.
+error-decoder-options_skipped = Einige gespeicherte Decoder-Optionen wurden nicht verstanden und übersprungen, deshalb gelten dafür die Standardwerte. Prüfen Sie die Decoder-Einstellungen.

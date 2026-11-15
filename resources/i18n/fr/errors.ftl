@@ -66,3 +66,20 @@ error-host-view_invalid = L'affichage enregistré de cette session (noms des can
 error-host-render_failed = Les signaux n'ont pas pu être dessinés. La capture n'est pas affectée et peut toujours être enregistrée. Modifiez le zoom ou la taille de la fenêtre ; si le problème persiste, signalez-le en joignant le fichier journal.
 error-host-internal = Un problème inattendu est survenu lors de l'exécution de votre commande, qui n'a pas été exécutée. Votre capture n'est pas affectée. Réessayez ; si le problème persiste, signalez-le en joignant le fichier journal.
 error-host-invalid_command = Cette action n'est pas possible pour le moment. Attendez la fin de l'opération en cours, puis réessayez.
+
+# Decoders: faults, refused choices and the saved decoder setup.
+error-decoder-failed = Un décodeur s'est arrêté avec une erreur. Les annotations produites avant sont conservées et marquées comme incomplètes. Modifiez ses réglages ou relancez-le ; la capture n'est pas affectée.
+error-decoder-panicked = Un décodeur a échoué de façon inattendue. Les annotations produites avant sont conservées et marquées comme incomplètes. Relancez-le ; si le problème persiste, signalez-le en joignant le fichier journal. La capture n'est pas affectée.
+error-decoder-not_responding = Un décodeur ne répond plus et a été abandonné. Ce qu'il a produit avant est conservé et marqué comme incomplet. Relancez-le ou supprimez-le ; la capture n'est pas affectée.
+error-decoder-memory_limit = Les résultats des décodeurs ont atteint la limite de mémoire, le décodage s'est donc arrêté. Tout ce qui a été trouvé jusque-là est conservé et marqué comme incomplet. Supprimez d'autres décodeurs ou augmentez la limite dans les réglages.
+error-decoder-annotation_limit = Un décodeur a atteint la limite du nombre d'annotations et s'est arrêté. Tout ce qui a été trouvé jusque-là est conservé et marqué comme incomplet. Décodez une partie plus courte de la capture ou choisissez des réglages plus stricts.
+error-decoder-invalid_output = Un décodeur a produit des résultats non valides. Ils ont été ignorés ; les résultats valides sont affichés. Si le problème persiste, signalez-le en joignant le fichier journal.
+error-decoder-invalid_setup = Ce choix de réglage n'est pas valide pour ce décodeur, rien n'a donc été modifié. Choisissez un autre canal ou une autre valeur.
+error-decoder-stack_cycle = Ce choix ferait dépendre des décodeurs les uns des autres en boucle, rien n'a donc été modifié. Choisissez une autre source.
+error-decoder-stack_incompatible = Ce décodeur ne peut pas lire les résultats du décodeur choisi, rien n'a donc été modifié. Choisissez une autre source.
+error-decoder-stack_too_deep = Cette chaîne de décodeurs serait trop longue, rien n'a donc été modifié. Utilisez une chaîne plus courte.
+error-decoder-too_many_instances = La limite de décodeurs par capture est atteinte, aucun décodeur n'a donc été ajouté. Supprimez-en un d'abord.
+error-decoder-too_many_stuck = Plusieurs décodeurs ne répondent plus et sont toujours bloqués, aucun nouveau décodage n'est donc lancé. Redémarrez l'application pour les libérer ; la capture n'est pas affectée.
+error-decoder-section_invalid = La partie décodeurs de ce fichier de session est endommagée. Les décodeurs lisibles ont été restaurés ; la capture et le reste de la session ne sont pas affectés.
+error-decoder-unknown_decoder = Cette session utilise un décodeur que cette version de l'application ne possède pas. Il a été ignoré et le reste de la session a été restauré.
+error-decoder-options_skipped = Certaines options enregistrées d'un décodeur n'ont pas été comprises et ont été ignorées ; les valeurs par défaut sont donc utilisées. Vérifiez les réglages du décodeur.

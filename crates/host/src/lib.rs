@@ -11,6 +11,9 @@
 
 #![deny(missing_docs)]
 
+// Used by the decoder commands (T027); declared now so the crate graph is final.
+use la_decoders as _;
+
 pub mod axis;
 pub mod capture;
 mod command;

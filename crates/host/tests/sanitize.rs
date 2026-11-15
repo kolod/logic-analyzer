@@ -108,3 +108,31 @@ fn sanitizing_twice_changes_nothing_over_a_seeded_corpus() {
         assert_eq!(once.trim(), once);
     }
 }
+
+/// The decoders sanitize outside text with their own copy of the rules; both must agree.
+#[test]
+fn the_decoder_sanitizer_agrees_with_the_host_sanitizer() {
+    let corpus = [
+        "plain",
+        "  padded  ",
+        "a\u{0}b\u{7}c\u{1b}d\u{7f}e\u{85}f\u{9f}g",
+        "a\nb\rc\td",
+        "a\u{2028}b\u{2029}c",
+        "a\u{202a}b\u{202b}c\u{202c}d\u{202d}e\u{202e}f",
+        "a\u{2066}b\u{2067}c\u{2068}d\u{2069}e",
+        "a\u{200b}b\u{200c}c\u{200d}d\u{2060}e\u{feff}f",
+        "a\u{200e}b\u{200f}c\u{061c}d",
+        "e\u{301}",
+        "シグナル Сигнал Größe 🔌",
+        "\u{202e}ev\u{0}il\u{202c}\n  ",
+        "",
+        " \t\n ",
+    ];
+    for text in corpus {
+        assert_eq!(
+            la_decoders::text::sanitize(text),
+            sanitize_text(text, usize::MAX),
+            "{text:?}"
+        );
+    }
+}

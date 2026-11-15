@@ -66,3 +66,20 @@ error-host-view_invalid = No se pudo restaurar la vista guardada de esta sesión
 error-host-render_failed = No se pudieron dibujar las señales. La captura no se ve afectada y aún puede guardarse. Cambie el zoom o el tamaño de la ventana; si sigue ocurriendo, infórmelo adjuntando el archivo de registro.
 error-host-internal = Ocurrió un problema inesperado al ejecutar su orden, que no se ejecutó. Su captura no se ve afectada. Inténtelo de nuevo; si sigue ocurriendo, infórmelo adjuntando el archivo de registro.
 error-host-invalid_command = Esa acción no es posible en este momento. Espere a que termine la operación en curso y pruebe de nuevo.
+
+# Decoders: faults, refused choices and the saved decoder setup.
+error-decoder-failed = Un decodificador se detuvo con un error. Las anotaciones producidas antes se conservan y se marcan como incompletas. Cambie su configuración o ejecútelo de nuevo; la captura no se ve afectada.
+error-decoder-panicked = Un decodificador falló de forma inesperada. Las anotaciones producidas antes se conservan y se marcan como incompletas. Ejecútelo de nuevo; si sigue ocurriendo, infórmelo adjuntando el archivo de registro. La captura no se ve afectada.
+error-decoder-not_responding = Un decodificador dejó de responder y se abandonó. Lo que produjo antes se conserva y se marca como incompleto. Ejecútelo de nuevo o quítelo; la captura no se ve afectada.
+error-decoder-memory_limit = Los resultados de los decodificadores alcanzaron el límite de memoria, por lo que la decodificación se detuvo. Todo lo encontrado hasta ahora se conserva y se marca como incompleto. Quite otros decodificadores o aumente el límite en la configuración.
+error-decoder-annotation_limit = Un decodificador alcanzó el límite de anotaciones y se detuvo. Todo lo encontrado hasta ahora se conserva y se marca como incompleto. Decodifique una parte más corta de la captura o elija ajustes más estrictos.
+error-decoder-invalid_output = Un decodificador produjo algunos resultados no válidos. Se omitieron; se muestran los resultados válidos. Si sigue ocurriendo, infórmelo adjuntando el archivo de registro.
+error-decoder-invalid_setup = Esa opción de configuración no es válida para este decodificador, por lo que no se cambió nada. Elija otro canal o valor.
+error-decoder-stack_cycle = Esa elección haría que los decodificadores dependieran unos de otros en círculo, por lo que no se cambió nada. Elija otra fuente.
+error-decoder-stack_incompatible = Ese decodificador no puede leer los resultados del decodificador elegido, por lo que no se cambió nada. Elija otra fuente.
+error-decoder-stack_too_deep = Esa cadena de decodificadores sería demasiado larga, por lo que no se cambió nada. Use una cadena más corta.
+error-decoder-too_many_instances = Se alcanzó el límite de decodificadores por captura, por lo que no se añadió ninguno. Quite uno primero.
+error-decoder-too_many_stuck = Varios decodificadores dejaron de responder y siguen bloqueados, por lo que no se inicia una nueva decodificación. Reinicie la aplicación para liberarlos; la captura no se ve afectada.
+error-decoder-section_invalid = La parte de decodificadores de este archivo de sesión está dañada. Se restauraron los decodificadores que se pudieron leer; la captura y el resto de la sesión no se ven afectados.
+error-decoder-unknown_decoder = Esta sesión usa un decodificador que esta versión de la aplicación no tiene. Se omitió y se restauró el resto de la sesión.
+error-decoder-options_skipped = Algunas opciones guardadas de un decodificador no se entendieron y se omitieron, por lo que se usan los valores predeterminados. Revise la configuración del decodificador.
