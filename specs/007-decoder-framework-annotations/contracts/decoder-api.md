@@ -1,5 +1,7 @@
 # Contract: Decoder API (version 1.0)
 
+**Superseded by `docs/decoder-api.md`**, the authoritative text since implementation; this file is the design it grew from.
+
 **Status**: design source for `docs/decoder-api.md`, which becomes the authoritative copy during
 implementation (as `docs/host-api.md` did for feature 006). `la_decoders::DECODER_API_VERSION` and the
 document's version line must agree; a test fails otherwise.
