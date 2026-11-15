@@ -71,7 +71,7 @@ menu-view-page-left = Сторінка назад
 menu-view-page-right = Сторінка вперед
 menu-capture-follow = Стежити за новими даними
 panel-channels = Канали
-channel-show = Показати
+channel-show = Показувати й записувати в наступному захопленні
 channel-move-up = Вгору
 channel-move-down = Вниз
 channel-colour = Колір
@@ -141,10 +141,3 @@ dialog-close = Закрити
 about-title = Про програму
 about-body = Logic Analyzer { $version }. Записує цифрові сигнали та показує їх на часовій шкалі; змодельований пристрій дозволяє спробувати програму без обладнання.
 about-license = Вільне програмне забезпечення за ліцензією GNU General Public License, версія 3.
-
-# Tooltip of the flag of a channel that chooses whether the next capture records it.
-channel-record = Записувати в наступному захопленні
-# Short caption above the column of the flags that choose what the next capture records.
-channels-header-record = Запис
-# Short caption above the column of the flags that show or hide a channel.
-channels-header-show = Показ

@@ -72,7 +72,7 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 |-------|---------|--------|
 | Devices | `RefreshDevices` | re-lists devices through the registry |
 | | `SelectDevice(DeviceId)` | selects it; resets the configuration draft to the device defaults and validates |
-| | `EditConfig(ConfigEdit)` | `Channels`, `SampleRate`, `Length`, `Trigger`, `Seed`, `Profile`, `Realtime`, `AcceptBudgetRisk`; validates after each edit; problems appear in `config_problems` |
+| | `EditConfig(ConfigEdit)` | `Channels`, `SampleRate`, `Length`, `Trigger`, `Seed`, `Profile`, `Realtime`, `AcceptBudgetRisk`; validates after each edit; problems appear in `config_problems`; `Channels` moves the flags of the channels the same way |
 | Capture | `StartCapture` | guarded when an unsaved capture is on screen; ignored while one runs or the configuration has problems |
 | | `StopCapture` | stops the running capture; the data is kept |
 | | `NewCapture` | guarded; clears the capture and returns to Idle |
@@ -87,7 +87,7 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetFollowLatest(bool)` | live follow while capturing |
 | Channels | `RenameChannel { channel, name }` | the name is sanitized and limited to 64 characters; the channel edits below work with or without a capture, and what they set stays for the next capture |
 | | `SetChannelColour { channel, colour }` | a palette entry or a chosen colour |
-| | `SetChannelVisible { channel, visible }` | shows or hides a channel; a lane is drawn only for a channel that is shown and that the capture recorded (which channels the next capture records is `EditConfig(Channels)`) |
+| | `SetChannelVisible { channel, visible }` | the one flag of a channel: shows it (a lane is drawn when the capture on screen has data for it) and makes the next capture record it, so it also changes `EditConfig(Channels)`; ignored while a capture runs |
 | | `MoveChannel { from, to }` | changes the order |
 | | `ResetPresentation` | defaults for names, colours, order and visibility |
 | Markers | `PlaceMarker { position, channel }` | at most 64; snaps to the nearest transition of `channel` when snapping is on |

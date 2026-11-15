@@ -190,6 +190,26 @@ fn check_invariants(shell: &Shell) -> Result<(), String> {
             ));
         }
     }
+    // The one flag of a channel is both "shown" and "recorded by the next capture". (For the
+    // channels of the selected device: the flags of channels beyond it only describe a capture
+    // opened from a file made with a bigger device.)
+    let device = state
+        .selected_device
+        .as_ref()
+        .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+        .map_or(8, |d| d.capabilities.channels);
+    let limit = if device >= 32 {
+        u32::MAX
+    } else {
+        (1_u32 << device) - 1
+    };
+    if state.presentation.visible_mask() & limit != state.config.enabled_channels & limit {
+        return Err(format!(
+            "the flags {:#x} differ from the recording mask {:#x}",
+            state.presentation.visible_mask() & limit,
+            state.config.enabled_channels & limit
+        ));
+    }
     // Activity and unsaved state.
     if state.operation.is_some() && state.activity != Activity::Idle {
         return Err("a save or load while capturing".into());

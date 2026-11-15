@@ -34,13 +34,22 @@ fn plan_channels(shell: &Shell) -> Vec<(u8, String, Colour)> {
 }
 
 #[test]
-fn the_defaults_list_every_channel_and_a_lane_appears_only_for_a_recorded_one() {
+fn the_defaults_list_every_channel_and_the_flag_is_on_for_the_recorded_ones() {
     let dir = TempDir::new("pres-default");
     // Channels 0, 2 and 5 of a 32-channel device are recorded.
     let shell = finished_shell(&dir, 0b100101, 2_000, 1);
     let styles = &shell.state().presentation.channels;
     assert_eq!(styles.len(), 32, "every channel of the capture is listed");
-    assert!(styles.iter().all(|s| s.visible), "all are shown by default");
+    let flagged: Vec<u8> = styles
+        .iter()
+        .filter(|s| s.visible)
+        .map(|s| s.index)
+        .collect();
+    assert_eq!(
+        flagged,
+        [0, 2, 5],
+        "the one flag is on for the recorded channels"
+    );
     assert!(styles.iter().all(|s| s.name.is_empty()));
     for style in styles {
         assert_eq!(style.colour, Colour::Palette(style.index % PALETTE_SIZE));
@@ -79,16 +88,9 @@ fn names_colours_and_order_can_be_set_before_any_capture_and_stay_for_the_next_o
         },
     );
     done(&mut shell, Command::MoveChannel { from: 2, to: 0 });
-    done(
-        &mut shell,
-        Command::SetChannelVisible {
-            channel: 1,
-            visible: false,
-        },
-    );
     assert_eq!(shell.state().unsaved, Unsaved::Clean);
 
-    // Record 0, 1 and 2 (in any case the flags are independent of showing), then capture.
+    // Record 0, 1 and 2; then the flag of channel 1 is turned off, which also stops recording it.
     for edit in [
         ConfigEdit::Realtime(false),
         ConfigEdit::Channels(0b111),
@@ -98,6 +100,14 @@ fn names_colours_and_order_can_be_set_before_any_capture_and_stay_for_the_next_o
     ] {
         done(&mut shell, Command::EditConfig(edit));
     }
+    done(
+        &mut shell,
+        Command::SetChannelVisible {
+            channel: 1,
+            visible: false,
+        },
+    );
+    assert_eq!(shell.state().config.enabled_channels, 0b101);
     done(&mut shell, Command::StartCapture);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     while shell.state().activity != la_host::Activity::Idle {
@@ -106,7 +116,7 @@ fn names_colours_and_order_can_be_set_before_any_capture_and_stay_for_the_next_o
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
     // What was set before the capture is what the capture shows: channel 2 first, named and
-    // coloured; channel 1 hidden although it was recorded; channel 0 as it was.
+    // coloured, then channel 0; channel 1 was not recorded and has no lane.
     assert_eq!(
         plan_channels(&shell),
         [
@@ -135,23 +145,24 @@ fn names_colours_and_order_can_be_set_before_any_capture_and_stay_for_the_next_o
         styles.iter().map(|s| s.index).collect::<Vec<_>>(),
         (0..32).collect::<Vec<u8>>()
     );
-    assert!(styles.iter().all(|s| s.name.is_empty() && s.visible));
+    assert!(styles.iter().all(|s| s.name.is_empty()));
+    assert_eq!(
+        shell.state().presentation.visible_mask(),
+        shell.state().config.enabled_channels,
+        "the flags are what is recorded"
+    );
 }
 
 #[test]
-fn recording_a_channel_and_showing_it_are_separate_choices() {
-    let dir = TempDir::new("pres-independent");
+fn one_flag_per_channel_shows_it_and_records_it_in_the_next_capture() {
+    let dir = TempDir::new("pres-one-flag");
     let mut shell = finished_shell(&dir, 0b11, 2_000, 4);
-    // The capture on screen recorded channels 0 and 1. Choosing what the next capture records
-    // does not change what is shown now, and hiding does not change what will be recorded.
-    done(&mut shell, Command::EditConfig(ConfigEdit::Channels(0b100)));
-    assert_eq!(
-        plan_channels(&shell)
-            .iter()
-            .map(|c| c.0)
-            .collect::<Vec<_>>(),
-        [0, 1]
-    );
+    let lanes = |shell: &Shell| -> Vec<u8> { plan_channels(shell).iter().map(|c| c.0).collect() };
+    // The capture on screen has data for channels 0 and 1.
+    assert_eq!(lanes(&shell), [0, 1]);
+    assert_eq!(shell.state().config.enabled_channels, 0b11);
+
+    // Turning a channel off hides its lane and leaves it out of the next capture.
     done(
         &mut shell,
         Command::SetChannelVisible {
@@ -159,14 +170,68 @@ fn recording_a_channel_and_showing_it_are_separate_choices() {
             visible: false,
         },
     );
-    assert_eq!(shell.state().config.enabled_channels, 0b100);
-    assert_eq!(
-        plan_channels(&shell)
-            .iter()
-            .map(|c| c.0)
-            .collect::<Vec<_>>(),
-        [1]
+    assert_eq!(lanes(&shell), [1]);
+    assert_eq!(shell.state().config.enabled_channels, 0b10);
+
+    // Turning on a channel the capture has no data for records it next time; there is no lane
+    // for it until there is data.
+    done(
+        &mut shell,
+        Command::SetChannelVisible {
+            channel: 5,
+            visible: true,
+        },
     );
+    assert_eq!(shell.state().config.enabled_channels, 0b10_0010);
+    assert_eq!(lanes(&shell), [1]);
+
+    // Turning channel 0 on again brings its lane back, because the data is still there.
+    done(
+        &mut shell,
+        Command::SetChannelVisible {
+            channel: 0,
+            visible: true,
+        },
+    );
+    assert_eq!(lanes(&shell), [0, 1]);
+    assert_eq!(shell.state().config.enabled_channels, 0b10_0011);
+
+    // Choosing the channels to record by the configuration moves the flags the same way.
+    done(&mut shell, Command::EditConfig(ConfigEdit::Channels(0b1)));
+    let flagged: Vec<u8> = shell
+        .state()
+        .presentation
+        .channels
+        .iter()
+        .filter(|c| c.visible)
+        .map(|c| c.index)
+        .collect();
+    assert_eq!(flagged, [0]);
+    assert_eq!(lanes(&shell), [0]);
+}
+
+#[test]
+fn the_flag_is_locked_while_a_capture_runs() {
+    let dir = TempDir::new("pres-locked");
+    let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
+    for edit in [
+        ConfigEdit::Channels(0b11),
+        ConfigEdit::SampleRate(20_000),
+        ConfigEdit::Length(10_000_000),
+        ConfigEdit::Seed(Some(9)),
+    ] {
+        done(&mut shell, Command::EditConfig(edit));
+    }
+    done(&mut shell, Command::StartCapture);
+    assert_eq!(
+        shell.apply(Command::SetChannelVisible {
+            channel: 0,
+            visible: false
+        }),
+        Outcome::Ignored(error::INVALID_COMMAND)
+    );
+    assert_eq!(shell.state().config.enabled_channels, 0b11);
+    done(&mut shell, Command::StopCapture);
 }
 
 #[test]
@@ -214,9 +279,11 @@ fn rename_colour_visibility_and_order_change_the_plan() {
     assert_eq!(after.capture, before.capture);
     assert_eq!(after.window, before.window);
 
+    // Names, colours and order go back to the defaults; the flags are what is recorded (channel 0
+    // was turned off above), so they stay as they are.
     done(&mut shell, Command::ResetPresentation);
     let channels = plan_channels(&shell);
-    assert_eq!(channels.iter().map(|c| c.0).collect::<Vec<_>>(), [0, 1, 2]);
+    assert_eq!(channels.iter().map(|c| c.0).collect::<Vec<_>>(), [1, 2]);
     assert!(channels.iter().all(|c| c.1.is_empty()));
 }
 

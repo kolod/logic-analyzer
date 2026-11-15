@@ -42,8 +42,6 @@ pub enum Message {
     /// A device was chosen.
     DevicePicked(DeviceChoice),
     /// A number of channels was chosen.
-    /// A channel was ticked or unticked for recording (before a capture exists).
-    RecordChannel(u8, bool),
     /// The sample rate text changed.
     RateText(String),
     /// The capture length text changed.
@@ -145,8 +143,6 @@ fn autonym(localizer: &la_i18n::Localizer, language: la_i18n::Language) -> Strin
 
 /// The interface scales the shortcuts and the settings step through, in percent.
 const SCALE_STEPS: [u16; 6] = [75, 100, 125, 150, 175, 200];
-/// The width of a column of flags in the channel panel.
-const CHECK_COLUMN: f32 = 40.0;
 /// The smallest and the largest step.
 const SCALE_MIN: u16 = 75;
 const SCALE_MAX: u16 = 200;
@@ -969,12 +965,6 @@ impl App {
                 self.sync_texts();
                 task
             }
-            Message::RecordChannel(channel, record) => {
-                let bit = 1_u32.checked_shl(u32::from(channel)).unwrap_or(0);
-                let mask = self.shell.state().config.enabled_channels;
-                let mask = if record { mask | bit } else { mask & !bit };
-                self.run(Command::EditConfig(ConfigEdit::Channels(mask)))
-            }
             Message::RateText(text) => {
                 self.rate_text.clone_from(&text);
                 match text.trim().parse::<u64>() {
@@ -1307,20 +1297,9 @@ impl App {
             left: 6.0,
         });
         list = list.push(text(self.t("panel-channels")).size(14));
-        // Column captions: the first flag chooses what the next capture records, the second what
-        // is shown.
-        list = list.push(
-            row![
-                container(text(self.t("channels-header-record")).size(10))
-                    .width(CHECK_COLUMN)
-                    .center_x(CHECK_COLUMN),
-                container(text(self.t("channels-header-show")).size(10))
-                    .width(CHECK_COLUMN)
-                    .center_x(CHECK_COLUMN),
-            ]
-            .spacing(4),
-        );
-        let can_record = state.activity == Activity::Idle;
+        // The one flag of a channel shows it and makes the next capture record it; it is locked
+        // only while a capture runs, because what that capture records cannot change.
+        let can_flag = state.activity == Activity::Idle;
         let last = state.presentation.channels.len().saturating_sub(1);
         for (position, style) in state.presentation.channels.iter().enumerate() {
             let default_label = localizer.message(
@@ -1340,25 +1319,11 @@ impl App {
                 }
             });
             let index = style.index;
-            let recorded =
-                u32::from(index) < 32 && state.config.enabled_channels >> u32::from(index) & 1 == 1;
             let line = row![
                 tooltip(
-                    container(checkbox(recorded).on_toggle_maybe(
-                        can_record.then_some(move |on| Message::RecordChannel(index, on)),
-                    ),)
-                    .width(CHECK_COLUMN)
-                    .center_x(CHECK_COLUMN),
-                    text(self.t("channel-record")),
-                    tooltip::Position::Bottom,
-                ),
-                tooltip(
-                    container(
-                        checkbox(style.visible)
-                            .on_toggle(move |v| Message::ChannelVisible(index, v)),
-                    )
-                    .width(CHECK_COLUMN)
-                    .center_x(CHECK_COLUMN),
+                    checkbox(style.visible).on_toggle_maybe(
+                        can_flag.then_some(move |v| Message::ChannelVisible(index, v)),
+                    ),
                     text(self.t("channel-show")),
                     tooltip::Position::Bottom,
                 ),
@@ -1565,7 +1530,7 @@ impl App {
             .push(
                 row![
                     signal,
-                    column![self.markers_panel(), self.channel_panel()].width(310)
+                    column![self.markers_panel(), self.channel_panel()].width(280)
                 ]
                 .height(Fill),
             )
@@ -2289,7 +2254,7 @@ mod tests {
         }
         // Start from nothing and tick channels 0, 2 and 5, as a person would.
         for channel in 0..32 {
-            let _ = app.update(Message::RecordChannel(channel, false));
+            let _ = app.update(Message::ChannelVisible(channel, false));
         }
         assert_eq!(app.shell.state().config.enabled_channels, 0);
         assert!(
@@ -2297,7 +2262,7 @@ mod tests {
             "no channel at all is a problem the toolbar explains"
         );
         for channel in [0, 2, 5] {
-            let _ = app.update(Message::RecordChannel(channel, true));
+            let _ = app.update(Message::ChannelVisible(channel, true));
         }
         assert_eq!(app.shell.state().config.enabled_channels, 0b100101);
         assert!(app.shell.state().config_problems.is_empty());
@@ -2330,9 +2295,14 @@ mod tests {
 
         // With the capture on screen the same flags still choose what the next capture records,
         // and names and colours can be changed whether or not there is a capture.
-        let _ = app.update(Message::RecordChannel(7, true));
+        let _ = app.update(Message::ChannelVisible(7, true));
         assert_eq!(app.shell.state().config.enabled_channels, 0b1010_0101);
-        assert_eq!(shown, [0, 2, 5], "what is shown now does not change");
+        let still: Vec<u8> = app.plan.channels.iter().map(|c| c.channel).collect();
+        assert_eq!(
+            still,
+            [0, 2, 5],
+            "channel 7 has no data in this capture, so no lane appears for it yet"
+        );
         let _ = app.update(Message::ChannelName(2, "SCL".into()));
         assert_eq!(
             app.shell

@@ -575,7 +575,9 @@ impl Shell {
                 }
                 state.config.apply(edit);
                 revalidate(state);
-                changed(Changes::CONFIG)
+                // The one flag of a channel follows what the next capture records.
+                sync_visibility(state);
+                changed(Changes::CONFIG | Changes::PRESENTATION)
             }
             Command::StartCapture => self.start_capture(state),
             Command::StopCapture => {
@@ -834,13 +836,33 @@ impl Shell {
                 edit_presentation(state, |p| p.set_colour(channel, colour))
             }
             Command::SetChannelVisible { channel, visible } => {
-                edit_presentation(state, |p| p.set_visible(channel, visible))
+                // One flag: the channel is shown, and the next capture records it. While a
+                // capture runs, what it records cannot change, so neither can the flag.
+                if state.activity != Activity::Idle
+                    || !state.presentation.set_visible(channel, visible)
+                {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                let bit =
+                    1_u32.checked_shl(u32::from(channel)).unwrap_or(0) & device_channel_mask(state);
+                if visible {
+                    state.config.enabled_channels |= bit;
+                } else {
+                    state.config.enabled_channels &= !bit;
+                }
+                revalidate(state);
+                mark_dirty(state);
+                changed(Changes::PRESENTATION | Changes::CONFIG)
             }
             Command::MoveChannel { from, to } => {
                 edit_presentation(state, |p| p.move_channel(from, to))
             }
             Command::ResetPresentation => {
-                state.presentation = Presentation::all_visible(presentation_channels(state));
+                state.presentation = Presentation::defaults(
+                    presentation_channels(state),
+                    state.config.enabled_channels,
+                );
+                sync_visibility(state);
                 mark_dirty(state);
                 changed(Changes::PRESENTATION)
             }
@@ -1026,11 +1048,12 @@ fn select_device(state: &mut State, id: &DeviceId) {
     if state.capture.is_none() {
         sync_presentation(state);
     }
+    sync_visibility(state);
     revalidate(state);
 }
 
 /// Checks the draft against the selected device and the memory limit.
-fn revalidate(state: &mut State) {
+pub(crate) fn revalidate(state: &mut State) {
     let limits = capture_limits(&state.settings);
     state.config_problems = state
         .selected_device
@@ -1069,10 +1092,35 @@ fn marker_target(state: &State, position: u64, channel: u8) -> Result<(u64, u64)
     Ok((length, position))
 }
 
-/// The default presentation of a capture: every channel in index order, shown (a lane appears
-/// only for the channels the capture recorded).
+/// The default presentation of a capture: every channel in index order, the recorded ones shown.
 pub(crate) fn default_presentation(capture: &CaptureView) -> Presentation {
-    Presentation::all_visible(capture.snapshot.channels())
+    Presentation::defaults(
+        capture.snapshot.channels(),
+        capture.description.enabled_mask(),
+    )
+}
+
+/// How many channels the selected device has.
+pub(crate) fn device_channels(state: &State) -> u8 {
+    state
+        .selected_device
+        .as_ref()
+        .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+        .map_or(8, |d| d.capabilities.channels)
+}
+
+/// Makes the flag of every channel of the selected device the one the recording mask says.
+pub(crate) fn sync_visibility(state: &mut State) {
+    let mask = state.config.enabled_channels;
+    let limit = device_channels(state);
+    state.presentation.visible_from_mask(mask, limit);
+}
+
+/// The mask that has every channel of the selected device.
+pub(crate) fn device_channel_mask(state: &State) -> u32 {
+    1_u32
+        .checked_shl(u32::from(device_channels(state)))
+        .map_or(u32::MAX, |bit| bit.wrapping_sub(1))
 }
 
 /// How many channels the presentation describes: those of the capture on screen, or else those of
@@ -1093,7 +1141,8 @@ pub(crate) fn presentation_channels(state: &State) -> u8 {
 /// Keeps the presentation as long as the channels it describes; what the user set is kept.
 pub(crate) fn sync_presentation(state: &mut State) {
     let count = presentation_channels(state);
-    state.presentation.resize(count);
+    let mask = state.config.enabled_channels;
+    state.presentation.resize(count, mask);
 }
 
 /// The pixel width the window limits use.

@@ -20,8 +20,8 @@ use crate::markers::Markers;
 use crate::notices::{NoticeContent, Severity};
 use crate::settings::MAX_RECENT_FILES;
 use crate::shell::{
-    Executed, Reject, Shell, capture_limits, clear_capture, default_presentation, report_into,
-    window_limits,
+    Executed, Reject, Shell, capture_limits, clear_capture, default_presentation,
+    device_channel_mask, report_into, revalidate, window_limits,
 };
 use crate::state::{Activity, OperationKind, OperationView, State, Unsaved};
 use crate::view_section::{self, Bounds, Decoded, ViewState};
@@ -334,6 +334,11 @@ impl Shell {
         let limits = window_limits(bounds.length, state.view_size.pixels);
         state.capture = Some(view);
         state.presentation = presentation;
+        // The one flag of a channel is also what the next capture records.
+        // Even "none": then Start says that no channel is chosen, and the flags show it.
+        state.config.enabled_channels =
+            state.presentation.visible_mask() & device_channel_mask(state);
+        revalidate(state);
         state.markers = markers;
         state.session_extras = extras;
         match window {

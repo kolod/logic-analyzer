@@ -71,7 +71,7 @@ menu-view-page-left = 前のページ
 menu-view-page-right = 次のページ
 menu-capture-follow = 最新データを追従
 panel-channels = チャンネル
-channel-show = 表示する
+channel-show = 表示し、次のキャプチャで記録する
 channel-move-up = 上へ
 channel-move-down = 下へ
 channel-colour = 色
@@ -141,10 +141,3 @@ dialog-close = 閉じる
 about-title = バージョン情報
 about-body = Logic Analyzer { $version }。デジタル信号を記録してタイムライン上に表示します。シミュレーションデバイスで、ハードウェアなしで試せます。
 about-license = GNU General Public License バージョン3のもとで公開されている自由ソフトウェアです。
-
-# Tooltip of the flag of a channel that chooses whether the next capture records it.
-channel-record = 次のキャプチャで記録する
-# Short caption above the column of the flags that choose what the next capture records.
-channels-header-record = 記録
-# Short caption above the column of the flags that show or hide a channel.
-channels-header-show = 表示

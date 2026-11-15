@@ -531,3 +531,47 @@ fn recent_files_are_newest_first_limited_to_ten_and_missing_ones_are_skipped() {
     let again = Shell::new(ShellConfig::for_tests(dir.path()));
     assert_eq!(again.state().settings.recent_files.len(), 10);
 }
+
+#[test]
+fn opening_a_file_sets_the_flags_and_what_the_next_capture_records_together() {
+    let dir = TempDir::new("sess-flags");
+    let mut shell = finished_shell(&dir, 0b11, 10_000, 17);
+    // Every channel switched off: nothing shown and nothing recorded next time.
+    for channel in 0..2 {
+        done(
+            &mut shell,
+            Command::SetChannelVisible {
+                channel,
+                visible: false,
+            },
+        );
+    }
+    let path = dir.path().join("all-off.lasession");
+    done(&mut shell, Command::SaveSessionAs(path.clone()));
+    wait_operation(&mut shell);
+
+    let other = TempDir::new("sess-flags-b");
+    let mut fresh = Shell::new(ShellConfig::for_tests(other.path()));
+    done(&mut fresh, Command::OpenSession(path));
+    wait_operation(&mut fresh);
+    let state = fresh.state();
+    assert_eq!(
+        state.config.enabled_channels, 0,
+        "the next capture records nothing yet"
+    );
+    assert!(
+        !state.config_problems.is_empty(),
+        "and Start says that no channel is chosen"
+    );
+    assert_eq!(state.presentation.visible_mask() & 0b11, 0);
+    // One flag turns the channel on for both: it is recorded next time and its lane is back.
+    done(
+        &mut fresh,
+        Command::SetChannelVisible {
+            channel: 1,
+            visible: true,
+        },
+    );
+    assert_eq!(fresh.state().config.enabled_channels, 0b10);
+    assert!(fresh.state().config_problems.is_empty());
+}

@@ -58,20 +58,21 @@ see nothing there is nothing, and if you see a band, zoom in and the edges appea
 ## Channels
 
 The **Channels** panel is always there, with or without a capture, and lists every channel of the
-device. Each row has two flags, a name, a colour and arrows:
+device. Each row has **one flag**, a name, a colour and arrows:
 
-- **Rec.** (record): whether the *next* capture records this channel. Any combination works (for
-  example channels 0, 2 and 5 only). With no channel ticked, Start stays unavailable and the
-  toolbar says why. The flag is locked only while a capture is running.
-- **Show**: whether the channel is drawn. A lane appears only for a channel that was recorded and is
-  shown, so ticking Show for a channel that was not recorded draws nothing.
+- **The flag** does two things at once. When it is on, the channel is shown (if the capture on
+  screen has data for it) and the next capture records it. Turn it off and the lane disappears and
+  the channel is left out of the next capture. Any combination works (for example channels 0, 2 and
+  5 only). With no flag on, Start stays unavailable and the toolbar says why. A channel the capture
+  on screen has no data for gets a lane only after the next capture records it. The flag is locked
+  while a capture runs, because what that capture records cannot change.
 - The text field names the channel, the colour square steps through the palette and the arrows
   change the order.
 
-Names, colours, order and the two flags can be changed at any time, before the first capture
-included, and they stay for the next capture. They are saved with a capture (what is shown and in
-which order), while the Rec. flags are a setting for the next capture and are not part of the file.
-Names are yours: they are never translated. **Reset channels** brings back the defaults.
+Names, colours, order and the flags can be changed at any time, before the first capture included,
+and they stay for the next capture. They are saved with a capture, and opening a file sets the flags
+(and with them what the next capture records) from it. Names are yours: they are never translated.
+**Reset channels** brings back the default names, colours and order; the flags stay as they are.
 
 ## Markers and measuring
 

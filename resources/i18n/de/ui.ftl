@@ -71,7 +71,7 @@ menu-view-page-left = Seite zurück
 menu-view-page-right = Seite vor
 menu-capture-follow = Neueste Daten folgen
 panel-channels = Kanäle
-channel-show = Anzeigen
+channel-show = Anzeigen und in der nächsten Aufnahme aufnehmen
 channel-move-up = Nach oben
 channel-move-down = Nach unten
 channel-colour = Farbe
@@ -141,10 +141,3 @@ dialog-close = Schließen
 about-title = Über
 about-body = Logic Analyzer { $version }. Zeichnet digitale Signale auf und zeigt sie auf einer Zeitleiste; ein simuliertes Gerät erlaubt das Ausprobieren ohne Hardware.
 about-license = Freie Software unter der GNU General Public License, Version 3.
-
-# Tooltip of the flag of a channel that chooses whether the next capture records it.
-channel-record = In der nächsten Aufnahme aufnehmen
-# Short caption above the column of the flags that choose what the next capture records.
-channels-header-record = Aufn.
-# Short caption above the column of the flags that show or hide a channel.
-channels-header-show = Zeigen

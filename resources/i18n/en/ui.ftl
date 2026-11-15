@@ -130,7 +130,7 @@ menu-capture-follow = Follow latest data
 # Title of the panel that lists the channels.
 panel-channels = Channels
 # Tooltip of the checkbox that shows or hides a channel.
-channel-show = Show
+channel-show = Show, and record in the next capture
 # Tooltip of the button that moves a channel up in the order.
 channel-move-up = Move up
 # Tooltip of the button that moves a channel down in the order.
@@ -257,10 +257,3 @@ about-title = About
 about-body = Logic Analyzer { $version }. Records digital signals and shows them on a timeline; a simulated device lets you try it without hardware.
 # License line of the about dialog.
 about-license = Free software under the GNU General Public License, version 3.
-
-# Tooltip of the flag of a channel that chooses whether the next capture records it.
-channel-record = Record in the next capture
-# Short caption above the column of the flags that choose what the next capture records.
-channels-header-record = Rec.
-# Short caption above the column of the flags that show or hide a channel.
-channels-header-show = Show

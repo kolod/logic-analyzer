@@ -55,16 +55,9 @@ impl Presentation {
         Self { channels }
     }
 
-    /// The defaults with every channel shown: whether a lane appears is decided by the channels
-    /// the capture on screen recorded, so the flag only needs to be turned off to hide one.
-    #[must_use]
-    pub fn all_visible(channel_count: u8) -> Self {
-        Self::defaults(channel_count, u32::MAX)
-    }
-
-    /// Makes the list exactly `channel_count` long, in index order where it is extended: what the
-    /// user set for the channels that stay (name, colour, order, visibility) is kept.
-    pub fn resize(&mut self, channel_count: u8) {
+    /// Makes the list exactly `channel_count` long. What the user set for the channels that stay
+    /// (name, colour, order) is kept; a new channel is shown when `enabled_mask` records it.
+    pub fn resize(&mut self, channel_count: u8, enabled_mask: u32) {
         self.channels.retain(|s| s.index < channel_count);
         for index in 0..channel_count {
             if !self.channels.iter().any(|s| s.index == index) {
@@ -72,10 +65,31 @@ impl Presentation {
                     index,
                     name: String::new(),
                     colour: Colour::Palette(index % PALETTE_SIZE),
-                    visible: true,
+                    visible: u32::from(index) < 32 && enabled_mask >> u32::from(index) & 1 == 1,
                 });
             }
         }
+    }
+
+    /// Sets the flag of every channel below `limit` from the recording mask: the one flag of a
+    /// channel means both "shown" and "recorded by the next capture". Channels at or above the
+    /// limit (a capture opened from a file made with a bigger device) keep their flag.
+    pub fn visible_from_mask(&mut self, enabled_mask: u32, limit: u8) {
+        for style in self.channels.iter_mut().filter(|s| s.index < limit) {
+            style.visible =
+                u32::from(style.index) < 32 && enabled_mask >> u32::from(style.index) & 1 == 1;
+        }
+    }
+
+    /// The channels whose flag is on, as a mask.
+    #[must_use]
+    pub fn visible_mask(&self) -> u32 {
+        self.channels
+            .iter()
+            .filter(|s| s.visible && s.index < 32)
+            .fold(0, |mask, s| {
+                mask | 1_u32.checked_shl(u32::from(s.index)).unwrap_or(0)
+            })
     }
 
     fn style_mut(&mut self, channel: u8) -> Option<&mut ChannelStyle> {
