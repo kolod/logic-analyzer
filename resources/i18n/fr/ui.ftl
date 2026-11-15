@@ -105,3 +105,17 @@ marker-measure-second = Second repère de la mesure
 measure-distance = Écart
 measure-frequency = Fréquence
 measure-pick = Choisissez deux repères pour mesurer le temps qui les sépare.
+
+### Fichiers de session
+
+menu-file-open = Ouvrir…
+menu-file-save = Enregistrer
+menu-file-save-as = Enregistrer sous…
+menu-file-recent = Fichiers récents
+dialog-saving = Enregistrement de la session…
+dialog-opening = Ouverture de la session…
+dialog-open-title = Ouvrir une session
+dialog-save-title = Enregistrer la session
+dialog-filter-session = Sessions de l’analyseur logique
+title-untitled = Capture sans titre
+notice-view-newer = Les réglages d’affichage de ce fichier viennent d’une version plus récente et n’ont pas été appliqués. Ils restent tels quels dans le fichier.

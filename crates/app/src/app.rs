@@ -7,8 +7,8 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use iced::widget::{
-    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, row, scrollable,
-    stack, text, text_input, tooltip,
+    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, progress_bar, row,
+    scrollable, stack, text, text_input, tooltip,
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
 use la_devices::DeviceId;
@@ -17,7 +17,7 @@ use la_host::shortcuts::{Accelerator, Action, ShortcutEntry};
 use la_host::window::ViewSize;
 use la_host::{
     Activity, Changes, Command, ConfigEdit, Decision, Outcome, Shell, ShellConfig, SignalProfile,
-    Tick,
+    Tick, Unsaved,
 };
 use la_i18n::{Args, Key};
 
@@ -71,6 +71,14 @@ pub enum Message {
     ShowLog,
     /// Show or hide the list of recent messages.
     ToggleMessages,
+    /// Ask for a file and open it.
+    OpenFile,
+    /// Save to the current file, or ask for a name when there is none.
+    SaveFile,
+    /// Ask for a name and save to it.
+    SaveFileAs,
+    /// The file chooser ended (`None`: the user gave up).
+    FileChosen(FileIntent, Option<std::path::PathBuf>),
     /// A marker shortcut or menu entry: place, previous, next, remove selected, snap.
     MarkerAction(MarkerAction),
     /// A marker was renamed in the markers panel.
@@ -79,6 +87,15 @@ pub enum Message {
     MarkerMeasure(usize, u32),
     /// Nothing to do.
     Noop,
+}
+
+/// What a file chooser was opened for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileIntent {
+    /// Choose a file to open.
+    Open,
+    /// Choose a name to save to.
+    SaveAs,
 }
 
 /// What a marker menu entry or shortcut asks for.
@@ -267,6 +284,52 @@ impl App {
         self.seed_text = config.seed.map_or_else(String::new, |s| s.to_string());
     }
 
+    /// Opens the file chooser for `intent` without blocking the window.
+    fn choose_file(&self, intent: FileIntent) -> Task<Message> {
+        let filter = self.t("dialog-filter-session");
+        match intent {
+            FileIntent::Open => {
+                let title = self.t("dialog-open-title");
+                Task::perform(crate::dialogs::pick_open(title, filter), move |path| {
+                    Message::FileChosen(intent, path)
+                })
+            }
+            FileIntent::SaveAs => {
+                let title = self.t("dialog-save-title");
+                let name = self.default_file_name();
+                Task::perform(
+                    crate::dialogs::pick_save(title, filter, name),
+                    move |path| Message::FileChosen(intent, path),
+                )
+            }
+        }
+    }
+
+    /// The name offered when saving: that of the current file, or one made from the capture.
+    fn default_file_name(&self) -> String {
+        let state = self.shell.state();
+        if let Some(name) = state
+            .session_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+        {
+            return name;
+        }
+        let stem = state
+            .capture
+            .as_ref()
+            .map(|c| c.description.device_name().to_owned())
+            .map(|n| {
+                n.chars()
+                    .map(|ch| if ch.is_alphanumeric() { ch } else { '-' })
+                    .collect::<String>()
+            })
+            .filter(|n| !n.trim_matches('-').is_empty())
+            .unwrap_or_else(|| "capture".to_owned());
+        format!("{stem}.lasession")
+    }
+
     /// Runs a marker action chosen from a menu or a shortcut.
     fn marker_action(&mut self, action: MarkerAction) -> Task<Message> {
         let state = self.shell.state();
@@ -382,7 +445,24 @@ impl App {
     /// The window title.
     #[must_use]
     pub fn title(&self) -> String {
-        self.t("app-title")
+        let state = self.shell.state();
+        if state.capture.is_none() {
+            return self.t("app-title");
+        }
+        let name = state
+            .session_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map_or_else(
+                || self.t("title-untitled"),
+                |n| n.to_string_lossy().into_owned(),
+            );
+        let mark = if state.unsaved == Unsaved::Clean {
+            ""
+        } else {
+            "*"
+        };
+        format!("{name}{mark} \u{2014} {}", self.t("app-title"))
     }
 
     /// The theme in use.
@@ -423,6 +503,10 @@ impl App {
         self.sync_after_command();
         match outcome {
             Outcome::Done(changes) if changes.contains(Changes::QUIT) => iced::exit(),
+            // Saving was asked for but the capture has no file yet: ask for a name.
+            Outcome::Ignored(reason) if *reason == la_host::NEEDS_PATH => {
+                self.choose_file(FileIntent::SaveAs)
+            }
             _ => Task::none(),
         }
     }
@@ -451,6 +535,9 @@ impl App {
                     Some(Action::Command(command)) => self.run(command),
                     Some(Action::ToggleFollowLatest) => self.update(Message::ToggleFollow),
                     Some(Action::ShowLog) => self.update(Message::ShowLog),
+                    Some(Action::OpenFile) => self.update(Message::OpenFile),
+                    Some(Action::SaveFile) => self.update(Message::SaveFile),
+                    Some(Action::SaveFileAs) => self.update(Message::SaveFileAs),
                     Some(Action::PlaceMarker) => {
                         self.update(Message::MarkerAction(MarkerAction::Place))
                     }
@@ -495,6 +582,29 @@ impl App {
                     second: pair[1],
                 })
             }
+            Message::OpenFile => {
+                self.open_menu = None;
+                self.choose_file(FileIntent::Open)
+            }
+            Message::SaveFile => {
+                self.open_menu = None;
+                if self.shell.state().session_path.is_some() {
+                    self.run(Command::SaveSession)
+                } else {
+                    self.choose_file(FileIntent::SaveAs)
+                }
+            }
+            Message::SaveFileAs => {
+                self.open_menu = None;
+                self.choose_file(FileIntent::SaveAs)
+            }
+            Message::FileChosen(intent, Some(path)) => match intent {
+                FileIntent::Open => self.run(Command::OpenSession(path)),
+                FileIntent::SaveAs => self.run(Command::SaveSessionAs(path)),
+            },
+            // Giving up the chooser leaves everything as it was (a question about unsaved data
+            // stays open: the user answers it).
+            Message::FileChosen(_, None) => Task::none(),
             Message::ToggleMessages => {
                 self.messages_open = !self.messages_open;
                 Task::none()
@@ -654,6 +764,9 @@ impl App {
                     }
                     Action::ToggleFollowLatest => item = item.on_press(Message::ToggleFollow),
                     Action::ShowLog => item = item.on_press(Message::ShowLog),
+                    Action::OpenFile => item = item.on_press(Message::OpenFile),
+                    Action::SaveFile => item = item.on_press(Message::SaveFile),
+                    Action::SaveFileAs => item = item.on_press(Message::SaveFileAs),
                     Action::PlaceMarker => {
                         item = item.on_press(Message::MarkerAction(MarkerAction::Place));
                     }
@@ -673,6 +786,26 @@ impl App {
                 }
             }
             items = items.push(item);
+        }
+        if *title == "menu-file" {
+            let recent = self.shell.recent_files();
+            if !recent.is_empty() {
+                items = items.push(text(self.t("menu-file-recent")).size(12));
+                for path in recent {
+                    let label = path.file_name().map_or_else(
+                        || path.display().to_string(),
+                        |n| n.to_string_lossy().into_owned(),
+                    );
+                    let mut item = button(text(label).size(13))
+                        .style(button::text)
+                        .padding([3, 20])
+                        .width(Length::Shrink);
+                    if self.shell.state().operation.is_none() {
+                        item = item.on_press(Message::Run(Command::OpenSession(path)));
+                    }
+                    items = items.push(item);
+                }
+            }
         }
         let offset = 6.0 + index as f32 * 90.0;
         Some(
@@ -1053,13 +1186,37 @@ impl App {
         )
     }
 
+    /// The progress of a save or load, with a button to cancel it.
+    fn progress_dialog(&self, progress: la_host::OperationView) -> Element<'_, Message> {
+        let title = match progress.kind {
+            la_host::OperationKind::Save => self.t("dialog-saving"),
+            la_host::OperationKind::Load => self.t("dialog-opening"),
+        };
+        let total = progress.total_bytes.max(1) as f32;
+        let body = column![
+            text(title).size(18),
+            progress_bar(0.0..=total, progress.done_bytes as f32).length(Length::Fixed(320.0)),
+            button(text(self.t("dialog-cancel")))
+                .style(button::secondary)
+                .on_press(Message::Run(Command::CancelOperation)),
+        ]
+        .spacing(12)
+        .max_width(420);
+        container(container(body).padding(20).style(container::bordered_box))
+            .center(Fill)
+            .into()
+    }
+
     fn unsaved_dialog(&self) -> Element<'_, Message> {
         let body = column![
             text(self.t("dialog-unsaved-title")).size(18),
             text(self.t("dialog-unsaved-body")),
             row![
-                button(text(self.t("dialog-save")))
-                    .on_press(Message::Run(Command::Decide(Decision::Save))),
+                button(text(self.t("dialog-save"))).on_press_maybe(
+                    (self.shell.state().activity == Activity::Idle
+                        && self.shell.state().operation.is_none())
+                    .then_some(Message::Run(Command::Decide(Decision::Save)))
+                ),
                 button(text(self.t("dialog-discard")))
                     .style(button::danger)
                     .on_press(Message::Run(Command::Decide(Decision::Discard))),
@@ -1110,10 +1267,14 @@ impl App {
             );
             layers.push(menu);
         }
-        if self.shell.state().pending_decision.is_some() {
+        if let Some(progress) = self.shell.state().operation {
             layers.push(
-                mouse_area(container(Space::new().width(Fill).height(Fill)).style(container::dark))
-                    .into(),
+                mouse_area(container(Space::new().width(Fill).height(Fill)).style(backdrop)).into(),
+            );
+            layers.push(self.progress_dialog(progress));
+        } else if self.shell.state().pending_decision.is_some() {
+            layers.push(
+                mouse_area(container(Space::new().width(Fill).height(Fill)).style(backdrop)).into(),
             );
             layers.push(self.unsaved_dialog());
         }
@@ -1124,6 +1285,14 @@ impl App {
 impl Default for App {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The translucent layer behind a dialog: the window stays visible, dimmed.
+fn backdrop(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.55).into()),
+        ..container::Style::default()
     }
 }
 
@@ -1325,6 +1494,110 @@ mod tests {
                 .matches_image(std::path::Path::new(&directory).join("markers"))
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn the_title_names_the_file_and_marks_unsaved_changes() {
+        let mut app = app_with_capture("title");
+        assert!(
+            app.title().starts_with("Untitled capture*"),
+            "{}",
+            app.title()
+        );
+        let dir = std::env::temp_dir().join(format!("la-app-title-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("my-capture.lasession");
+        let _ = app.update(Message::Run(Command::SaveSessionAs(path.clone())));
+        let deadline = Instant::now().checked_add(Duration::from_secs(20)).unwrap();
+        while app.shell.operation_running() {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the save did not end");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(path.exists());
+        assert!(
+            app.title().starts_with("my-capture.lasession \u{2014}"),
+            "{}",
+            app.title()
+        );
+        let _ = app.update(Message::Run(Command::RenameChannel {
+            channel: 0,
+            name: "x".into(),
+        }));
+        assert!(
+            app.title().starts_with("my-capture.lasession* "),
+            "{}",
+            app.title()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn closing_with_unsaved_data_shows_the_question_with_its_three_answers() {
+        let mut app = app_with_capture("close");
+        let _ = app.update(Message::CloseRequested);
+        assert!(app.shell.state().pending_decision.is_some());
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        for label in ["Unsaved capture", "Save", "Discard", "Cancel"] {
+            assert!(ui.find(label).is_ok(), "{label}");
+        }
+        let snapshot = ui.snapshot(&app.theme()).unwrap();
+        if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+            snapshot
+                .matches_image(std::path::Path::new(&directory).join("unsaved"))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn a_running_save_shows_its_progress_with_a_cancel_button() {
+        let app = app_with_capture("progress");
+        let view = la_host::OperationView {
+            kind: la_host::OperationKind::Save,
+            done_bytes: 300,
+            total_bytes: 1_000,
+        };
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(600.0, 300.0),
+            app.progress_dialog(view),
+        );
+        assert!(ui.find("Saving the session\u{2026}").is_ok());
+        assert!(ui.find("Cancel").is_ok());
+        let snapshot = ui.snapshot(&app.theme()).unwrap();
+        if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+            snapshot
+                .matches_image(std::path::Path::new(&directory).join("progress"))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn the_file_menu_lists_open_save_and_save_as_and_enables_them_by_state() {
+        let app = app_with_capture("filemenu");
+        let enabled = |key: &str| {
+            app.table
+                .iter()
+                .find(|e| e.menu[1] == key)
+                .map(|e| e.enabled_when.is_enabled(app.shell.state()))
+        };
+        assert_eq!(enabled("menu-file-open"), Some(true));
+        assert_eq!(enabled("menu-file-save"), Some(true));
+        assert_eq!(enabled("menu-file-save-as"), Some(true));
+        let fresh = App::with_shell(Shell::new(ShellConfig::for_tests(&std::env::temp_dir())));
+        let enabled = |key: &str| {
+            fresh
+                .table
+                .iter()
+                .find(|e| e.menu[1] == key)
+                .map(|e| e.enabled_when.is_enabled(fresh.shell.state()))
+        };
+        assert_eq!(enabled("menu-file-save"), Some(false), "nothing to save");
+        assert_eq!(enabled("menu-file-open"), Some(true));
     }
 
     #[test]

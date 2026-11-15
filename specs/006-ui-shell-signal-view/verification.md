@@ -42,3 +42,19 @@ recorded here with the platform, the date and the result. Anything not met is st
 | 2026-11-15 | Windows 11 | Right-click to place, dragging a marker line, and the menu with a known-period signal in two languages | **pending** (T061): needs a person at the window |
 
 A defect found by the render test and fixed: the plan refresh key lacked the marker version, so markers placed in the running window would not have been drawn.
+
+## US4: save, reopen and never lose a capture
+
+| Date | Platform | Check | Result |
+|------|----------|-------|--------|
+| 2026-11-15 | Windows 11 | `view_section.rs`: the reader against byte vectors written out from the contract, round trips of the default, typical and maximal states (32 channels, 64 markers, 256-byte names), a failing fixture for every validation rule, a newer section version, and a mutation fuzzer (every single-byte change of the small payloads, sampled for the 20 KB one, every truncation and extension): nothing panics and every accepted payload re-encodes to the same bytes | passed |
+| 2026-11-15 | Windows 11 | `session` crate: the writer emits format minor 1, a `VIEW` section round-trips unchanged, the 1.0 fixtures still load, a new `v1_1` fixture directory pins the writer, the independent reader and writer agree on minor 1 | passed |
+| 2026-11-15 | Windows 11 | `session_scenarios.rs`: save then open in a fresh shell restores every transition and gap, description and simulated mark, names, colours, order, visibility, markers, selection and window; the default look writes no `VIEW` section; save after open rewrites the same path atomically; progress is reported and a cancelled save leaves the old file byte-identical with no temporary file; a cancelled load changes nothing; damaged, truncated, empty, foreign, unknown-critical and missing files give their stable code and leave the capture alone; an invalid `VIEW` section opens with defaults and a warning and is not written back; a newer one is kept untouched with an info message; unknown sections are written back; recent files (newest first, 10, missing skipped, remembered) | passed |
+| 2026-11-15 | Windows 11 | `save_interruptions.rs` (SC-007): 19 file-system calls of a save, each failed with 6 error kinds (114 fault points, some with a half-written buffer): the previous file is exactly as before or the complete new one, it always loads, one `session.io_write` notice, the capture unchanged and unsaved, no temporary file after the next save | passed |
+| 2026-11-15 | Windows 11 | `unsaved_guard.rs` (SC-011): Clean/Dirty/Running by new/open/quit/close, plus start over an unsaved capture; Cancel, Discard, Save with and without a known path, a failed save keeps the command pending, cancelling the question during a save; a random walk of 20,000 commands never replaces unsaved data without Discard or a successful save. A mutation that removes the guard from new-capture is caught by 7 tests including the walk | passed |
+| 2026-11-15 | Windows 11 | App tests: the title shows the file name and a `*` for unsaved changes; closing with unsaved data shows the question (picture checked, backdrop dimmed); the progress dialog with Cancel; the File menu enables Open/Save/Save as by state; the window starts and runs for 6 s | passed |
+| 2026-11-15 | Windows 11 | The native file choosers, closing a running capture and answering each way, opening a corrupted copy of a real file | **pending** (T073): needs a person at the window |
+
+Deviations from the task text, on purpose: starting a capture while one is running is ignored (the interface offers no Start then) instead of asking, because it cannot lose data without the user also stopping the running one; `guard.rs` was not made a separate file, the guard lives in `shell.rs` and `sessions.rs`; the "too large" file case is covered by the session crate's own tests.
+
+A defect found and fixed on the way: the dimmed backdrop behind dialogs was opaque, hiding the whole window.

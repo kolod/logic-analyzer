@@ -105,3 +105,17 @@ marker-measure-second = 測定の終点
 measure-distance = 間隔
 measure-frequency = 周波数
 measure-pick = 2つのマーカーを選ぶと、その間の時間を測定できます。
+
+### セッションファイル
+
+menu-file-open = 開く…
+menu-file-save = 保存
+menu-file-save-as = 名前を付けて保存…
+menu-file-recent = 最近使ったファイル
+dialog-saving = セッションを保存しています…
+dialog-opening = セッションを開いています…
+dialog-open-title = セッションを開く
+dialog-save-title = セッションを保存
+dialog-filter-session = ロジックアナライザのセッション
+title-untitled = 無題のキャプチャ
+notice-view-newer = このファイルの表示設定は新しいバージョンのものなので適用されませんでした。設定はファイル内にそのまま残ります。

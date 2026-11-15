@@ -105,3 +105,17 @@ marker-measure-second = Segundo de la medición
 measure-distance = Distancia
 measure-frequency = Frecuencia
 measure-pick = Elija dos marcadores para medir el tiempo entre ellos.
+
+### Archivos de sesión
+
+menu-file-open = Abrir…
+menu-file-save = Guardar
+menu-file-save-as = Guardar como…
+menu-file-recent = Archivos recientes
+dialog-saving = Guardando la sesión…
+dialog-opening = Abriendo la sesión…
+dialog-open-title = Abrir una sesión
+dialog-save-title = Guardar la sesión
+dialog-filter-session = Sesiones del analizador lógico
+title-untitled = Captura sin título
+notice-view-newer = Los ajustes de vista de este archivo proceden de una versión más reciente y no se aplicaron. Permanecen tal cual en el archivo.

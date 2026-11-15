@@ -105,3 +105,17 @@ marker-measure-second = Zweite Messmarke
 measure-distance = Abstand
 measure-frequency = Frequenz
 measure-pick = Wählen Sie zwei Markierungen, um die Zeit dazwischen zu messen.
+
+### Sitzungsdateien
+
+menu-file-open = Öffnen…
+menu-file-save = Speichern
+menu-file-save-as = Speichern unter…
+menu-file-recent = Zuletzt verwendet
+dialog-saving = Sitzung wird gespeichert…
+dialog-opening = Sitzung wird geöffnet…
+dialog-open-title = Sitzung öffnen
+dialog-save-title = Sitzung speichern
+dialog-filter-session = Logikanalysator-Sitzungen
+title-untitled = Unbenannte Aufnahme
+notice-view-newer = Die Ansichtseinstellungen dieser Datei stammen aus einer neueren Version und wurden nicht angewendet. Sie bleiben unverändert in der Datei.

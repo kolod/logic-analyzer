@@ -74,6 +74,8 @@ pub enum Action {
     Command(Command),
     /// Open the dialog that asks for a file to open, then send `OpenSession`.
     OpenFile,
+    /// Save to the current file, or ask for a file name when there is none yet.
+    SaveFile,
     /// Open the dialog that asks for a file name, then send `SaveSessionAs`.
     SaveFileAs,
     /// Open the settings dialog.
@@ -101,8 +103,12 @@ pub enum Action {
 pub enum EnabledWhen {
     /// Always.
     Always,
-    /// Nothing is running.
+    /// Nothing is running (no capture, no save, no load).
     Idle,
+    /// No save or load is running.
+    NoOperation,
+    /// A capture is on screen and nothing is running.
+    CanSave,
     /// A capture is running.
     Capturing,
     /// A capture is on screen.
@@ -119,7 +125,13 @@ impl EnabledWhen {
     pub fn is_enabled(self, state: &State) -> bool {
         match self {
             EnabledWhen::Always => true,
-            EnabledWhen::Idle => state.activity == Activity::Idle,
+            EnabledWhen::Idle => state.activity == Activity::Idle && state.operation.is_none(),
+            EnabledWhen::NoOperation => state.operation.is_none(),
+            EnabledWhen::CanSave => {
+                state.capture.is_some()
+                    && state.activity == Activity::Idle
+                    && state.operation.is_none()
+            }
             EnabledWhen::Capturing => state.activity == Activity::Capturing,
             EnabledWhen::CaptureExists => state.capture.is_some(),
             EnabledWhen::MarkersExist => !state.markers.list.is_empty(),
@@ -170,6 +182,24 @@ pub fn table() -> Vec<ShortcutEntry> {
             ["menu-file", "menu-file-new"],
             Some(Accelerator::ctrl("N")),
             EnabledWhen::Idle,
+        ),
+        ShortcutEntry::new(
+            Action::OpenFile,
+            ["menu-file", "menu-file-open"],
+            Some(Accelerator::ctrl("O")),
+            EnabledWhen::NoOperation,
+        ),
+        ShortcutEntry::new(
+            Action::SaveFile,
+            ["menu-file", "menu-file-save"],
+            Some(Accelerator::ctrl("S")),
+            EnabledWhen::CanSave,
+        ),
+        ShortcutEntry::new(
+            Action::SaveFileAs,
+            ["menu-file", "menu-file-save-as"],
+            Some(Accelerator::ctrl_shift("S")),
+            EnabledWhen::CanSave,
         ),
         ShortcutEntry::new(
             Action::Command(Command::Quit),

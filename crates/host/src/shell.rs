@@ -242,7 +242,7 @@ impl Shell {
     /// How often the shell wants to be polled.
     #[must_use]
     pub fn wants_ticks(&self) -> Tick {
-        if self.running.is_some() {
+        if self.running.is_some() || self.operation.is_some() {
             Tick::Fast
         } else {
             Tick::Slow

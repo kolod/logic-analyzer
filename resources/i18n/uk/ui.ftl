@@ -105,3 +105,17 @@ marker-measure-second = Друга позначка вимірювання
 measure-distance = Відстань
 measure-frequency = Частота
 measure-pick = Виберіть дві позначки, щоб виміряти час між ними.
+
+### Файли сесій
+
+menu-file-open = Відкрити…
+menu-file-save = Зберегти
+menu-file-save-as = Зберегти як…
+menu-file-recent = Нещодавні файли
+dialog-saving = Збереження сесії…
+dialog-opening = Відкриття сесії…
+dialog-open-title = Відкрити сесію
+dialog-save-title = Зберегти сесію
+dialog-filter-session = Сесії логічного аналізатора
+title-untitled = Захоплення без назви
+notice-view-newer = Налаштування вигляду в цьому файлі походять із новішої версії й не були застосовані. Вони залишаються у файлі без змін.

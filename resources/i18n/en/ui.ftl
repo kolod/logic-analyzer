@@ -191,3 +191,28 @@ measure-distance = Distance
 measure-frequency = Frequency
 # Hint shown when fewer than two markers are chosen for a measurement.
 measure-pick = Choose two markers to measure the time between them.
+
+### Session files
+
+# Open a saved session file.
+menu-file-open = Open…
+# Save the capture to its session file.
+menu-file-save = Save
+# Save the capture to a new session file.
+menu-file-save-as = Save as…
+# Heading of the list of recently used session files in the File menu.
+menu-file-recent = Recent files
+# Shown while a session file is being written.
+dialog-saving = Saving the session…
+# Shown while a session file is being read.
+dialog-opening = Opening the session…
+# Title of the file chooser that opens a session.
+dialog-open-title = Open a session
+# Title of the file chooser that saves a session.
+dialog-save-title = Save the session
+# Name of the file type filter for session files (.lasession).
+dialog-filter-session = Logic analyzer sessions
+# The window title of a capture that has no file yet.
+title-untitled = Untitled capture
+# Information: the file stores view settings written by a newer version.
+notice-view-newer = The view settings in this file come from a newer version and were not applied. They stay in the file as they are.
