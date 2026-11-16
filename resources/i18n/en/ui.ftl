@@ -173,6 +173,8 @@ capture-length-small = That is less than one sample at this sample rate.
 capture-length-large = That is longer than a capture can be.
 capture-length-no-rate = Set the sample rate first.
 capture-channels = Channels to record
+capture-channels-all = All
+capture-channels-none = None
 capture-no-channel = No channel is chosen: choose at least one to start.
 # The default name of a marker; the argument is its number.
 marker-default = Marker { $number }

@@ -78,6 +78,8 @@ pub enum Message {
     CloseRequested,
     /// A channel was shown or hidden.
     ChannelVisible(u8, bool),
+    /// All the channels (`true`) or none (`false`) are recorded.
+    ChannelsAll(bool),
     /// Follow the newest data on or off.
     ToggleFollow,
     /// Open the folder with the log files.
@@ -358,6 +360,10 @@ struct ChannelEdit {
 
 /// The identity of the in-place editor, for focusing it.
 const NAME_EDITOR: &str = "channel-name-editor";
+
+/// The side of a channel button, and the gap between two: eight of them fit the 280 px panel.
+const CHANNEL_BUTTON: f32 = 28.0;
+const CHANNEL_GAP: f32 = 3.0;
 
 /// The index `SubmenuToggled` carries for the recent files of the File menu (not a table entry).
 const RECENT_SUBMENU: usize = usize::MAX;
@@ -1086,6 +1092,21 @@ impl App {
                 let follow = !self.shell.state().follow_latest;
                 self.run(Command::SetFollowLatest(follow))
             }
+            Message::ChannelsAll(on) => {
+                // One edit of the recording mask: the flags of the channels follow it.
+                let mask = if on {
+                    self.shell
+                        .state()
+                        .presentation
+                        .channels
+                        .iter()
+                        .filter(|c| c.index < 32)
+                        .fold(0_u32, |mask, c| mask | 1_u32 << c.index)
+                } else {
+                    0
+                };
+                self.run(Command::EditConfig(ConfigEdit::Channels(mask)))
+            }
             Message::ChannelVisible(channel, visible) => {
                 self.run(Command::SetChannelVisible { channel, visible })
             }
@@ -1494,8 +1515,9 @@ impl App {
             .then_some(table_index);
     }
 
-    /// The toolbar: Start and Stop, and what keeps Start from working.
-    fn toolbar(&self) -> Element<'_, Message> {
+    /// Start (or Stop while capturing) and what keeps Start from working, at the top of the
+    /// Capture view.
+    fn start_block(&self) -> Element<'_, Message> {
         let state = self.shell.state();
         let idle = state.activity == Activity::Idle;
         let localizer = self.shell.localizer();
@@ -1508,21 +1530,18 @@ impl App {
         } else {
             button(text(self.t("toolbar-stop"))).on_press(Message::Run(Command::StopCapture))
         };
-        let mut toolbar = column![container(row![start]).padding([6, 8])];
-        // "No channel is chosen" needs no message: the flags in the channel list show it, and
-        // Start stays unavailable.
+        let mut toolbar = column![start].spacing(4);
+        // "No channel is chosen" needs no message here: the channel buttons say it, and Start
+        // stays unavailable.
         for problem in state
             .config_problems
             .iter()
             .filter(|p| p.setting != la_host::devices::Setting::Channels)
         {
             toolbar = toolbar.push(
-                container(
-                    text(localizer.error_message_for_code(problem.code))
-                        .size(13)
-                        .style(text::danger),
-                )
-                .padding([0, 10]),
+                text(localizer.error_message_for_code(problem.code))
+                    .size(12)
+                    .style(text::danger),
             );
         }
         toolbar.into()
@@ -1605,6 +1624,7 @@ impl App {
         }
         let mut view = column![
             text(self.t("panel-capture")).size(14),
+            self.start_block(),
             labelled(self.t("toolbar-device"), device_picker.width(Fill).into()),
             labelled(self.t("toolbar-rate"), rate.into()),
             length_block,
@@ -2105,10 +2125,10 @@ impl App {
             state.presentation.channels.iter().collect();
         styles.sort_by_key(|s| s.index);
         let can_flag = state.activity == Activity::Idle;
-        let mut rows = column![].spacing(4);
+        let mut rows = column![].spacing(CHANNEL_GAP);
         debug_assert_eq!(styles.chunks(8).count(), Self::button_rows(styles.len()));
         for chunk in styles.chunks(8) {
-            let mut line = row![].spacing(4);
+            let mut line = row![].spacing(CHANNEL_GAP);
             for style in chunk {
                 let (index, on, colour) = (style.index, style.visible, style.colour);
                 let label = self.shell.localizer().message(
@@ -2121,13 +2141,12 @@ impl App {
                     style.name.clone()
                 };
                 let press = button(
-                    text(index.to_string())
-                        .size(12)
-                        .width(Fill)
-                        .align_x(iced::alignment::Horizontal::Center),
+                    container(text(index.to_string()).size(12))
+                        .center_x(Fill)
+                        .center_y(Fill),
                 )
-                .width(32)
-                .height(32)
+                .width(CHANNEL_BUTTON)
+                .height(CHANNEL_BUTTON)
                 .padding(0)
                 .style(move |theme: &Theme, status| {
                     crate::theme::channel_button_style(variant, colour, on, theme, status)
@@ -2151,10 +2170,21 @@ impl App {
                     .style(text::danger),
             );
         }
-        block = block.push(
-            button(text(self.t("channel-reset")).size(13))
+        let small = |label: String, message: Message| {
+            button(text(label).size(13))
                 .style(button::secondary)
-                .on_press(Message::Run(Command::ResetPresentation)),
+                .on_press_maybe(can_flag.then_some(message))
+        };
+        block = block.push(
+            row![
+                small(
+                    self.t("channel-reset"),
+                    Message::Run(Command::ResetPresentation)
+                ),
+                small(self.t("capture-channels-all"), Message::ChannelsAll(true)),
+                small(self.t("capture-channels-none"), Message::ChannelsAll(false)),
+            ]
+            .spacing(4),
         );
         block.into()
     }
@@ -2360,7 +2390,7 @@ impl App {
             None => signal.into(),
         };
 
-        let mut content = column![self.menu_bar(), self.toolbar()];
+        let mut content = column![self.menu_bar()];
         if let Some(banner) = self.banner() {
             content = content.push(banner);
         }
@@ -2722,6 +2752,113 @@ mod tests {
             drop(ui);
             let _ = app.update(Message::ChannelNameCancel);
             assert!(app.editing.is_none());
+        }
+    }
+
+    #[test]
+    fn eight_channel_buttons_fit_a_row_of_the_panel() {
+        // The panel is 280 px, with 6 px on the left and 18 px on the right of its content.
+        let row = 8.0 * CHANNEL_BUTTON + 7.0 * CHANNEL_GAP;
+        let room = crate::side_panel::PANEL_WIDTH - 6.0 - 18.0;
+        assert!(row <= room, "{row} against {room}");
+    }
+
+    #[test]
+    fn start_is_in_the_capture_view_and_not_in_a_toolbar() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("start-in-panel");
+        let start = app.t("toolbar-start");
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(900.0, 600.0),
+            app.view(),
+        );
+        assert!(
+            ui.find(start.as_str()).is_ok(),
+            "Start is in the Capture view"
+        );
+        drop(ui);
+        // A slow capture is running: Stop replaces Start.
+        for edit in [
+            ConfigEdit::Realtime(true),
+            ConfigEdit::SampleRate(1_000),
+            ConfigEdit::Length(100_000),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        let outcome = app.shell.apply(Command::StartCapture);
+        if matches!(outcome, Outcome::NeedsDecision(_)) {
+            let _ = app.shell.apply(Command::Decide(Decision::Discard));
+        }
+        assert_eq!(app.shell.state().activity, Activity::Capturing);
+        let stop = app.t("toolbar-stop");
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(900.0, 600.0),
+            app.view(),
+        );
+        assert!(
+            ui.find(stop.as_str()).is_ok(),
+            "Stop replaces it while capturing"
+        );
+        drop(ui);
+        // With another view shown the panel has no Start.
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Markers));
+        let ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(900.0, 600.0),
+            app.view(),
+        );
+        let mut ui = ui;
+        assert!(ui.find(stop.as_str()).is_err());
+    }
+
+    #[test]
+    fn all_and_none_switch_every_channel_at_once() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("all-none");
+        let flags = |app: &App| -> Vec<bool> {
+            let mut list: Vec<_> = app
+                .shell
+                .state()
+                .presentation
+                .channels
+                .iter()
+                .map(|c| (c.index, c.visible))
+                .collect();
+            list.sort_unstable();
+            list.into_iter().map(|(_, v)| v).collect()
+        };
+        let _ = app.update(Message::ChannelsAll(false));
+        assert!(flags(&app).iter().all(|v| !v));
+        assert_eq!(app.shell.state().config.enabled_channels, 0);
+        let _ = app.update(Message::ChannelsAll(true));
+        assert!(flags(&app).iter().all(|v| *v));
+        assert_eq!(
+            app.shell.state().config.enabled_channels.count_ones() as usize,
+            app.shell.state().presentation.channels.len().min(32)
+        );
+        // The buttons and the two new ones render in three languages.
+        for language in [
+            la_i18n::Language::En,
+            la_i18n::Language::De,
+            la_i18n::Language::Ja,
+        ] {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 560.0),
+                app.view(),
+            );
+            for key in [
+                "capture-channels-all",
+                "capture-channels-none",
+                "channel-reset",
+            ] {
+                let label = app.t(key);
+                assert!(ui.find(label.as_str()).is_ok(), "{language:?} {key}");
+            }
         }
     }
 

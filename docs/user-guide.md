@@ -9,9 +9,8 @@ Supported systems: Windows 10 and 11, and Debian 13.
 ## Starting
 
 Run `logic-analyzer` (after `cargo build --release -p la-app` the program is
-`target/release/logic-analyzer`). The window opens with the toolbar (**Start** and **Stop**) on top,
-the signal area in the middle, a panel and a strip of icons at the right edge, and a status line at
-the bottom. The window and the executable carry the application icon, and session files have an icon
+`target/release/logic-analyzer`). The window opens with the signal area in the middle, a panel and a
+strip of icons at the right edge, and a status line at the bottom. The window and the executable carry the application icon, and session files have an icon
 of their own once an installer registers them (`packaging/`). The first
 start uses your system language when it is one of English, German, French, Spanish, Japanese or
 Ukrainian, and English otherwise; you can change it at any time in the settings.
@@ -66,8 +65,9 @@ the next start.
 
 ### The Capture view
 
-It holds the device, the sample rate, the length in seconds, the settings of the simulated device and
-the **channels to record**: one button for each channel, eight to a row. A button with only a frame
+It holds **Start** (it becomes **Stop** while a capture runs), the device, the sample rate, the length
+in seconds, the settings of the simulated device and the **channels to record**: one button for each
+channel, eight to a row, with **All** and **None** beside **Reset channels** to switch them all at once. A button with only a frame
 and a number in the channel's colour is **off**; a filled one is **on**. Click one to switch the
 channel. Any combination works (for example channels 0, 2 and 5 only); with none on, **Start** stays
 unavailable and the view says why. The buttons are locked while a capture runs, because what that

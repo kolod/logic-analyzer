@@ -38,13 +38,13 @@ For a lane with its top `y` and height `h`, after the vertical offset:
 - Click on an icon: `SetSidePanel(that view)`; on the icon of the shown view: `SetSidePanel(Hidden)`.
 - The panel width is fixed (280 px) in this feature; the signals take the rest, also at the minimum
   window width.
-- The Capture view, top to bottom: device, sample rate, length in seconds (with the samples beside it),
+- The Capture view, top to bottom: Start (Stop while a capture runs) and what keeps it from working, device, sample rate, length in seconds (with the samples beside it),
   seed, density, real time (the last three only for the simulated device), the channels to record, the
   explanations of problems.
-- **Channel buttons**: 8 per row, 32 px square, the number of the channel inside (the name is too long);
+- **Channel buttons**: 8 per row, 28 px square with a 3 px gap (eight fit the 280 px panel), centred number, the number of the channel inside (the name is too long);
   off: border and number in the channel's colour on the panel background; on: border and background in the
   channel's colour and the number in black or white, whichever contrasts better. They send
-  `SetChannelVisible`; they are inert while a capture runs; the tooltip is the channel's name.
+  `SetChannelVisible`; **All** and **None** beside **Reset channels** set the whole recording mask at once; they are inert while a capture runs; the tooltip is the channel's name.
 
 ## The edge buttons
 
