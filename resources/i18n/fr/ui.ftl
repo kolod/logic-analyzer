@@ -34,7 +34,6 @@ menu-capture-stop = Arrêter
 
 toolbar-device = Appareil
 toolbar-rate = Fréquence d'échantillonnage (Hz)
-toolbar-length = Durée (échantillons)
 toolbar-seed = Graine
 toolbar-seed-random = aléatoire
 toolbar-profile = Signal
@@ -70,10 +69,6 @@ menu-view-pan-right = Défiler à droite
 menu-view-page-left = Page précédente
 menu-view-page-right = Page suivante
 menu-capture-follow = Suivre les dernières données
-panel-channels = Canaux
-channel-move-up = Monter
-channel-move-down = Descendre
-channel-colour = Couleur
 channel-reset = Réinitialiser les canaux
 
 ### Messages
@@ -99,6 +94,15 @@ panel-capture = Capture
 panel-view-capture = Réglages de la capture
 panel-view-decoders = Décodeurs
 panel-view-markers = Marqueurs et mesures
+capture-length-seconds = Durée (secondes)
+capture-length-samples = Échantillons : { $count }
+capture-length-invalid = Saisissez la durée en secondes, par exemple 2,5.
+capture-length-decimals = Au plus neuf chiffres après la virgule.
+capture-length-small = C'est moins d'un échantillon à cette fréquence d'échantillonnage.
+capture-length-large = C'est plus long qu'une capture ne peut l'être.
+capture-length-no-rate = Réglez d'abord la fréquence d'échantillonnage.
+capture-channels = Canaux à enregistrer
+capture-no-channel = Aucun canal choisi : choisissez-en au moins un pour démarrer.
 marker-default = Repère { $number }
 marker-go = Aller au repère
 marker-remove = Supprimer

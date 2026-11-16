@@ -34,7 +34,6 @@ menu-capture-stop = Зупинити
 
 toolbar-device = Пристрій
 toolbar-rate = Частота дискретизації (Гц)
-toolbar-length = Довжина (відліків)
 toolbar-seed = Зерно
 toolbar-seed-random = випадкове
 toolbar-profile = Сигнал
@@ -70,10 +69,6 @@ menu-view-pan-right = Прокрутити праворуч
 menu-view-page-left = Сторінка назад
 menu-view-page-right = Сторінка вперед
 menu-capture-follow = Стежити за новими даними
-panel-channels = Канали
-channel-move-up = Вгору
-channel-move-down = Вниз
-channel-colour = Колір
 channel-reset = Скинути канали
 
 ### Повідомлення
@@ -99,6 +94,15 @@ panel-capture = Захоплення
 panel-view-capture = Налаштування захоплення
 panel-view-decoders = Декодери
 panel-view-markers = Маркери та вимірювання
+capture-length-seconds = Тривалість (секунди)
+capture-length-samples = Відліків: { $count }
+capture-length-invalid = Введіть тривалість у секундах, наприклад 2,5.
+capture-length-decimals = Не більше дев'яти цифр після коми.
+capture-length-small = Це менше за один відлік за такої частоти дискретизації.
+capture-length-large = Це довше, ніж може бути захоплення.
+capture-length-no-rate = Спершу встановіть частоту дискретизації.
+capture-channels = Канали для запису
+capture-no-channel = Жодного каналу не вибрано: виберіть хоча б один, щоб почати.
 marker-default = Позначка { $number }
 marker-go = До позначки
 marker-remove = Видалити

@@ -14,6 +14,7 @@
 pub mod axis;
 pub mod capture;
 mod command;
+pub mod config;
 mod decoder_sessions;
 pub mod decoders;
 pub mod devices;

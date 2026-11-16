@@ -58,8 +58,6 @@ menu-capture-stop = Stop
 toolbar-device = Device
 # Label of the sample rate field (the value is in hertz).
 toolbar-rate = Sample rate (Hz)
-# Label of the capture length field (the value is a number of samples).
-toolbar-length = Length (samples)
 # Label of the seed of the simulated signals.
 toolbar-seed = Seed
 # Placeholder of the seed field: a new seed is chosen at every start.
@@ -127,14 +125,6 @@ menu-view-page-left = Page left
 menu-view-page-right = Page right
 # Keep the view at the newest data of a running capture.
 menu-capture-follow = Follow latest data
-# Title of the panel that lists the channels.
-panel-channels = Channels
-# Tooltip of the button that moves a channel up in the order.
-channel-move-up = Move up
-# Tooltip of the button that moves a channel down in the order.
-channel-move-down = Move down
-# Tooltip of the button that changes the colour of a channel.
-channel-colour = Colour
 # Button: restore the default names, colours, order and visibility.
 channel-reset = Reset channels
 
@@ -175,6 +165,15 @@ panel-capture = Capture
 panel-view-capture = Capture settings
 panel-view-decoders = Decoders
 panel-view-markers = Markers and measuring
+capture-length-seconds = Length (seconds)
+capture-length-samples = Samples: { $count }
+capture-length-invalid = Enter the length as a number of seconds, such as 2.5.
+capture-length-decimals = Use at most nine digits after the point.
+capture-length-small = That is less than one sample at this sample rate.
+capture-length-large = That is longer than a capture can be.
+capture-length-no-rate = Set the sample rate first.
+capture-channels = Channels to record
+capture-no-channel = No channel is chosen: choose at least one to start.
 # The default name of a marker; the argument is its number.
 marker-default = Marker { $number }
 # Tooltip of the button that moves the view to a marker.

@@ -34,7 +34,6 @@ menu-capture-stop = Detener
 
 toolbar-device = Dispositivo
 toolbar-rate = Frecuencia de muestreo (Hz)
-toolbar-length = Duración (muestras)
 toolbar-seed = Semilla
 toolbar-seed-random = aleatoria
 toolbar-profile = Señal
@@ -70,10 +69,6 @@ menu-view-pan-right = Desplazar a la derecha
 menu-view-page-left = Página anterior
 menu-view-page-right = Página siguiente
 menu-capture-follow = Seguir los datos más recientes
-panel-channels = Canales
-channel-move-up = Subir
-channel-move-down = Bajar
-channel-colour = Color
 channel-reset = Restablecer canales
 
 ### Mensajes
@@ -99,6 +94,15 @@ panel-capture = Captura
 panel-view-capture = Ajustes de la captura
 panel-view-decoders = Decodificadores
 panel-view-markers = Marcadores y medidas
+capture-length-seconds = Duración (segundos)
+capture-length-samples = Muestras: { $count }
+capture-length-invalid = Escriba la duración en segundos, por ejemplo 2,5.
+capture-length-decimals = Use como máximo nueve cifras decimales.
+capture-length-small = Es menos de una muestra con esta frecuencia de muestreo.
+capture-length-large = Es más larga de lo que puede ser una captura.
+capture-length-no-rate = Primero fije la frecuencia de muestreo.
+capture-channels = Canales a grabar
+capture-no-channel = No hay ningún canal elegido: elija al menos uno para empezar.
 marker-default = Marcador { $number }
 marker-go = Ir al marcador
 marker-remove = Quitar

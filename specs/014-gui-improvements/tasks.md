@@ -216,7 +216,7 @@ panel, and that the choice returns after a restart.
 
 ### Tests for User Story 3 (write first; they must fail)
 
-- [ ] T023 [P] [US3] `crates/host/tests/seconds.rs`: `samples_for_seconds` by hand: (1_000_000, "2.5") = 2_500_000, (1_000_000,
+- [X] T023 [P] [US3] `crates/host/tests/seconds.rs`: `samples_for_seconds` by hand: (1_000_000, "2.5") = 2_500_000, (1_000_000,
   "1") = 1_000_000, (1_000, "0.0004") is refused (less than a sample is zero), (3, "0.5") = 2 (1.5 rounds up),
   (3, "0.1666666667") = 1, (1_000_000_000, "0.000000001") = 1, (u64::MAX, "2") is refused (too large), rate 0 is
   refused, "", " ", "-1", "1e3", "abc", "1,5", "1.", ".5" (accepted as 0.5? the contract says digits on both sides of
@@ -225,34 +225,34 @@ panel, and that the choice returns after a restart.
   "2.5", (1_000_000, 1) = "0.000001", (1_000, 1) = "0.001", (3, 1) = "0.333333333", (1, 7) = "7", 0 samples is
   "0"; a property test (an LCG) that for rates that divide 10^9 the round trip is exact and for others within
   one sample.
-- [ ] T024 [P] [US3] A unit test in `crates/app/src/theme.rs` for `channel_button_text(colour_background) -> black or white`:
+- [X] T024 [P] [US3] A unit test in `crates/app/src/theme.rs` for `channel_button_text(colour_background) -> black or white`:
   for every palette entry in both themes the chosen text colour has a contrast ratio of at least 3 : 1 on the
   background (WCAG relative luminance, written in the test by hand), and for pure black and pure white
   backgrounds the answers are white and black.
-- [ ] T025 [P] [US3] Headless rendering tests in `crates/app/src/app.rs`: the Capture view with a device of 8, 16 and 32
+- [X] T025 [P] [US3] Headless rendering tests in `crates/app/src/app.rs`: the Capture view with a device of 8, 16 and 32
   channels (one, two and four rows of buttons), with channels on and off, in English, German and Japanese at the
   minimum window size without clipping; the length field with seconds and the samples beside it; a capture
   running (buttons inert).
-- [ ] T026 [P] [US3] An application test (no display) for the state of the length: typing "2.5" with the rate 1,000,000
+- [X] T026 [P] [US3] An application test (no display) for the state of the length: typing "2.5" with the rate 1,000,000
   sends `ConfigEdit::Length(2_500_000)`; changing the rate to 2,000,000 keeps "2.5" in the field and sends
   `ConfigEdit::Length(5_000_000)`; an invalid text sends nothing and shows the reason; the samples beside the
   field follow.
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] `crates/host/src/devices.rs` (or a new `config.rs` declared in `lib.rs`): `samples_for_seconds`,
+- [X] T027 [US3] `crates/host/src/devices.rs` (or a new `config.rs` declared in `lib.rs`): `samples_for_seconds`,
   `SecondsError`, `seconds_for_samples` per the data model, integer arithmetic only. T023 passes.
-- [ ] T028 [US3] `crates/app/src/theme.rs`: `channel_button_style(colour, on, theme) -> button::Style` (off: text and border in
+- [X] T028 [US3] `crates/app/src/theme.rs`: `channel_button_style(colour, on, theme) -> button::Style` (off: text and border in
   the channel colour on the panel background; on: border and background in the channel colour, text by
   `channel_button_text`), and `channel_button_text`. T024 passes.
-- [ ] T029 [US3] `crates/app/src/app.rs`: `capture_panel()` is finished: the length is entered in seconds with the
+- [X] T029 [US3] `crates/app/src/app.rs`: `capture_panel()` is finished: the length is entered in seconds with the
   samples beside it (`length_seconds_text` state, `Message::LengthSecondsText`), the rate change recomputes the
   samples from the seconds, the channel buttons (eight per row, 32 px, the channel number inside, the name as
   tooltip, `SetChannelVisible`, inert while a capture runs), "Reset channels" (`ResetPresentation`) below them,
   the reason Start is unavailable when no channel is on (the key `capture-no-channel`), the explanations of
   device problems; keys `capture-length-seconds`, `capture-length-samples`, `capture-channels`,
   `capture-reset-channels` (reuse the existing one if it exists) in six languages. T025 and T026 pass.
-- [ ] T030 [US3] Remove the Channels panel: delete `channel_panel()` and its messages (`ChannelName`, `ChannelVisible`,
+- [X] T030 [US3] Remove the Channels panel: delete `channel_panel()` and its messages (`ChannelName`, `ChannelVisible`,
   `ChannelColour`, `ChannelMove`) and the keys that only it used from the six `ui.ftl` files (the parity test
   finds an unused key); update the tests that used them (`app.rs` tests, `docs`). `cargo test -p la-app` passes.
 

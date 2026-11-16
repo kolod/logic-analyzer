@@ -34,7 +34,6 @@ menu-capture-stop = Anhalten
 
 toolbar-device = Gerät
 toolbar-rate = Abtastrate (Hz)
-toolbar-length = Länge (Samples)
 toolbar-seed = Startwert
 toolbar-seed-random = zufällig
 toolbar-profile = Signal
@@ -70,10 +69,6 @@ menu-view-pan-right = Nach rechts
 menu-view-page-left = Seite zurück
 menu-view-page-right = Seite vor
 menu-capture-follow = Neueste Daten folgen
-panel-channels = Kanäle
-channel-move-up = Nach oben
-channel-move-down = Nach unten
-channel-colour = Farbe
 channel-reset = Kanäle zurücksetzen
 
 ### Meldungen
@@ -99,6 +94,15 @@ panel-capture = Aufnahme
 panel-view-capture = Aufnahmeeinstellungen
 panel-view-decoders = Decoder
 panel-view-markers = Marker und Messen
+capture-length-seconds = Länge (Sekunden)
+capture-length-samples = Abtastwerte: { $count }
+capture-length-invalid = Geben Sie die Länge als Zahl in Sekunden ein, zum Beispiel 2,5.
+capture-length-decimals = Höchstens neun Stellen nach dem Komma.
+capture-length-small = Das ist bei dieser Abtastrate weniger als ein Abtastwert.
+capture-length-large = Das ist länger, als eine Aufnahme sein kann.
+capture-length-no-rate = Stellen Sie zuerst die Abtastrate ein.
+capture-channels = Aufzunehmende Kanäle
+capture-no-channel = Kein Kanal gewählt: Wählen Sie mindestens einen zum Starten.
 marker-default = Markierung { $number }
 marker-go = Zur Markierung
 marker-remove = Entfernen

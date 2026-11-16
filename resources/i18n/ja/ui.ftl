@@ -34,7 +34,6 @@ menu-capture-stop = 停止
 
 toolbar-device = デバイス
 toolbar-rate = サンプルレート (Hz)
-toolbar-length = 長さ (サンプル数)
 toolbar-seed = シード
 toolbar-seed-random = ランダム
 toolbar-profile = 信号
@@ -70,10 +69,6 @@ menu-view-pan-right = 右へ移動
 menu-view-page-left = 前のページ
 menu-view-page-right = 次のページ
 menu-capture-follow = 最新データを追従
-panel-channels = チャンネル
-channel-move-up = 上へ
-channel-move-down = 下へ
-channel-colour = 色
 channel-reset = チャンネルをリセット
 
 ### メッセージ
@@ -99,6 +94,15 @@ panel-capture = キャプチャ
 panel-view-capture = キャプチャの設定
 panel-view-decoders = デコーダー
 panel-view-markers = マーカーと測定
+capture-length-seconds = 長さ(秒)
+capture-length-samples = サンプル数: { $count }
+capture-length-invalid = 長さを秒数で入力してください(例: 2.5)。
+capture-length-decimals = 小数点以下は9桁までです。
+capture-length-small = このサンプルレートでは1サンプルに満たない長さです。
+capture-length-large = キャプチャの上限を超える長さです。
+capture-length-no-rate = 先にサンプルレートを設定してください。
+capture-channels = 記録するチャンネル
+capture-no-channel = チャンネルが選ばれていません。開始するには1つ以上選んでください。
 marker-default = マーカー { $number }
 marker-go = マーカーへ移動
 marker-remove = 削除

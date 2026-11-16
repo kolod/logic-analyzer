@@ -14,7 +14,6 @@ use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, wi
 use la_decoders::setup::{Source, Value};
 use la_devices::DeviceId;
 use la_host::decoders::{CatalogueOptionKind, InstanceState};
-use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::shortcuts::{Accelerator, Action, ShortcutEntry};
 use la_host::window::ViewSize;
 use la_host::{
@@ -77,14 +76,8 @@ pub enum Message {
     SystemTheme(theme::Mode),
     /// The window asked to close.
     CloseRequested,
-    /// A channel was renamed in the channel panel.
-    ChannelName(u8, String),
     /// A channel was shown or hidden.
     ChannelVisible(u8, bool),
-    /// The colour of a channel moves to the next palette entry.
-    ChannelColour(u8),
-    /// A channel moves one position up (negative) or down (positive) in the order.
-    ChannelMove(usize, i8),
     /// Follow the newest data on or off.
     ToggleFollow,
     /// Open the folder with the log files.
@@ -334,8 +327,8 @@ pub struct App {
     open_menu: Option<usize>,
     rate_text: String,
     length_text: String,
+    length_error: Option<la_host::config::SecondsError>,
     seed_text: String,
-    names: std::collections::BTreeMap<u8, String>,
     marker_names: std::collections::BTreeMap<u32, String>,
     decoder_names: std::collections::BTreeMap<u32, String>,
     option_texts: std::collections::BTreeMap<(u32, String), String>,
@@ -385,8 +378,8 @@ impl App {
             open_menu: None,
             rate_text: String::new(),
             length_text: String::new(),
+            length_error: None,
             seed_text: String::new(),
-            names: std::collections::BTreeMap::new(),
             marker_names: std::collections::BTreeMap::new(),
             decoder_names: std::collections::BTreeMap::new(),
             option_texts: std::collections::BTreeMap::new(),
@@ -399,7 +392,6 @@ impl App {
             editing: None,
         };
         app.sync_texts();
-        app.sync_names();
         app.refresh();
         app
     }
@@ -432,7 +424,12 @@ impl App {
     fn sync_texts(&mut self) {
         let config = &self.shell.state().config;
         self.rate_text = config.sample_rate_hz.to_string();
-        self.length_text = config.length.to_string();
+        // What the user typed stays while it still means the length in the configuration.
+        let (rate, length) = (config.sample_rate_hz, config.length);
+        if la_host::config::samples_for_seconds(rate, &self.length_text) != Ok(length) {
+            self.length_text = la_host::config::seconds_for_samples(rate, length);
+            self.length_error = None;
+        }
         self.seed_text = config.seed.map_or_else(String::new, |s| s.to_string());
     }
 
@@ -715,18 +712,6 @@ impl App {
             .collect();
     }
 
-    /// Copies the channel names of the presentation into the text fields.
-    fn sync_names(&mut self) {
-        self.names = self
-            .shell
-            .state()
-            .presentation
-            .channels
-            .iter()
-            .map(|style| (style.index, style.name.clone()))
-            .collect();
-    }
-
     /// Recomputes the frame plan and the canvas cache when what they depend on changed.
     fn refresh(&mut self) {
         let state = self.shell.state();
@@ -816,13 +801,9 @@ impl App {
 
     /// Runs a host command and turns its outcome into a task.
     fn run(&mut self, command: Command) -> Task<Message> {
-        let renames = matches!(
-            command,
-            Command::RenameChannel { .. } | Command::RenameMarker { .. }
-        );
+        let renames = matches!(command, Command::RenameMarker { .. });
         let outcome = self.shell.apply(command);
         if !renames {
-            self.sync_names();
             self.sync_marker_names();
         }
         self.after(&outcome)
@@ -939,14 +920,10 @@ impl App {
                 Task::none()
             }
             Message::ChannelNameAccept => match self.editing.take() {
-                Some(edit) if edit.text != edit.original => {
-                    let task = self.run(Command::RenameChannel {
-                        channel: edit.channel,
-                        name: edit.text,
-                    });
-                    self.sync_names();
-                    task
-                }
+                Some(edit) if edit.text != edit.original => self.run(Command::RenameChannel {
+                    channel: edit.channel,
+                    name: edit.text,
+                }),
                 _ => Task::none(),
             },
             Message::ChannelNameCancel => {
@@ -1092,39 +1069,8 @@ impl App {
                 let follow = !self.shell.state().follow_latest;
                 self.run(Command::SetFollowLatest(follow))
             }
-            Message::ChannelName(channel, name) => {
-                self.names.insert(channel, name.clone());
-                self.run(Command::RenameChannel { channel, name })
-            }
             Message::ChannelVisible(channel, visible) => {
                 self.run(Command::SetChannelVisible { channel, visible })
-            }
-            Message::ChannelColour(channel) => {
-                let next = self
-                    .shell
-                    .state()
-                    .presentation
-                    .channels
-                    .iter()
-                    .find(|style| style.index == channel)
-                    .map(|style| match style.colour {
-                        Colour::Palette(index) => {
-                            Colour::Palette(index.saturating_add(1) % PALETTE_SIZE)
-                        }
-                        Colour::Rgb(..) => Colour::Palette(channel % PALETTE_SIZE),
-                    });
-                match next {
-                    Some(colour) => self.run(Command::SetChannelColour { channel, colour }),
-                    None => Task::none(),
-                }
-            }
-            Message::ChannelMove(position, direction) => {
-                let to = if direction < 0 {
-                    position.saturating_sub(1)
-                } else {
-                    position.saturating_add(1)
-                };
-                self.run(Command::MoveChannel { from: position, to })
             }
             Message::AreaResized(width) => {
                 let pixels = width.max(1.0) as u32;
@@ -1229,15 +1175,37 @@ impl App {
             Message::RateText(text) => {
                 self.rate_text.clone_from(&text);
                 match text.trim().parse::<u64>() {
-                    Ok(hz) => self.run(Command::EditConfig(ConfigEdit::SampleRate(hz))),
+                    Ok(hz) => {
+                        let rate = self.run(Command::EditConfig(ConfigEdit::SampleRate(hz)));
+                        // The length is kept in seconds: the samples follow the rate.
+                        match la_host::config::samples_for_seconds(hz, &self.length_text) {
+                            Ok(samples) => {
+                                self.length_error = None;
+                                let length =
+                                    self.run(Command::EditConfig(ConfigEdit::Length(samples)));
+                                Task::batch([rate, length])
+                            }
+                            Err(error) => {
+                                self.length_error = Some(error);
+                                rate
+                            }
+                        }
+                    }
                     Err(_) => Task::none(),
                 }
             }
             Message::LengthText(text) => {
                 self.length_text.clone_from(&text);
-                match text.trim().parse::<u64>() {
-                    Ok(samples) => self.run(Command::EditConfig(ConfigEdit::Length(samples))),
-                    Err(_) => Task::none(),
+                let rate = self.shell.state().config.sample_rate_hz;
+                match la_host::config::samples_for_seconds(rate, &text) {
+                    Ok(samples) => {
+                        self.length_error = None;
+                        self.run(Command::EditConfig(ConfigEdit::Length(samples)))
+                    }
+                    Err(error) => {
+                        self.length_error = Some(error);
+                        Task::none()
+                    }
                 }
             }
             Message::SeedText(text) => {
@@ -1454,11 +1422,36 @@ impl App {
             realtime = realtime.on_toggle(Message::RealtimeToggled);
         }
         let _ = &mut profile_picker;
+        let localizer = self.shell.localizer();
+        let samples_note = text(localizer.message(
+            &Key::from_static("capture-length-samples"),
+            &Args::new().uint("count", state.config.length),
+        ))
+        .size(12);
+        let mut length_block = column![
+            labelled(self.t("capture-length-seconds"), length.into()),
+            samples_note
+        ]
+        .spacing(2);
+        if let Some(error) = self.length_error {
+            length_block = length_block.push(
+                text(self.t(match error {
+                    la_host::config::SecondsError::Empty
+                    | la_host::config::SecondsError::NotANumber => "capture-length-invalid",
+                    la_host::config::SecondsError::TooManyDecimals => "capture-length-decimals",
+                    la_host::config::SecondsError::TooSmall => "capture-length-small",
+                    la_host::config::SecondsError::TooLarge => "capture-length-large",
+                    la_host::config::SecondsError::NoRate => "capture-length-no-rate",
+                }))
+                .size(12)
+                .style(text::danger),
+            );
+        }
         let mut view = column![
             text(self.t("panel-capture")).size(14),
             labelled(self.t("toolbar-device"), device_picker.width(Fill).into()),
             labelled(self.t("toolbar-rate"), rate.into()),
-            labelled(self.t("toolbar-length"), length.into()),
+            length_block,
             labelled(self.t("toolbar-seed"), seed.into()),
             labelled(self.t("toolbar-profile"), profile_picker.width(Fill).into()),
             realtime,
@@ -1470,9 +1463,7 @@ impl App {
             bottom: 6.0,
             left: 6.0,
         });
-        // For now the flags of the channels are the panel that was there before; the next step
-        // replaces it with the buttons of the capture view.
-        view = view.push(self.channel_panel());
+        view = view.push(self.channel_buttons());
         scrollable(view).height(Fill).into()
     }
 
@@ -1941,91 +1932,73 @@ impl App {
             .into()
     }
 
-    /// The panel that lists the channels: show, name, colour and order.
-    fn channel_panel(&self) -> Element<'_, Message> {
+    /// How many rows of eight buttons `channels` channels need.
+    fn button_rows(channels: usize) -> usize {
+        channels.div_ceil(8)
+    }
+
+    /// The channels to record, as buttons eight in a row: a channel that is off shows its number and
+    /// its border in its colour, one that is on is filled with its colour.
+    fn channel_buttons(&self) -> Element<'_, Message> {
         let state = self.shell.state();
-        let localizer = self.shell.localizer();
         let variant = self.variant;
-        let mut list = column![].spacing(4).padding(iced::Padding {
-            top: 6.0,
-            right: 18.0,
-            bottom: 6.0,
-            left: 6.0,
-        });
-        list = list.push(text(self.t("panel-channels")).size(14));
-        // The one flag of a channel shows it and makes the next capture record it; it is locked
-        // only while a capture runs, because what that capture records cannot change.
+        // The buttons are in the order of the channel numbers, not of the display order.
+        let mut styles: Vec<&la_host::presentation::ChannelStyle> =
+            state.presentation.channels.iter().collect();
+        styles.sort_by_key(|s| s.index);
         let can_flag = state.activity == Activity::Idle;
-        let last = state.presentation.channels.len().saturating_sub(1);
-        for (position, style) in state.presentation.channels.iter().enumerate() {
-            let default_label = localizer.message(
-                &Key::from_static("channel-default"),
-                &Args::new().uint("number", u64::from(style.index)),
-            );
-            let name = self.names.get(&style.index).map_or("", String::as_str);
-            let swatch = container(Space::new().width(14).height(14)).style({
-                let colour = variant.channel(style.colour);
-                move |_theme: &Theme| container::Style {
-                    background: Some(colour.into()),
-                    border: iced::Border {
-                        radius: 3.0.into(),
-                        ..iced::Border::default()
-                    },
-                    ..container::Style::default()
-                }
-            });
-            let index = style.index;
-            let line = row![
-                checkbox(style.visible).on_toggle_maybe(
-                    can_flag.then_some(move |v| Message::ChannelVisible(index, v)),
-                ),
-                text_input(&default_label, name)
-                    .size(13)
-                    .width(Fill)
-                    .on_input(move |t| Message::ChannelName(index, t)),
-                tooltip(
-                    button(swatch)
-                        .style(button::text)
+        let mut rows = column![].spacing(4);
+        debug_assert_eq!(styles.chunks(8).count(), Self::button_rows(styles.len()));
+        for chunk in styles.chunks(8) {
+            let mut line = row![].spacing(4);
+            for style in chunk {
+                let (index, on, colour) = (style.index, style.visible, style.colour);
+                let label = self.shell.localizer().message(
+                    &Key::from_static("channel-default"),
+                    &Args::new().uint("number", u64::from(index)),
+                );
+                let name = if style.name.is_empty() {
+                    label
+                } else {
+                    style.name.clone()
+                };
+                let press = button(
+                    text(index.to_string())
+                        .size(12)
+                        .width(Fill)
+                        .align_x(iced::alignment::Horizontal::Center),
+                )
+                .width(32)
+                .height(32)
+                .padding(0)
+                .style(move |theme: &Theme, status| {
+                    crate::theme::channel_button_style(variant, colour, on, theme, status)
+                })
+                .on_press_maybe(can_flag.then_some(Message::ChannelVisible(index, !on)));
+                line = line.push(tooltip(
+                    press,
+                    container(text(name).size(12))
                         .padding(4)
-                        .on_press(Message::ChannelColour(index)),
-                    text(self.t("channel-colour")),
+                        .style(container::bordered_box),
                     tooltip::Position::Bottom,
-                ),
-                tooltip(
-                    button(text("\u{25b2}").size(11))
-                        .style(button::text)
-                        .padding(3)
-                        .on_press_maybe(
-                            (position > 0).then_some(Message::ChannelMove(position, -1))
-                        ),
-                    text(self.t("channel-move-up")),
-                    tooltip::Position::Bottom,
-                ),
-                tooltip(
-                    button(text("\u{25bc}").size(11))
-                        .style(button::text)
-                        .padding(3)
-                        .on_press_maybe(
-                            (position < last).then_some(Message::ChannelMove(position, 1))
-                        ),
-                    text(self.t("channel-move-down")),
-                    tooltip::Position::Bottom,
-                ),
-            ]
-            .spacing(4)
-            .align_y(iced::Alignment::Center);
-            list = list.push(line);
+                ));
+            }
+            rows = rows.push(line);
         }
-        list = list.push(
+        let mut block = column![text(self.t("capture-channels")).size(13), rows].spacing(4);
+        if state.config.enabled_channels == 0 {
+            block = block.push(
+                text(self.t("capture-no-channel"))
+                    .size(12)
+                    .style(text::danger),
+            );
+        }
+        block = block.push(
             button(text(self.t("channel-reset")).size(13))
                 .style(button::secondary)
                 .on_press(Message::Run(Command::ResetPresentation)),
         );
-        container(scrollable(list))
-            .width(Fill)
-            .height(Length::FillPortion(3))
-            .style(container::bordered_box)
-            .into()
+        block.into()
     }
 
     fn status_bar(&self) -> Element<'_, Message> {
@@ -2592,6 +2565,108 @@ mod tests {
             let _ = app.update(Message::ChannelNameCancel);
             assert!(app.editing.is_none());
         }
+    }
+
+    #[test]
+    fn the_channel_buttons_are_eight_to_a_row() {
+        assert_eq!(App::button_rows(0), 0);
+        assert_eq!(App::button_rows(1), 1);
+        assert_eq!(App::button_rows(8), 1);
+        assert_eq!(App::button_rows(9), 2);
+        assert_eq!(App::button_rows(16), 2);
+        assert_eq!(App::button_rows(32), 4);
+    }
+
+    #[test]
+    fn the_capture_view_renders_in_three_languages_at_the_minimum_size_and_while_recording() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("capture-view");
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        for language in [
+            la_i18n::Language::En,
+            la_i18n::Language::De,
+            la_i18n::Language::Ja,
+        ] {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 560.0),
+                app.view(),
+            );
+            for key in ["capture-length-seconds", "capture-channels", "toolbar-rate"] {
+                let label = app.t(key);
+                assert!(
+                    ui.find(label.as_str()).is_ok(),
+                    "{language:?} {key}: {label}"
+                );
+            }
+            let shot = ui.snapshot(&app.theme()).unwrap();
+            if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+                shot.matches_image(
+                    std::path::Path::new(&directory).join(format!("capture-{}", language.tag())),
+                )
+                .unwrap();
+            }
+        }
+        // With a capture running the buttons are inert and the view still renders.
+        for edit in [
+            ConfigEdit::Realtime(true),
+            ConfigEdit::SampleRate(1_000),
+            ConfigEdit::Length(100_000),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        let outcome = app.shell.apply(Command::StartCapture);
+        if matches!(outcome, Outcome::NeedsDecision(_)) {
+            let _ = app.shell.apply(Command::Decide(Decision::Discard));
+        }
+        assert_eq!(app.shell.state().activity, Activity::Capturing);
+        let before = app.shell.state().config.enabled_channels;
+        let _ = app.update(Message::ChannelVisible(7, true));
+        assert_eq!(app.shell.state().config.enabled_channels, before);
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(800.0, 560.0),
+            app.view(),
+        );
+        let _ = ui.snapshot(&app.theme()).unwrap();
+        drop(ui);
+        let _ = app.shell.apply(Command::StopCapture);
+    }
+
+    #[test]
+    fn the_length_is_typed_in_seconds_and_follows_the_sample_rate() {
+        let _turn = render_turn();
+        let dir = std::env::temp_dir().join(format!("la-app-seconds-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        let _ = app.update(Message::RateText("1000000".into()));
+        let _ = app.update(Message::LengthText("2.5".into()));
+        assert_eq!(app.shell.state().config.length, 2_500_000);
+        assert!(app.length_error.is_none());
+        // A new rate keeps the seconds and recomputes the samples.
+        let _ = app.update(Message::RateText("2000000".into()));
+        assert_eq!(app.length_text, "2.5");
+        assert_eq!(app.shell.state().config.length, 5_000_000);
+        // Text that is not a length sends nothing and says why.
+        for (text, error) in [
+            ("abc", la_host::config::SecondsError::NotANumber),
+            ("", la_host::config::SecondsError::Empty),
+            ("0.0000001", la_host::config::SecondsError::TooSmall),
+            (
+                "0.1234567891",
+                la_host::config::SecondsError::TooManyDecimals,
+            ),
+        ] {
+            let _ = app.update(Message::LengthText(text.into()));
+            assert_eq!(app.length_error, Some(error), "{text:?}");
+            assert_eq!(app.shell.state().config.length, 5_000_000, "{text:?}");
+        }
+        // A good text clears the message again.
+        let _ = app.update(Message::LengthText("1".into()));
+        assert!(app.length_error.is_none());
+        assert_eq!(app.shell.state().config.length, 2_000_000);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -3343,8 +3418,14 @@ mod tests {
             let _ = app.update(Message::Run(Command::EditConfig(edit)));
         }
         // Names and colours do not wait for a capture.
-        let _ = app.update(Message::ChannelName(4, "SDA".into()));
-        let _ = app.update(Message::ChannelColour(4));
+        let _ = app.update(Message::Run(Command::RenameChannel {
+            channel: 4,
+            name: "SDA".into(),
+        }));
+        let _ = app.update(Message::Run(Command::SetChannelColour {
+            channel: 4,
+            colour: la_host::presentation::Colour::Palette(5),
+        }));
         {
             let style = app
                 .shell
@@ -3355,7 +3436,7 @@ mod tests {
                 .find(|c| c.index == 4)
                 .unwrap();
             assert_eq!(style.name, "SDA");
-            assert_eq!(style.colour, Colour::Palette(5));
+            assert_eq!(style.colour, la_host::presentation::Colour::Palette(5));
         }
         // Start from nothing and tick channels 0, 2 and 5, as a person would.
         for channel in 0..32 {
@@ -3372,13 +3453,13 @@ mod tests {
         assert_eq!(app.shell.state().config.enabled_channels, 0b100101);
         assert!(app.shell.state().config_problems.is_empty());
 
-        // The panel before a capture lists the channels with their flags.
+        // The Capture view before a capture lists the channels as buttons.
         let mut ui = iced_test::Simulator::with_size(
             crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
-        assert!(ui.find("Channel 31").is_ok());
+        assert!(ui.find("31").is_ok(), "the button of channel 31");
         let snapshot = ui.snapshot(&app.theme()).unwrap();
         if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
             snapshot
@@ -3408,7 +3489,10 @@ mod tests {
             [0, 2, 5],
             "channel 7 has no data in this capture, so no lane appears for it yet"
         );
-        let _ = app.update(Message::ChannelName(2, "SCL".into()));
+        let _ = app.update(Message::Run(Command::RenameChannel {
+            channel: 2,
+            name: "SCL".into(),
+        }));
         assert_eq!(
             app.shell
                 .state()
