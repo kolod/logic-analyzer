@@ -1,0 +1,111 @@
+# the target holds SCL low for 40 samples; nothing changes in the decode
+# SCL is channel 0, SDA channel 1. Runs: <sda><scl> <samples>.
+11 64
+01 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 44
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 8
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 4
+11 65
+--- expect
+lane point 64 ann-i2c-start
+ch1 point 64 ann-i2c-start
+lane range 72 201 ann-i2c-address-write 0x50
+lane point 200 ann-i2c-ack
+ch0 edge 72 rising =1
+ch0 edge 88 rising =0
+ch0 edge 104 rising =1
+ch0 edge 120 rising =0
+ch0 edge 136 rising =0
+ch0 edge 152 rising =0
+ch0 edge 168 rising =0
+ch0 edge 184 rising =0
+ch0 edge 200 rising ann-i2c-ack
+lane range 216 385 ann-i2c-data 0x12
+lane point 384 ann-i2c-ack
+ch0 edge 216 rising =0
+ch0 edge 232 rising =0
+ch0 edge 248 rising =0
+ch0 edge 304 rising =1
+ch0 edge 320 rising =0
+ch0 edge 336 rising =0
+ch0 edge 352 rising =1
+ch0 edge 368 rising =0
+ch0 edge 384 rising ann-i2c-ack
+lane range 400 529 ann-i2c-data 0x34
+lane point 528 ann-i2c-ack
+ch0 edge 400 rising =0
+ch0 edge 416 rising =0
+ch0 edge 432 rising =1
+ch0 edge 448 rising =1
+ch0 edge 464 rising =0
+ch0 edge 480 rising =1
+ch0 edge 496 rising =0
+ch0 edge 512 rising =0
+ch0 edge 528 rising ann-i2c-ack
+lane point 548 ann-i2c-stop
+ch1 point 548 ann-i2c-stop
+lane range 64 549 ann-i2c-transaction-write 0x50

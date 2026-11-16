@@ -1,0 +1,233 @@
+# lines low, then noise whose highs are shorter than a period, then the real traffic
+# SCL is channel 0, SDA channel 1. Runs: <sda><scl> <samples>.
+00 2000
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 3
+11 5
+01 2
+00 5
+10 3
+11 6
+01 2
+00 5
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 3
+11 5
+01 2
+00 5
+10 3
+11 6
+01 2
+00 5
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 3
+11 5
+01 2
+00 5
+10 3
+11 6
+01 2
+00 5
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 3
+11 5
+01 2
+00 5
+10 3
+11 6
+01 2
+00 5
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 3
+11 5
+01 2
+00 5
+10 3
+11 6
+01 2
+00 5
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 3
+11 5
+01 2
+00 5
+10 3
+11 6
+01 2
+00 5
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 3
+11 5
+01 2
+00 5
+10 3
+11 6
+01 2
+00 5
+10 3
+11 3
+01 2
+00 5
+10 3
+11 4
+01 2
+00 5
+10 4
+11 43
+01 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 8
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 4
+11 65
+--- expect
+lane point 2480 ann-i2c-start
+ch1 point 2480 ann-i2c-start
+lane range 2488 2617 ann-i2c-address-write 0x50
+lane point 2616 ann-i2c-ack
+ch0 edge 2488 rising =1
+ch0 edge 2504 rising =0
+ch0 edge 2520 rising =1
+ch0 edge 2536 rising =0
+ch0 edge 2552 rising =0
+ch0 edge 2568 rising =0
+ch0 edge 2584 rising =0
+ch0 edge 2600 rising =0
+ch0 edge 2616 rising ann-i2c-ack
+lane range 2632 2761 ann-i2c-data 0x12
+lane point 2760 ann-i2c-ack
+ch0 edge 2632 rising =0
+ch0 edge 2648 rising =0
+ch0 edge 2664 rising =0
+ch0 edge 2680 rising =1
+ch0 edge 2696 rising =0
+ch0 edge 2712 rising =0
+ch0 edge 2728 rising =1
+ch0 edge 2744 rising =0
+ch0 edge 2760 rising ann-i2c-ack
+lane range 2776 2905 ann-i2c-data 0x34
+lane point 2904 ann-i2c-ack
+ch0 edge 2776 rising =0
+ch0 edge 2792 rising =0
+ch0 edge 2808 rising =1
+ch0 edge 2824 rising =1
+ch0 edge 2840 rising =0
+ch0 edge 2856 rising =1
+ch0 edge 2872 rising =0
+ch0 edge 2888 rising =0
+ch0 edge 2904 rising ann-i2c-ack
+lane point 2924 ann-i2c-stop
+ch1 point 2924 ann-i2c-stop
+lane range 2480 2925 ann-i2c-transaction-write 0x50

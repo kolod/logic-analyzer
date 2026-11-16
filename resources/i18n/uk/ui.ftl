@@ -159,6 +159,22 @@ ann-sample-clocked-bits-bit = Біт { $value }
 ann-sample-clocked-bits-incomplete = Неповний байт: { $value } бітів
 ann-sample-clocked-bits-gap = Тут втрачено відліки
 
+### Decoders: I2C
+decoder-i2c-name = I2C
+decoder-i2c-description = Читає шину I2C (два дроти, такт і дані): адресу, байти та підтвердження кожної транзакції.
+decoder-i2c-signal-scl = Такт (SCL)
+decoder-i2c-signal-sda = Дані (SDA)
+ann-i2c-start = Старт
+ann-i2c-repeated-start = Повторний старт
+ann-i2c-stop = Стоп
+ann-i2c-transaction-write = Запис до { $value }
+ann-i2c-transaction-read = Читання з { $value }
+ann-i2c-address-write = Адреса { $value } (запис)
+ann-i2c-address-read = Адреса { $value } (читання)
+ann-i2c-data = Дані { $value }
+ann-i2c-ack = ACK
+ann-i2c-nak = NAK
+
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Декодери
 menu-decoders-add = Додати декодер

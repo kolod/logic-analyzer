@@ -43,6 +43,12 @@ impl Registry {
         ) {
             tracing::error!(code = e.code(), "a built-in decoder was not registered");
         }
+        if let Err(e) = registry.register_decoder(
+            &crate::decoders::i2c::DESCRIPTOR,
+            crate::decoders::i2c::create,
+        ) {
+            tracing::error!(code = e.code(), "a built-in decoder was not registered");
+        }
         registry.generators.push((
             crate::decoders::clocked_bits::ID,
             crate::generators::clocked_bits::claim,

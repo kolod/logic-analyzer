@@ -22,7 +22,8 @@
 //!
 //! An expectation line is `<target> <kind> <positions> <key> <arguments...> [error]` where the target
 //! is `lane` or `chN` (an overlay on channel N); the kinds are `range <start> <end>`, `point <at>`
-//! and `edge <at> <rising|falling>`; marks without text name no key. SCL is channel 0 and SDA channel
+//! and `edge <at> <rising|falling>`; the text is a message key and its arguments, or `=text` for a
+//! literal text (the bit an arrow shows). SCL is channel 0 and SDA channel
 //! 1 (see [`SCL`] and [`SDA`]).
 #![allow(dead_code)]
 
@@ -262,6 +263,10 @@ fn parse_expected(parts: &[&str]) -> Result<Expected, String> {
         _ => (false, rest),
     };
     let (key, args) = match rest.split_first() {
+        // `=1` is a literal text (no message key): the text of a sampled bit.
+        Some((literal, _)) if literal.starts_with('=') => {
+            (String::new(), vec![literal[1..].to_owned()])
+        }
         Some((key, args)) => (
             (*key).to_owned(),
             args.iter().map(|a| (*a).to_owned()).collect(),
@@ -286,4 +291,323 @@ pub fn load_fixture(name: &str) -> Fixture {
         .join(format!("{name}.txt"));
     let text = std::fs::read_to_string(&path).unwrap();
     parse_fixture(&text).unwrap_or_else(|e| panic!("{name}: {}", e.0))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Decoding with the I2C decoder and putting the result into the form of an expectation.
+// ---------------------------------------------------------------------------------------------
+
+use std::sync::atomic::AtomicBool;
+
+use la_decoders::decoders::i2c::{DESCRIPTOR, ID, create};
+use la_decoders::model::{Annotation, Item, Kind, Shape, Target, Text};
+use la_decoders::run::{ChunkLimits, Outcome, Pass, Sink, run_pass};
+use la_decoders::setup::{Setup, Value};
+use la_decoders::store::{Budget, Limits};
+
+/// The setup of an I2C instance with SCL on [`SCL`] and SDA on [`SDA`] and these options.
+pub fn setup(options: &[(&str, Value)]) -> Setup {
+    let mut setup = Setup::new(1, ID);
+    setup.channels.insert("scl".into(), SCL);
+    setup.channels.insert("sda".into(), SDA);
+    for (id, value) in options {
+        setup.options.insert((*id).into(), value.clone());
+    }
+    setup
+}
+
+/// A fresh pass of the decoder over a setup.
+pub fn new_pass(setup: &Setup) -> Pass {
+    Pass::new(
+        &DESCRIPTOR,
+        setup.clone(),
+        create(setup).unwrap(),
+        Sink::new(Limits::default(), Budget::new(1 << 30)),
+    )
+}
+
+/// What a decode produced, in the form of the expectations.
+#[derive(Debug, Clone)]
+pub struct Decoded {
+    /// Every annotation, sorted.
+    pub all: Vec<Expected>,
+    /// The shapes of the overlay marks, by channel.
+    pub shapes: Vec<(u8, Shape, Option<u8>)>,
+    /// The items.
+    pub items: Vec<Item>,
+    /// How many records the sink refused.
+    pub refused: u64,
+}
+
+impl Decoded {
+    /// The annotations of the lane.
+    pub fn lane(&self) -> Vec<Expected> {
+        self.all
+            .iter()
+            .filter(|e| e.channel.is_none())
+            .cloned()
+            .collect()
+    }
+
+    /// The annotations of the overlay on a channel.
+    pub fn overlay(&self, channel: u8) -> Vec<Expected> {
+        self.all
+            .iter()
+            .filter(|e| e.channel == Some(channel))
+            .cloned()
+            .collect()
+    }
+}
+
+fn expected_of(annotation: &Annotation) -> Expected {
+    let (kind, positions, rising) = match annotation.kind {
+        Kind::Range { start, end } => ("range", vec![start, end], None),
+        Kind::Point { at } => ("point", vec![at], None),
+        Kind::Edge { at, rising } => ("edge", vec![at], Some(rising)),
+    };
+    let (key, args) = match &annotation.text {
+        Text::Message { key, args } => ((*key).to_owned(), args.clone()),
+        Text::Literal(text) => (String::new(), vec![text.clone()]),
+    };
+    Expected {
+        channel: match annotation.target {
+            Target::Lane => None,
+            Target::Channel(c) => Some(c),
+        },
+        kind: kind.to_owned(),
+        positions,
+        rising,
+        key,
+        args,
+        error: annotation.error,
+    }
+}
+
+fn sort_key(e: &Expected) -> (Option<u8>, Vec<u64>, String, String) {
+    (
+        e.channel,
+        e.positions.clone(),
+        e.kind.clone(),
+        e.key.clone(),
+    )
+}
+
+/// Sorts expectations the way [`Decoded::all`] is sorted.
+pub fn sorted(mut list: Vec<Expected>) -> Vec<Expected> {
+    list.sort_by_key(sort_key);
+    list
+}
+
+/// Reads the results of a pass.
+pub fn collect(pass: &mut Pass) -> Decoded {
+    let results = pass.sink().results();
+    let mut all = Vec::new();
+    let mut shapes = Vec::new();
+    for entry in results.lane.window(0, u64::MAX) {
+        all.push(expected_of(&entry.annotation));
+    }
+    for (channel, snapshot) in &results.overlays {
+        for entry in snapshot.window(0, u64::MAX) {
+            all.push(expected_of(&entry.annotation));
+            shapes.push((
+                *channel,
+                entry.annotation.style.shape,
+                entry.annotation.style.colour,
+            ));
+        }
+    }
+    Decoded {
+        all: sorted(all),
+        shapes,
+        items: pass.sink().items().to_vec(),
+        refused: pass.sink().refused().total(),
+    }
+}
+
+/// Decodes a closed capture of `words` (SCL on channel 0, SDA on channel 1) in chunks of `limits`.
+pub fn decode_with(words: &[u32], options: &[(&str, Value)], limits: &ChunkLimits) -> Decoded {
+    let mut capture = crate::common::capture_from_parts(
+        2,
+        1_000_000,
+        &[crate::common::Part::Samples(words.to_vec())],
+    );
+    capture.close().unwrap();
+    decode_capture(&capture, options, limits)
+}
+
+/// Decodes a closed capture.
+pub fn decode_capture(
+    capture: &la_storage::Capture,
+    options: &[(&str, Value)],
+    limits: &ChunkLimits,
+) -> Decoded {
+    let setup = setup(options);
+    let mut pass = new_pass(&setup);
+    let outcome = run_pass(
+        &mut pass,
+        &capture.reader(),
+        limits,
+        &AtomicBool::new(false),
+        &mut || false,
+        &mut |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(outcome, Outcome::Complete);
+    collect(&mut pass)
+}
+
+/// Decodes a closed capture of `words` with the default chunk limits and options.
+pub fn decode(words: &[u32]) -> Decoded {
+    decode_with(words, &[], &ChunkLimits::default())
+}
+
+// Constructors of expectations.
+
+/// A lane range.
+pub fn lane_range(start: u64, end: u64, key: &str, args: &[&str]) -> Expected {
+    Expected {
+        channel: None,
+        kind: "range".into(),
+        positions: vec![start, end],
+        rising: None,
+        key: key.into(),
+        args: args.iter().map(|a| (*a).to_owned()).collect(),
+        error: false,
+    }
+}
+
+/// A lane point.
+pub fn lane_point(at: u64, key: &str) -> Expected {
+    Expected {
+        channel: None,
+        kind: "point".into(),
+        positions: vec![at],
+        rising: None,
+        key: key.into(),
+        args: Vec::new(),
+        error: false,
+    }
+}
+
+/// A point on a channel.
+pub fn dot(channel: u8, at: u64, key: &str) -> Expected {
+    Expected {
+        channel: Some(channel),
+        ..lane_point(at, key)
+    }
+}
+
+/// A sampling arrow on SCL: the bit as text, or a message key for the acknowledge bit.
+pub fn arrow(at: u64, key: &str, args: &[&str]) -> Expected {
+    Expected {
+        channel: Some(SCL),
+        kind: "edge".into(),
+        positions: vec![at],
+        rising: Some(true),
+        key: key.into(),
+        args: args.iter().map(|a| (*a).to_owned()).collect(),
+        error: false,
+    }
+}
+
+/// The same with the error flag.
+pub fn erroneous(mut e: Expected) -> Expected {
+    e.error = true;
+    e
+}
+
+/// The nine arrows of a byte: the eight bits (most significant first) and the acknowledge bit.
+pub fn byte_arrows(at: At, value: u8, ack: &str) -> Vec<Expected> {
+    let mut list = Vec::new();
+    for i in 0..8_u64 {
+        let bit = if value >> (7 - i) & 1 != 0 { "1" } else { "0" };
+        list.push(arrow(at.first + 16 * i, "", &[bit]));
+    }
+    list.push(arrow(at.ack, ack, &[]));
+    list
+}
+
+/// The lane parts of a byte: its range and its acknowledge point.
+pub fn byte_lane(at: At, key: &str, text: &str, ack: &str, ack_error: bool) -> Vec<Expected> {
+    let mut point = lane_point(at.ack, ack);
+    point.error = ack_error;
+    vec![lane_range(at.first, at.ack + 1, key, &[text]), point]
+}
+
+// Whole transactions with their expected decodes (default options).
+
+pub fn hex(value: u8) -> String {
+    format!("0x{value:02X}")
+}
+
+/// A write of `data` to `address` (7 bits), everything acknowledged, and what decoding it gives.
+pub fn write_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
+    let mut expected = Vec::new();
+    let start = bus.start();
+    expected.push(lane_point(start, "ann-i2c-start"));
+    expected.push(dot(SDA, start, "ann-i2c-start"));
+    let a = bus.byte(address << 1, true);
+    expected.extend(byte_lane(
+        a,
+        "ann-i2c-address-write",
+        &hex(address),
+        "ann-i2c-ack",
+        false,
+    ));
+    expected.extend(byte_arrows(a, address << 1, "ann-i2c-ack"));
+    for value in data {
+        let at = bus.byte(*value, true);
+        expected.extend(byte_lane(
+            at,
+            "ann-i2c-data",
+            &hex(*value),
+            "ann-i2c-ack",
+            false,
+        ));
+        expected.extend(byte_arrows(at, *value, "ann-i2c-ack"));
+    }
+    let stop = bus.stop();
+    expected.push(lane_point(stop, "ann-i2c-stop"));
+    expected.push(dot(SDA, stop, "ann-i2c-stop"));
+    expected.push(lane_range(
+        start,
+        stop + 1,
+        "ann-i2c-transaction-write",
+        &[&hex(address)],
+    ));
+    expected
+}
+
+/// A read of `data` from `address`: the controller acknowledges every byte but the last.
+pub fn read_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
+    let mut expected = Vec::new();
+    let start = bus.start();
+    expected.push(lane_point(start, "ann-i2c-start"));
+    expected.push(dot(SDA, start, "ann-i2c-start"));
+    let a = bus.byte(address << 1 | 1, true);
+    expected.extend(byte_lane(
+        a,
+        "ann-i2c-address-read",
+        &hex(address),
+        "ann-i2c-ack",
+        false,
+    ));
+    expected.extend(byte_arrows(a, address << 1 | 1, "ann-i2c-ack"));
+    for (index, value) in data.iter().enumerate() {
+        let last = index + 1 == data.len();
+        let at = bus.byte(*value, !last);
+        let ack = if last { "ann-i2c-nak" } else { "ann-i2c-ack" };
+        expected.extend(byte_lane(at, "ann-i2c-data", &hex(*value), ack, false));
+        expected.extend(byte_arrows(at, *value, ack));
+    }
+    let stop = bus.stop();
+    expected.push(lane_point(stop, "ann-i2c-stop"));
+    expected.push(dot(SDA, stop, "ann-i2c-stop"));
+    expected.push(lane_range(
+        start,
+        stop + 1,
+        "ann-i2c-transaction-read",
+        &[&hex(address)],
+    ));
+    expected
 }

@@ -119,7 +119,7 @@ and check nothing is reported before the first valid start.
 
 ### Tests for User Story 1 (write first; they must fail)
 
-- [ ] T006 [P] [US1] `crates/decoders/tests/i2c_period.rs`: the period estimator of research R1 as pure
+- [X] T006 [P] [US1] `crates/decoders/tests/i2c_period.rs`: the period estimator of research R1 as pure
   functions on a list of SCL rising-edge positions (the API is `Period::new()`, `Period::edge(position)
   -> Option<u64>` returning `Some(T)` at the first edge after which the condition holds, `None` before).
   Cases, expected values by hand: a steady clock of 16 gives `T = 16` exactly after the 17th edge (16
@@ -130,7 +130,7 @@ and check nothing is reported before the first valid start.
   interval; the result for a list is the same however it is split across calls (feed it one edge at a
   time and in batches) and never changes after it was found; huge positions (`u64::MAX - 1`) and equal
   positions do not panic or overflow.
-- [ ] T007 [P] [US1] `crates/decoders/tests/i2c.rs` (decoding, positions from the bus builder): a write to
+- [X] T007 [P] [US1] `crates/decoders/tests/i2c.rs` (decoding, positions from the bus builder): a write to
   0x50 with bytes 0x12 and 0x34, all ACK, `Idle(64)` before and after, decoded with the decoder created
   by `decoders::i2c::create` over a closed capture, with the whole `Chunk` loop (`run_pass`), expects
   exactly: lane points for start and stop (keys `ann-i2c-start`, `ann-i2c-stop`), lane ranges for the
@@ -147,7 +147,7 @@ and check nothing is reported before the first valid start.
   position); SDA and SCL changing on the same sample as a clock edge (SCL is processed first, the bit is
   the level SDA held before); SDA and SCL assigned to swapped channels give an empty or wrong but valid
   result and no panic (scenario 5).
-- [ ] T008 [P] [US1] `crates/decoders/tests/i2c.rs` (synchronisation and start-up, research R2): nothing is
+- [X] T008 [P] [US1] `crates/decoders/tests/i2c.rs` (synchronisation and start-up, research R2): nothing is
   drawn or reported before the first start that follows an idle of at least `T` with both lines high:
   (a) a capture that begins in the middle of a byte (SCL pulses, SDA changing, then an ordinary
   transaction after an idle) decodes only the ordinary transaction; (b) lines held low for thousands of
@@ -162,7 +162,7 @@ and check nothing is reported before the first valid start.
   call stays within the work bound: assert the number of `process` calls is more than 1 and that no
   single call reports more than 262,144 edges processed through a counter the decoder exposes under
   `#[cfg(test)]`-free means, namely the observable `final_through` steps).
-- [ ] T009 [P] [US1] Recorded signals: create `crates/decoders/tests/fixtures/i2c/` with
+- [X] T009 [P] [US1] Recorded signals: create `crates/decoders/tests/fixtures/i2c/` with
   `write_two_bytes.txt`, `read_two_bytes.txt`, `repeated_start.txt`, `begins_mid_byte.txt`,
   `preinit_low_then_noise.txt`, `clock_stretching.txt`, each in the format of T002 with a hand-written
   `--- expect` section, and `crates/decoders/tests/i2c_recorded.rs` that decodes each and compares every
@@ -170,19 +170,19 @@ and check nothing is reported before the first valid start.
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] `crates/decoders/src/decoders/i2c/period.rs`: `Period` per research R1 (256 quarter-octave
+- [X] T010 [US1] `crates/decoders/src/decoders/i2c/period.rs`: `Period` per research R1 (256 quarter-octave
   bins of `{count: u32, sum: u64}`, the previous rising-edge position, the interval count, `found:
   Option<u64>`), integer arithmetic only, `bin = 4·(63 - leading_zeros) + next two bits`, clamped to 255;
   `edge(position) -> Option<u64>` as T006 specifies; an explicit `break_at_gap()` that forgets the previous
   edge. T006 passes.
-- [ ] T011 [US1] `crates/decoders/src/decoders/i2c/text.rs`: the annotation texts of this story as functions
+- [X] T011 [US1] `crates/decoders/src/decoders/i2c/text.rs`: the annotation texts of this story as functions
   returning `Text::Message { key, args }` with **literal** keys (`ann-i2c-start`, `-repeated-start`,
   `-stop`, `-transaction-write`, `-transaction-read`, `-incomplete`, `-address-write`, `-address-read`,
   `-data`, `-ack`, `-nak`) and the value formatting for the default options only (7-bit address and
   hexadecimal as `0x50`, a byte as `0x12`); and the styles (colour indexes for transaction, address,
   data; marks on signals name no colour). Add the keys with their argument documentation to
   `resources/i18n/en/ui.ftl` and the drafts to de, fr, es, ja, uk.
-- [ ] T012 [US1] `crates/decoders/src/decoders/i2c/bus.rs`: the bus state machine of research R4 as a type
+- [X] T012 [US1] `crates/decoders/src/decoders/i2c/bus.rs`: the bus state machine of research R4 as a type
   that is fed edges (`scl`/`sda`, rising or falling, position) in the order the reader delivers them and
   writes to a `&mut Sink`: levels of both lines (initial levels from the reader at position 0; unknown
   after a gap), the idle-run tracking and the synchronisation rule of R2 (first start only after both
@@ -193,7 +193,7 @@ and check nothing is reported before the first valid start.
   an error, never a NAK of the controller on a read), all with checked arithmetic and no indexing. Errors
   other than the NAKs (cut short, empty, gap, end of capture) are US3; until then those situations end
   the transaction silently. T007, T008 (a–g) and T009 pass for the cases that do not need US3.
-- [ ] T013 [US1] `crates/decoders/src/decoders/i2c/mod.rs`: the descriptor (`id` `i2c`, version 1, signals
+- [X] T013 [US1] `crates/decoders/src/decoders/i2c/mod.rs`: the descriptor (`id` `i2c`, version 1, signals
   `scl` then `sda`, both required and not shareable, no options yet, `outputs: &["i2c"]`, `generator:
   true`), `create(&Setup)`, and the `Run` implementation in two states: **calibrating** (reads SCL rising
   edges from position 0 with `reader.edges`, at most 262,144 edges per call, feeds `Period`, outputs
@@ -202,7 +202,7 @@ and check nothing is reported before the first valid start.
   position processed, and `finish` draining what is left and flushing a pending construct (End::Complete
   and End::Cut alike). Keys `decoder-i2c-name`, `-description`, `-signal-scl`, `-signal-sda` in six
   languages. T008 (h, i) passes.
-- [ ] T014 [US1] Register the decoder: in `Registry::builtin()` (`crates/decoders/src/registry.rs`) register
+- [X] T014 [US1] Register the decoder: in `Registry::builtin()` (`crates/decoders/src/registry.rs`) register
   `decoders::i2c::DESCRIPTOR` with `create`; the generator comes in US2. Run the whole workspace tests and
   fix every test that assumed a single built-in decoder (search for `catalogue.len()`, `decoders.len()` and
   `instances[0]` in `crates/host/tests/` and `crates/app/src/app.rs` tests); such a change is only to the

@@ -279,6 +279,33 @@ ann-sample-clocked-bits-incomplete = Incomplete byte: { $value } bits
 # Annotation (error): positions of the capture were lost here.
 ann-sample-clocked-bits-gap = Samples lost here
 
+### Decoders: I2C
+# The I2C decoder (decoders describe themselves with these keys).
+decoder-i2c-name = I2C
+decoder-i2c-description = Reads the I2C bus (two wires, clock and data): the address, the bytes and the acknowledgements of every transaction.
+decoder-i2c-signal-scl = Clock (SCL)
+decoder-i2c-signal-sda = Data (SDA)
+# Annotation: a start condition (the data line falls while the clock is high).
+ann-i2c-start = Start
+# Annotation: a repeated start condition (a start without a stop before it).
+ann-i2c-repeated-start = Repeated start
+# Annotation: a stop condition (the data line rises while the clock is high).
+ann-i2c-stop = Stop
+# Annotation: a whole transaction that writes. $value is the address of the target, such as 0x50.
+ann-i2c-transaction-write = Write to { $value }
+# Annotation: a whole transaction that reads. $value is the address of the target, such as 0x50.
+ann-i2c-transaction-read = Read from { $value }
+# Annotation: the address byte of a write. $value is the address, such as 0x50.
+ann-i2c-address-write = Address { $value } (write)
+# Annotation: the address byte of a read. $value is the address, such as 0x50.
+ann-i2c-address-read = Address { $value } (read)
+# Annotation: a data byte. $value is its value, such as 0x12.
+ann-i2c-data = Data { $value }
+# Annotation: the receiver acknowledged the byte.
+ann-i2c-ack = ACK
+# Annotation: the receiver did not acknowledge the byte.
+ann-i2c-nak = NAK
+
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Decoders
 menu-decoders-add = Add decoder

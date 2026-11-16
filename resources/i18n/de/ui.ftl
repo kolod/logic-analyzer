@@ -159,6 +159,22 @@ ann-sample-clocked-bits-bit = Bit { $value }
 ann-sample-clocked-bits-incomplete = Unvollständiges Byte: { $value } Bits
 ann-sample-clocked-bits-gap = Hier gingen Abtastwerte verloren
 
+### Decoders: I2C
+decoder-i2c-name = I2C
+decoder-i2c-description = Liest den I2C-Bus (zwei Leitungen, Takt und Daten): Adresse, Bytes und Bestätigungen jeder Übertragung.
+decoder-i2c-signal-scl = Takt (SCL)
+decoder-i2c-signal-sda = Daten (SDA)
+ann-i2c-start = Start
+ann-i2c-repeated-start = Wiederholter Start
+ann-i2c-stop = Stopp
+ann-i2c-transaction-write = Schreiben an { $value }
+ann-i2c-transaction-read = Lesen von { $value }
+ann-i2c-address-write = Adresse { $value } (Schreiben)
+ann-i2c-address-read = Adresse { $value } (Lesen)
+ann-i2c-data = Daten { $value }
+ann-i2c-ack = ACK
+ann-i2c-nak = NAK
+
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Decoder
 menu-decoders-add = Decoder hinzufügen
