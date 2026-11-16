@@ -88,11 +88,13 @@ your language. The frequency shows only as many digits as the distance really re
 
 ## Decoders
 
-A decoder reads the signals of the capture on screen and says what they mean. The first one is the
-sample decoder **Clocked bits**: it samples a data channel on every edge of a clock channel and groups
-the bits into bytes.
+A decoder reads the signals of the capture on screen and says what they mean. There are two:
+**I2C**, which reads the two-wire bus (see "Decoding I2C" below), and the sample decoder **Clocked
+bits**, which samples a data channel on every edge of a clock channel and groups the bits into bytes.
+The rest of this chapter holds for both.
 
-1. Capture (or open) signals, then press **D** or choose **Decoders → Add decoder**.
+1. Capture (or open) signals, then open the list **Add decoder** in the **Decoders** panel and choose a
+   decoder.
 2. In the **Decoders** panel choose the channel for each signal (here **Clock** and **Data**) and, if
    you like, the options: which clock edge, the bit order, the bits per byte and the idle limit in
    samples. The decoding starts as soon as the channels are chosen, and again whenever a channel or
@@ -114,6 +116,36 @@ random), and the same seed gives the same signals. Add the decoder to a capture 
 the next capture: the decoder stays and decodes it from the start. Tick **Plant deliberate errors in the
 simulated signals** in the decoder's block to cut some bytes short on purpose and look for the red
 marks where they were planted.
+
+### Decoding I2C
+
+Choose **I2C** in the list, then choose the channels of **Clock (SCL)** and **Data (SDA)**.
+
+- **The lane** shows every transaction as a range (`Write to 0x50`, `Read from 0x50`) with its
+  address (`Address 0x50 (write)`), its data bytes (`Data 0x12`) and an **ACK** or **NAK** point for
+  each byte; start, repeated start and stop are flags.
+- **On the signals** a dot on the data line marks every start and stop, and an arrow on the clock line
+  marks every clock edge at which a bit was read (nine for a byte: eight bits and the acknowledge).
+  Zoom in on a byte to see them; at wide zoom they are not drawn, as for any decoder.
+- **Address notation.** The **Address notation** option shows the 7-bit address (`0x50`, the usual
+  way) or the 8-bit value with the direction bit as many data sheets write it (`0xA0` to write, `0xA1`
+  to read). **Number base** shows hexadecimal, decimal or binary. Changing either decodes again; the
+  old results stay, marked outdated, until the new ones replace them. A 10-bit address is shown as one
+  address.
+- **Errors**, in red: an address or a written byte that was not acknowledged (the NAK with which a
+  read ends is normal and is not one), a byte cut short by a stop or a start, a start followed by a
+  stop with no clock between, and samples lost in the middle of a transaction. A transaction that is
+  not finished when the capture ends is drawn to the end with the text *Incomplete transaction*; it is
+  not an error.
+- **Why nothing is shown at the beginning.** The decoder first finds the speed of the bus from the
+  clock pulses (you do not set it), then looks for the first start after the bus was idle for at least
+  one clock period. Anything before it, such as a capture that begins in the middle of a byte or
+  before the microcontroller has set up its I2C interface, is ignored without a mark. While a capture
+  is still running and too few clock pulses have been seen to know the speed, the lane stays empty
+  and fills in as soon as they have.
+- **Without hardware.** With the simulated device, I2C channels carry valid traffic with random
+  addresses, directions and data; tick **Plant deliberate errors in the simulated signals** to get
+  unacknowledged bytes and cut-short bytes too. The same seed gives the same traffic.
 
 A decoder that fails never harms anything else: its block says what happened and what to do, the
 results it had found before the failure stay (marked incomplete), the other decoders and the capture

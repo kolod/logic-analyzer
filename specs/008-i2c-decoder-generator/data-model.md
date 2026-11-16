@@ -26,7 +26,7 @@ Small and bounded by constants, never by the capture (Rule "state must be small"
 | Channels | the channel numbers of SCL and SDA, for the overlay targets |
 | Options | address notation, radix |
 | Levels | the level of SCL and SDA at the position reached; whether it is known (a gap or the start makes it unknown) |
-| Calibration | the histogram of intervals (256 bins: count `u32`, sum `u64`), the position of the last SCL rising edge, the number of intervals; then `T` (a `u64`) once found |
+| Calibration | the last 32 intervals and the histogram of them (256 bins: count `u32`, sum `u128`), the position of the last SCL rising edge; then `T` (a `u64`) once found |
 | Synchronisation | the start of the current run of both lines high (or none) |
 | Transaction | none, or: start position, direction, address (7 or 10 bit) and whether it is complete, number of bytes so far, whether the first part was a 10-bit write header |
 | Byte | bits read so far (0 to 9), their values, the position of the first bit's rising edge |

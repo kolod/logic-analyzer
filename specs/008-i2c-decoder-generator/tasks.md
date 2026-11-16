@@ -401,31 +401,31 @@ decoder carries on; truncated and start-up captures round trip.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T036 [P] Documents (English): `docs/decoders/i2c.md` (what the decoder reads; the synchronisation rule
+- [X] T036 [P] Documents (English): `docs/decoders/i2c.md` (what the decoder reads; the synchronisation rule
   and the automatic bus period; start-up and truncated captures; every annotation and overlay; the
   options; the items contract copied from `contracts/i2c-items.md`; the generator, its options and the
   start-up it can produce); a section "Decoding I2C" in `docs/user-guide.md` (address notation, reading
   arrows and dots, why nothing is shown before the first start, NAK semantics); a one-line mention in
   `docs/decoder-api.md` that I2C is the reference decoder; check links.
-- [ ] T037 [P] Localization review: every new key exists in six languages and the parity check passes
+- [X] T037 [P] Localization review: every new key exists in six languages and the parity check passes
   (`cargo test -p la-i18n`); the drafts are marked as machine drafts the way the earlier features mark
   them; add the Japanese and long German lane texts (`ann-i2c-error-address-nak`, `ann-i2c-transaction-read`)
   to the existing lane layout test if one exists, otherwise to `docs/` as a manual check item.
-- [ ] T038 Principle I review of `crates/decoders/src/decoders/i2c/` and `generators/i2c.rs`: no `unwrap`,
+- [X] T038 Principle I review of `crates/decoders/src/decoders/i2c/` and `generators/i2c.rs`: no `unwrap`,
   `expect`, indexing, unchecked arithmetic or `unsafe`; every loop bounded by the data it reads or by the
   per-call work bound; histogram index clamped; run `cargo clippy --workspace --all-targets -- -D warnings`
   and `cargo +1.85 check --workspace`.
-- [ ] T039 Mutation checks for the tests that passed on first run (T008 b/c/e, T022 gap, T028 option
+- [X] T039 Mutation checks for the tests that passed on first run (T008 b/c/e, T022 gap, T028 option
   tests): break the guarded line, see the test fail, restore; record in `verification.md`.
-- [ ] T040 Prove SC-008: `git diff main --stat -- crates/app crates/host/src crates/session` shows no
+- [X] T040 Prove SC-008: `git diff main --stat -- crates/app crates/host/src crates/session` shows no
   change (tests of the host and the changed expectation in `app.rs` tests of T014 excepted, which is a test
   module); record the result in `verification.md`.
-- [ ] T041 `specs/008-i2c-decoder-generator/verification.md`: traceability of every FR and SC to the tests
+- [X] T041 `specs/008-i2c-decoder-generator/verification.md`: traceability of every FR and SC to the tests
   that prove it (as 007's), the results of T039 and T040, the benchmark numbers against the baseline, and
   the list of manual checks left to the owner: look at the lane and overlays on Windows and Debian
   (quickstart section 4), SC-002 (under one minute from an empty application, by someone who has not read
   the guide), translations review, one real I2C capture when hardware exists (feature 011 onward).
-- [ ] T042 Run the whole quickstart (`specs/008-i2c-decoder-generator/quickstart.md` sections 1–3 and 5),
+- [X] T042 Run the whole quickstart (`specs/008-i2c-decoder-generator/quickstart.md` sections 1–3 and 5),
   `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo deny check`,
   `cargo test --workspace` (and `LA_ROUND_TRIP_SEEDS=10000` once in release mode); update `roadmap.md`
   (008 `(merged)` when the pull request is merged, not before).

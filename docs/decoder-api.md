@@ -174,6 +174,9 @@ expected(setup: &Setup, seed: u64, length: u64) -> Vec<Item>                    
 - A generator encodes at its own level; version 1.0 ships the single-level case and fixes the trait for
   the stacked one.
 
+The I2C decoder (`decoders::i2c`, [decoders/i2c.md](decoders/i2c.md)) is the reference for a decoder
+that uses `final_through`, items, overlays and a generator with planted errors.
+
 Implemented as `generators::clocked_bits` (`source(setup, seed)`, `expected(setup, seed, length)`,
 `expected_errors(setup, seed, length)` and `claim(setup)`) and combined with the random signals of the
 device by `generators::composite::CompositeFactory`; the host builds the factory from the instances when

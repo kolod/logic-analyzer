@@ -13,23 +13,25 @@ signal itself, with integer arithmetic only:
 - Every pair of consecutive SCL rising edges with no lost samples between them gives an interval `d`.
 - Intervals go into a histogram of quarter-octave bins (`bin = 4·floor(log2 d) + next two bits of d`,
   256 bins in all, each with a count and a sum). The state is a few kilobytes.
-- After each interval, in order, the decoder checks the *calibration condition*: the best bin together
-  with its two neighbours holds at least 16 intervals and at least half of all intervals counted so far.
+- The decoder keeps the last 32 intervals and, after each interval, in order, checks the *calibration
+  condition*: the best bin together with its two neighbours holds at least 16 of those 32 intervals.
   The first interval after which it holds fixes `T` as the mean of the intervals in those three bins
-  (sum divided by count), forever for this pass.
+  (sum divided by count), forever for this pass. (The first design asked for half of *all* intervals;
+  a long noisy start-up could then keep the clock from ever being recognised, so only the latest
+  intervals count.)
 
 **Why.** Inside a byte the SCL rising edges are one period apart, so any real traffic fills one bin
 quickly: a transaction with an address and one byte gives 17 intervals. Gaps between transactions and
-noise before the MCU set up its interface are few and spread over many bins, so they cannot reach half
-of the intervals. A mean of a bin is exact for a steady clock and within a quarter octave otherwise,
+noise before the MCU set up its interface are spread over many bins, so they cannot fill 16 of the last
+32 intervals, and once the clock comes 16 of its intervals are enough, however long the noise was. A mean of a bin is exact for a steady clock and within a quarter octave otherwise,
 which is all the rule "idle for at least one period" needs. The check runs interval by interval, so
 the moment it first holds depends only on the signal and never on how it was cut into chunks (FR-009,
 FR-024). Clock stretching makes a few intervals longer; they land in other bins.
 
 **Alternatives rejected.** The minimum interval (one glitch spoils it); the first transaction only (it
 may be junk, and it cannot be known to be the first real one); a user option for the period (the user
-asked for automatic detection, and a wrong value silently hides traffic); a fixed number of intervals
-without the half rule (a long noisy start-up would calibrate on noise).
+asked for automatic detection, and a wrong value silently hides traffic); half of all intervals so far
+(a long noisy start-up would keep the clock from being recognised).
 
 ## R2. Synchronising on the bus, and waiting for `T`
 
@@ -100,9 +102,12 @@ Idle ──start──▶ Address(bit 0..8) ──▶ Data(bit 0..8) ──▶ D
   it is also a violation (R5) and the byte is reported as cut short.
 - **Stop**: SDA rises while SCL is high. It ends the transaction; in the middle of a byte it reports the
   byte cut short.
-- **Bit**: SCL rising edge (with SCL high the SDA edge rule above takes precedence over bit reading, so
-  a bit is read only while SDA is stable at the rise). Nine rising edges make a byte and its
-  acknowledgement; the ninth is the acknowledge bit (low = ACK, high = NAK).
+- **Bit**: a rising edge of SCL is a candidate; it is a bit only when its pulse ends (SCL falls) with
+  no SDA edge in it, because an SDA edge while SCL is high is a start or a stop and the pulse before it
+  was only its set-up (this is how a repeated start and a stop are told from a data bit). The bit is
+  the level SDA had at the rising edge. Nine bits make a byte and its acknowledgement; the ninth is
+  the acknowledge bit (low = ACK, high = NAK). A capture that ends before the pulse of a bit ends does
+  not count that bit.
 - **Address**: the first byte after a start. The 8th bit is the direction (0 write, 1 read). A first
   byte of the form `11110xxD` is the first byte of a 10-bit address: if `D` is 0, the next byte is the
   low 8 bits and the two are shown as one 10-bit address; if `D` is 1 after a repeated start in a

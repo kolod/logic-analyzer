@@ -152,7 +152,8 @@ logic**: if a rule can be tested without a window, it belongs in `la-host`, with
 A decoder is built into the application and described by data; the interface, the setup form, the
 lane and the saved setup are all made from that description, so **`la-app` needs no change** (a test,
 `a_registered_test_decoder_appears_without_changing_the_shell`, checks this). The contract is
-[docs/decoder-api.md](docs/decoder-api.md).
+[docs/decoder-api.md](docs/decoder-api.md); the I2C decoder ([docs/decoders/i2c.md](docs/decoders/i2c.md))
+is a worked example.
 
 1. Write the descriptor (`crates/decoders/src/decoders/<name>.rs`): a stable id, a version, the
    signal roles, the options with their types and defaults, what it reads (`Signals` or the items of

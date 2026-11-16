@@ -41,7 +41,7 @@ a capture of ten million samples decodes in the background with no interface pau
 drawing cost does not depend on the capture length (feature 007's planner, unchanged).
 
 **Constraints**: a decoder call takes milliseconds (at most 262,144 edges of calibration or catch-up per
-call); state is bounded by constants (a 256-bin histogram and a few counters); no panic on any input;
+call); state is bounded by constants (a 256-bin histogram, a ring of 32 intervals and a few counters); no panic on any input;
 no new dependency; the shell is untouched (SC-008).
 
 **Scale/Scope**: millions of transactions per capture; about 11 annotations per byte; one decoder, one
