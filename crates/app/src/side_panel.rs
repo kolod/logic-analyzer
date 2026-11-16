@@ -106,9 +106,9 @@ mod tests {
     #[test]
     fn the_strip_is_made_of_28_px_buttons_with_a_gap_of_4_px() {
         // 4 + 28 + 4 + 28 + 4 + 28 + 4: three buttons fit a strip 36 wide with room to spare.
-        assert!((STRIP_WIDTH - BUTTON) / 2.0 >= GAP);
-        assert!((BUTTON - 28.0).abs() < f32::EPSILON && (GAP - 4.0).abs() < f32::EPSILON);
-        assert!(PANEL_WIDTH >= 220.0);
+        const { assert!((STRIP_WIDTH - BUTTON) / 2.0 >= GAP) };
+        const { assert!(BUTTON == 28.0 && GAP == 4.0) };
+        const { assert!(PANEL_WIDTH >= 220.0) };
     }
 
     #[test]
