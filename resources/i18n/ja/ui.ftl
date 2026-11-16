@@ -174,6 +174,12 @@ ann-i2c-address-read = アドレス { $value }（読み出し）
 ann-i2c-data = データ { $value }
 ann-i2c-ack = ACK
 ann-i2c-nak = NAK
+ann-i2c-incomplete = 未完了のトランザクション
+ann-i2c-error-byte-cut = { $value } ビット後にバイトが途切れました
+ann-i2c-error-address-nak = アドレス { $value } に応答がありません
+ann-i2c-error-data-nak = データ { $value } に応答がありません
+ann-i2c-error-empty = 空のトランザクション：アドレスがありません
+ann-i2c-error-gap = ここでサンプルが失われました
 
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = デコーダー

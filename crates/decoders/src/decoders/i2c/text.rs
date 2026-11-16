@@ -15,6 +15,12 @@ const MSG_ADDRESS_READ: &str = "ann-i2c-address-read";
 const MSG_DATA: &str = "ann-i2c-data";
 const MSG_ACK: &str = "ann-i2c-ack";
 const MSG_NAK: &str = "ann-i2c-nak";
+const MSG_INCOMPLETE: &str = "ann-i2c-incomplete";
+const MSG_BYTE_CUT: &str = "ann-i2c-error-byte-cut";
+const MSG_ADDRESS_NAK: &str = "ann-i2c-error-address-nak";
+const MSG_DATA_NAK: &str = "ann-i2c-error-data-nak";
+const MSG_EMPTY: &str = "ann-i2c-error-empty";
+const MSG_GAP: &str = "ann-i2c-error-gap";
 
 /// The colours of the lane (indexes of the palette). The marks on the signals name none: they take
 /// the colour of their signal.
@@ -24,8 +30,7 @@ const COLOUR_DATA: u8 = 1;
 const COLOUR_EVENT: u8 = 3;
 const COLOUR_ACK: u8 = 2;
 /// The colour of errors.
-#[expect(dead_code, reason = "used by the error paths of the decoder (T025)")]
-pub const COLOUR_ERROR: u8 = 4;
+const COLOUR_ERROR: u8 = 4;
 
 fn message(key: &'static str, args: Vec<String>) -> Text {
     Text::Message { key, args }
@@ -151,4 +156,49 @@ pub fn bit_arrow(bit: bool) -> (Text, Style) {
 pub fn ack_arrow(ack: bool) -> (Text, Style) {
     let key = if ack { MSG_ACK } else { MSG_NAK };
     (message(key, Vec::new()), signal(Shape::Arrow))
+}
+
+/// The range of a transaction that was not finished (not an error).
+pub fn incomplete() -> (Text, Style) {
+    (
+        message(MSG_INCOMPLETE, Vec::new()),
+        lane(COLOUR_TRANSACTION, Shape::Bar),
+    )
+}
+
+/// The error range of a byte that was cut short after `bits` bits.
+pub fn byte_cut(bits: u8) -> (Text, Style) {
+    (
+        message(MSG_BYTE_CUT, vec![bits.to_string()]),
+        lane(COLOUR_ERROR, Shape::Bar),
+    )
+}
+
+/// The error point of an address that was not acknowledged.
+pub fn address_nak(address: String) -> (Text, Style) {
+    (
+        message(MSG_ADDRESS_NAK, vec![address]),
+        lane(COLOUR_ERROR, Shape::Cross),
+    )
+}
+
+/// The error point of a written byte that was not acknowledged.
+pub fn data_nak(value: String) -> (Text, Style) {
+    (
+        message(MSG_DATA_NAK, vec![value]),
+        lane(COLOUR_ERROR, Shape::Cross),
+    )
+}
+
+/// The error range of a transaction with no address.
+pub fn empty() -> (Text, Style) {
+    (
+        message(MSG_EMPTY, Vec::new()),
+        lane(COLOUR_ERROR, Shape::Bar),
+    )
+}
+
+/// The error range of lost samples.
+pub fn gap() -> (Text, Style) {
+    (message(MSG_GAP, Vec::new()), lane(COLOUR_ERROR, Shape::Bar))
 }

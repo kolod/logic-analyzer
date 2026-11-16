@@ -174,6 +174,12 @@ ann-i2c-address-read = Адреса { $value } (читання)
 ann-i2c-data = Дані { $value }
 ann-i2c-ack = ACK
 ann-i2c-nak = NAK
+ann-i2c-incomplete = Незавершена транзакція
+ann-i2c-error-byte-cut = Байт обірвано після { $value } бітів
+ann-i2c-error-address-nak = Адресу { $value } не підтверджено
+ann-i2c-error-data-nak = Дані { $value } не підтверджено
+ann-i2c-error-empty = Порожня транзакція: немає адреси
+ann-i2c-error-gap = Тут втрачено відліки
 
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Декодери

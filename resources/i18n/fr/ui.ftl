@@ -174,6 +174,12 @@ ann-i2c-address-read = Adresse { $value } (lecture)
 ann-i2c-data = Données { $value }
 ann-i2c-ack = ACK
 ann-i2c-nak = NAK
+ann-i2c-incomplete = Transaction incomplète
+ann-i2c-error-byte-cut = Octet interrompu après { $value } bits
+ann-i2c-error-address-nak = Adresse { $value } non acquittée
+ann-i2c-error-data-nak = Données { $value } non acquittées
+ann-i2c-error-empty = Transaction vide : aucune adresse
+ann-i2c-error-gap = Des échantillons ont été perdus ici
 
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Décodeurs

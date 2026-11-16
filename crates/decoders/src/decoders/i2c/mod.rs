@@ -205,6 +205,16 @@ impl Run for I2c {
                 }
             }
         }
+        // What is in progress is shown as it is: at the end of the capture, or where a cut pass
+        // had got to.
+        if let State::Running(bus) = &mut self.state {
+            let at = if end == End::Complete {
+                reader.length()
+            } else {
+                bus.cursor()
+            };
+            bus.flush(at, sink)?;
+        }
         Ok(())
     }
 }

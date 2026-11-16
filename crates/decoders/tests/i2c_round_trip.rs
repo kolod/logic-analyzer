@@ -158,3 +158,166 @@ fn ten_thousand_seeds() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Planted errors, truncated captures and start-up (spec 008, user story 3, task T023).
+// ---------------------------------------------------------------------------------------------
+
+use common::i2c::Decoded;
+use la_decoders::generators::i2c::{PlantedError, expected_errors};
+use la_decoders::model::{Item, Payload};
+
+/// The errors the decoder reported, in the form of the planted ones.
+fn reported(decoded: &Decoded) -> Vec<PlantedError> {
+    let mut list: Vec<PlantedError> = decoded
+        .lane()
+        .iter()
+        .filter(|e| e.error)
+        .map(|e| match e.key.as_str() {
+            "ann-i2c-error-address-nak" => PlantedError::AddressNak { at: e.positions[0] },
+            "ann-i2c-error-data-nak" => PlantedError::DataNak { at: e.positions[0] },
+            "ann-i2c-error-byte-cut" => PlantedError::ByteCut {
+                start: e.positions[0],
+                end: e.positions[1],
+            },
+            other => panic!(
+                "an error that was not planted: {other} at {:?}",
+                e.positions
+            ),
+        })
+        .collect();
+    list.sort_by_key(PlantedError::position);
+    list
+}
+
+fn planted(setup: &Setup, seed: u64, length: u64) -> Vec<PlantedError> {
+    let mut list = expected_errors(setup, seed, length);
+    list.sort_by_key(PlantedError::position);
+    list
+}
+
+#[test]
+fn planted_errors_are_reported_where_they_were_planted_and_nowhere_else() {
+    let mut total = 0;
+    for seed in 0..400_u64 {
+        let setup = setup_with(&[
+            ("errors", 1),
+            ("error_rate", 2 + (seed % 11) as i64),
+            ("max_bytes", 1 + (seed % 6) as i64),
+        ]);
+        let length = frames(&setup, 8);
+        let words = generate(&setup, seed, length, 4_096);
+        let decoded = decode_with(&words, &[], &ChunkLimits::default());
+        assert_eq!(
+            decoded.items,
+            expected(&setup, seed, length as u64),
+            "seed {seed}"
+        );
+        let wanted = planted(&setup, seed, length as u64);
+        assert_eq!(reported(&decoded), wanted, "seed {seed}");
+        total += wanted.len();
+    }
+    assert!(
+        total > 100,
+        "the rate of errors was too low to test anything: {total}"
+    );
+}
+
+#[test]
+fn without_errors_nothing_is_planted_and_the_same_seed_plants_the_same_errors() {
+    for seed in 0..20_u64 {
+        let off = setup_with(&[("errors", 0), ("error_rate", 2)]);
+        assert!(expected_errors(&off, seed, 100_000).is_empty());
+        let on = setup_with(&[("errors", 1), ("error_rate", 2)]);
+        let length = frames(&on, 10);
+        assert!(!expected_errors(&on, seed, length as u64).is_empty());
+        assert_eq!(
+            expected_errors(&on, seed, length as u64),
+            expected_errors(&on, seed, length as u64)
+        );
+        assert_eq!(
+            generate(&on, seed, length, 100),
+            generate(&on, seed, length, length)
+        );
+        assert_ne!(
+            generate(&on, seed, length, length),
+            generate(&off, seed, length, length)
+        );
+    }
+}
+
+#[test]
+fn a_capture_cut_at_any_point_gives_the_items_completed_before_it_and_no_other_error() {
+    for seed in 0..30_u64 {
+        let setup = setup_with(&[("errors", 1), ("error_rate", 3), ("max_bytes", 3)]);
+        let frame = Params::from_setup(&setup, seed).unwrap().frame_length() as usize;
+        for offset in (0..frame).step_by(97) {
+            let length = frame * 3 + offset;
+            let words = generate(&setup, seed, length, 4_096);
+            let decoded = decode_with(&words, &[], &ChunkLimits::default());
+            let items: Vec<Item> = expected(&setup, seed, length as u64);
+            assert_eq!(decoded.items, items, "seed {seed} length {length}");
+            // Every error is a planted one, or a byte cut short by the end of the capture.
+            let wanted = planted(&setup, seed, length as u64);
+            for error in reported(&decoded) {
+                let cut_by_the_end =
+                    matches!(error, PlantedError::ByteCut { end, .. } if end == length as u64);
+                assert!(
+                    cut_by_the_end || wanted.contains(&error),
+                    "seed {seed} length {length}: {error:?}"
+                );
+            }
+            for error in &wanted {
+                assert!(
+                    reported(&decoded).contains(error),
+                    "seed {seed} length {length}: {error:?} not reported"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_start_up_before_the_interface_is_set_up_leaves_no_trace_and_shifts_everything() {
+    for seed in 0..100_u64 {
+        let plain = setup_with(&[
+            ("max_bytes", 1 + (seed % 5) as i64),
+            ("errors", (seed % 2) as i64),
+        ]);
+        let mut with = plain.clone();
+        with.generator.insert("startup".to_owned(), 1);
+        let shift = Params::from_setup(&with, seed).unwrap().startup_length();
+        assert!(shift > 0 && shift % 16 == 0 && shift <= 128, "{shift}");
+        assert_eq!(
+            Params::from_setup(&plain, seed).unwrap().startup_length(),
+            0
+        );
+        let frames_length = frames(&plain, 8);
+        let length = frames_length + shift as usize;
+        let words = generate(&with, seed, length, 4_096);
+        let decoded = decode_with(&words, &[], &ChunkLimits::default());
+        let items = expected(&with, seed, length as u64);
+        assert_eq!(decoded.items, items, "seed {seed}");
+        // The same traffic as without a start-up, moved by its length.
+        let shifted: Vec<Item> = expected(&plain, seed, frames_length as u64)
+            .into_iter()
+            .map(|mut i| {
+                i.start += shift;
+                i.end += shift;
+                i
+            })
+            .collect();
+        assert_eq!(items, shifted, "seed {seed}");
+        // Nothing is drawn or reported inside the start-up.
+        assert!(
+            decoded.all.iter().all(|e| e.positions[0] >= shift),
+            "seed {seed}: something before the end of the start-up"
+        );
+        assert_eq!(
+            reported(&decoded),
+            planted(&with, seed, length as u64),
+            "seed {seed}"
+        );
+        let _: &Payload = &items[0].payload;
+    }
+}

@@ -1,0 +1,185 @@
+# a written byte is not acknowledged
+# SCL is channel 0, SDA channel 1. Runs: <sda><scl> <samples>.
+11 64
+01 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 4
+11 65
+01 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 4
+11 65
+--- expect
+lane point 64 ann-i2c-start
+ch1 point 64 ann-i2c-start
+lane range 72 201 ann-i2c-address-write 0x51
+lane point 200 ann-i2c-ack
+ch0 edge 72 rising =1
+ch0 edge 88 rising =0
+ch0 edge 104 rising =1
+ch0 edge 120 rising =0
+ch0 edge 136 rising =0
+ch0 edge 152 rising =0
+ch0 edge 168 rising =1
+ch0 edge 184 rising =0
+ch0 edge 200 rising ann-i2c-ack
+lane range 216 345 ann-i2c-data 0x01
+lane point 344 ann-i2c-ack
+ch0 edge 216 rising =0
+ch0 edge 232 rising =0
+ch0 edge 248 rising =0
+ch0 edge 264 rising =0
+ch0 edge 280 rising =0
+ch0 edge 296 rising =0
+ch0 edge 312 rising =0
+ch0 edge 328 rising =1
+ch0 edge 344 rising ann-i2c-ack
+lane range 360 489 ann-i2c-data 0x02
+lane point 488 ann-i2c-ack
+ch0 edge 360 rising =0
+ch0 edge 376 rising =0
+ch0 edge 392 rising =0
+ch0 edge 408 rising =0
+ch0 edge 424 rising =0
+ch0 edge 440 rising =0
+ch0 edge 456 rising =1
+ch0 edge 472 rising =0
+ch0 edge 488 rising ann-i2c-ack
+lane point 508 ann-i2c-stop
+ch1 point 508 ann-i2c-stop
+lane range 64 509 ann-i2c-transaction-write 0x51
+lane point 573 ann-i2c-start
+ch1 point 573 ann-i2c-start
+lane range 581 710 ann-i2c-address-write 0x50
+lane point 709 ann-i2c-ack
+ch0 edge 581 rising =1
+ch0 edge 597 rising =0
+ch0 edge 613 rising =1
+ch0 edge 629 rising =0
+ch0 edge 645 rising =0
+ch0 edge 661 rising =0
+ch0 edge 677 rising =0
+ch0 edge 693 rising =0
+ch0 edge 709 rising ann-i2c-ack
+lane range 725 854 ann-i2c-data 0x12
+lane point 853 ann-i2c-error-data-nak 0x12 error
+ch0 edge 725 rising =0
+ch0 edge 741 rising =0
+ch0 edge 757 rising =0
+ch0 edge 773 rising =1
+ch0 edge 789 rising =0
+ch0 edge 805 rising =0
+ch0 edge 821 rising =1
+ch0 edge 837 rising =0
+ch0 edge 853 rising ann-i2c-nak
+lane point 873 ann-i2c-stop
+ch1 point 873 ann-i2c-stop
+lane range 573 874 ann-i2c-transaction-write 0x50

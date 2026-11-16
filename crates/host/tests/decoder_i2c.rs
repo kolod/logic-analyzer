@@ -410,3 +410,52 @@ fn ten_million_samples_decode_without_holding_the_interface() {
     assert_eq!(view.state, InstanceState::Finished);
     assert!(view.annotations > 100_000, "{}", view.annotations);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Errors on request through the generator options the application edits (spec 008, T027).
+// ---------------------------------------------------------------------------------------------
+
+/// The positions of the errors in the lane.
+fn error_positions(shell: &Shell, id: u32) -> Vec<u64> {
+    let results = shell.decoder_results(id).unwrap();
+    let mut list: Vec<u64> = results
+        .lane
+        .window(0, u64::MAX)
+        .iter()
+        .filter(|e| e.annotation.error)
+        .map(|e| e.start())
+        .collect();
+    list.sort_unstable();
+    list
+}
+
+#[test]
+fn errors_are_planted_when_the_generator_option_is_on_and_not_otherwise() {
+    let dir = TempDir::new("i2c-errors");
+    let (mut shell, id) = shell_with_decoder(&dir);
+    // Whole frames (984 samples with the default of four bytes), so that no byte is cut by the end.
+    let length = 984 * 80;
+    // The same command the application sends when the checkbox and the rate field are used.
+    let mut setup = shell.state().decoders.instance(id).unwrap().setup.clone();
+    setup.generator.insert("errors".to_owned(), 1);
+    setup.generator.insert("error_rate".to_owned(), 3);
+    done(&mut shell, Command::ConfigureDecoder { id, setup });
+    capture_again(&mut shell, SEED, length);
+    wait_all(&mut shell);
+    let setup = shell.state().decoders.instance(id).unwrap().setup.clone();
+    let mut planted: Vec<u64> = la_decoders::generators::i2c::expected_errors(&setup, SEED, length)
+        .iter()
+        .map(la_decoders::generators::i2c::PlantedError::position)
+        .collect();
+    planted.sort_unstable();
+    assert!(planted.len() > 10, "{}", planted.len());
+    assert_eq!(error_positions(&shell, id), planted);
+
+    // With the option off there are no errors.
+    let mut setup = setup;
+    setup.generator.insert("errors".to_owned(), 0);
+    done(&mut shell, Command::ConfigureDecoder { id, setup });
+    capture_again(&mut shell, SEED, length);
+    wait_all(&mut shell);
+    assert!(error_positions(&shell, id).is_empty());
+}

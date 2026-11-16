@@ -305,6 +305,18 @@ ann-i2c-data = Data { $value }
 ann-i2c-ack = ACK
 # Annotation: the receiver did not acknowledge the byte.
 ann-i2c-nak = NAK
+# Annotation: a transaction that was not finished (the capture ended or samples were lost).
+ann-i2c-incomplete = Incomplete transaction
+# Annotation (error): a byte that ended early. $value is the number of bits that were read.
+ann-i2c-error-byte-cut = Byte cut short after { $value } bits
+# Annotation (error): the address was not acknowledged. $value is the address, such as 0x50.
+ann-i2c-error-address-nak = Address { $value } not acknowledged
+# Annotation (error): a byte written to a target was not acknowledged. $value is the byte, such as 0x12.
+ann-i2c-error-data-nak = Data { $value } not acknowledged
+# Annotation (error): a start condition followed by a stop condition with no clock pulse between them.
+ann-i2c-error-empty = Empty transaction: no address
+# Annotation (error): positions of the capture were lost here.
+ann-i2c-error-gap = Samples lost here
 
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Decoders

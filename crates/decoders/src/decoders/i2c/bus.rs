@@ -194,7 +194,7 @@ impl Bus {
             if gap.start > position {
                 self.edges(reader, position, gap.start, sink)?;
             }
-            self.gap_begins();
+            self.gap_begins(gap.start, gap_end.min(reader.length()), sink)?;
             if gap_end >= to {
                 self.in_gap_until = Some(gap_end);
                 return Ok(());
@@ -229,15 +229,82 @@ impl Bus {
         Ok(())
     }
 
-    /// Samples were lost: what is in progress ends and the bus must be found idle again.
-    fn gap_begins(&mut self) {
-        self.transaction = None;
+    /// Samples were lost: what is in progress ends (as an error where something was in progress)
+    /// and the bus must be found idle again.
+    fn gap_begins(&mut self, at: u64, end: u64, sink: &mut Sink) -> Result<(), DecodeError> {
+        if let Some(transaction) = self.transaction.take() {
+            put(
+                sink,
+                Kind::Range { start: at, end },
+                Target::Lane,
+                text::gap(),
+                true,
+            )?;
+            if transaction.address.is_some() {
+                put(
+                    sink,
+                    Kind::Range {
+                        start: transaction.start,
+                        end: at,
+                    },
+                    Target::Lane,
+                    text::incomplete(),
+                    false,
+                )?;
+            }
+        }
         self.byte = Byte::default();
         self.pulse = None;
         self.synced = false;
         self.scl = None;
         self.sda = None;
         self.idle_since = None;
+        Ok(())
+    }
+
+    /// The pass ends at `at`: what is in progress is shown as it is (a byte that was begun is cut
+    /// short, the transaction is unfinished, which is not an error).
+    ///
+    /// # Errors
+    ///
+    /// The limit of the sink was reached.
+    pub fn flush(&mut self, at: u64, sink: &mut Sink) -> Result<(), DecodeError> {
+        let Some(transaction) = self.transaction.take() else {
+            return Ok(());
+        };
+        self.cut_byte(at, sink)?;
+        self.pulse = None;
+        if transaction.address.is_some() {
+            put(
+                sink,
+                Kind::Range {
+                    start: transaction.start,
+                    end: at,
+                },
+                Target::Lane,
+                text::incomplete(),
+                false,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// A byte that was begun and not finished ends at `at`: an error over the bits that were read.
+    fn cut_byte(&mut self, at: u64, sink: &mut Sink) -> Result<(), DecodeError> {
+        let byte = std::mem::take(&mut self.byte);
+        if byte.count == 0 {
+            return Ok(());
+        }
+        put(
+            sink,
+            Kind::Range {
+                start: byte.first,
+                end: at,
+            },
+            Target::Lane,
+            text::byte_cut(byte.count),
+            true,
+        )
     }
 
     fn update_idle(&mut self, at: u64) {
@@ -294,8 +361,25 @@ impl Bus {
         }
         self.synced = true;
         // Between bytes a start inside a transaction is a repeated start; in the middle of a byte
-        // it begins a new transaction.
+        // it cuts the byte short and begins a new transaction.
         let between_bytes = self.byte.count == 0;
+        if !between_bytes {
+            self.cut_byte(at, sink)?;
+            if let Some(old) = self.transaction.take() {
+                if old.address.is_some() {
+                    put(
+                        sink,
+                        Kind::Range {
+                            start: old.start,
+                            end: at,
+                        },
+                        Target::Lane,
+                        text::incomplete(),
+                        false,
+                    )?;
+                }
+            }
+        }
         self.byte = Byte::default();
         let repeated = match &mut self.transaction {
             Some(transaction) if between_bytes => {
@@ -342,7 +426,8 @@ impl Bus {
             // A stop with nothing to stop (before the first start, or after a stop).
             return Ok(());
         };
-        self.byte = Byte::default();
+        let cut = self.byte.count > 0;
+        self.cut_byte(at, sink)?;
         let direction = match (transaction.address, transaction.read) {
             (None, _) => items::UNKNOWN,
             (Some(_), true) => items::READ,
@@ -367,6 +452,18 @@ impl Bus {
                 Target::Lane,
                 text::transaction(transaction.first_read, self.display.value(address)),
                 false,
+            )?;
+        } else if !cut {
+            // A start and a stop with no clock pulse between them.
+            put(
+                sink,
+                Kind::Range {
+                    start: transaction.start,
+                    end: at.saturating_add(1),
+                },
+                Target::Lane,
+                text::empty(),
+                true,
             )?;
         }
         Ok(())
@@ -412,6 +509,12 @@ impl Bus {
             end: pulse.at.saturating_add(1),
         };
         let is_address = transaction.expect_address;
+        // The value an error message names: the address (without the direction bit) or the byte.
+        let shown = if is_address {
+            byte.value >> 1
+        } else {
+            byte.value
+        };
         // A NAK is an error after an address and after a byte written to a target; the controller's
         // own NAK of a byte it reads is how a read ends.
         let error = !ack && (is_address || !transaction.read);
@@ -468,11 +571,18 @@ impl Bus {
                 .item(byte.first, item_end),
             )?;
         }
+        let point = if !error {
+            text::acknowledge(ack)
+        } else if is_address {
+            text::address_nak(self.display.value(shown))
+        } else {
+            text::data_nak(self.display.value(shown))
+        };
         put(
             sink,
             Kind::Point { at: pulse.at },
             Target::Lane,
-            text::acknowledge(ack),
+            point,
             error,
         )
     }

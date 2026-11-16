@@ -280,7 +280,7 @@ decoder carries on; truncated and start-up captures round trip.
 
 ### Tests for User Story 3 (write first; they must fail)
 
-- [ ] T022 [P] [US3] In `crates/decoders/tests/i2c.rs`, hand-built signals with hand-written expected
+- [X] T022 [P] [US3] In `crates/decoders/tests/i2c.rs`, hand-built signals with hand-written expected
   errors: the address NAK (message `ann-i2c-error-address-nak` with the address, error flag, the
   transaction ends at its stop); a data NAK on a written byte (`ann-i2c-error-data-nak`); no error for the
   controller's NAK of the last read byte; a stop in the middle of a byte after 3 bits
@@ -292,31 +292,31 @@ decoder carries on; truncated and start-up captures round trip.
   `ann-i2c-error-byte-cut` error, a transaction range to the end with `ann-i2c-incomplete`, not an
   error); a capture that ends between bytes (the incomplete range, no byte error); and a growing capture
   where the transaction continues when more samples arrive (the result equals the closed capture).
-- [ ] T023 [P] [US3] In `crates/decoders/tests/i2c_round_trip.rs`: with `errors = 1` and `error_rate` 2..12,
+- [X] T023 [P] [US3] In `crates/decoders/tests/i2c_round_trip.rs`: with `errors = 1` and `error_rate` 2..12,
   for 400 seeds, the decoded items equal `expected` and the error annotations (kind, position) equal
   `expected_errors` exactly; with `errors = 0` no error; the same seed and rate plant the same errors;
   lengths chosen to cut inside a transaction (every phase of one frame) give the items completed before
   the cut and no spurious error; `startup = 1` for 200 seeds decodes the same items as `startup = 0`
   shifted by the start-up length, and nothing is reported for the start-up. Assert that more than 100
   errors were planted across the seeds so the test cannot pass vacuously.
-- [ ] T024 [P] [US3] Fixtures `nak_on_address.txt`, `nak_on_data.txt`, `byte_cut_by_stop.txt`,
+- [X] T024 [P] [US3] Fixtures `nak_on_address.txt`, `nak_on_data.txt`, `byte_cut_by_stop.txt`,
   `start_without_clock.txt`, `ends_mid_transaction.txt` in `crates/decoders/tests/fixtures/i2c/` and their
   cases in `crates/decoders/tests/i2c_recorded.rs`.
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Error paths in `bus.rs` and `text.rs`: the cut-short byte on a stop, on a start and on the
+- [X] T025 [US3] Error paths in `bus.rs` and `text.rs`: the cut-short byte on a stop, on a start and on the
   end of the pass (`finish`), the empty transaction, the gap, the incomplete transaction range, with the
   messages and arguments of `research.md` R9 (`ann-i2c-error-address-nak`, `-data-nak`, `-byte-cut`,
   `-empty`, `-gap`, `ann-i2c-incomplete`) and the error colour; the keys with their drafts in six
   languages. T022 and T024 pass.
-- [ ] T026 [US3] Generator errors and start-up in `generators/i2c.rs`: planted errors (address NAK, data
+- [X] T026 [US3] Generator errors and start-up in `generators/i2c.rs`: planted errors (address NAK, data
   NAK, cut short) chosen per frame from `mix`, with `error_rate` clamped to at least 2; the
   `startup` prefix (lines low, then pulses with highs shorter than `T`, a multiple of the bit period, at
   most 8 periods, no valid start); `expected` returns items with the error flag where an acknowledge is
   required and missing; `expected_errors` returns `PlantedError::{AddressNak, DataNak, ByteCut}` with
   positions; truncated lengths handled. T023 passes. Document the options in the module comment.
-- [ ] T027 [US3] Host: in `crates/host/tests/decoder_i2c.rs` set `Setup::generator` `errors` and
+- [X] T027 [US3] Host: in `crates/host/tests/decoder_i2c.rs` set `Setup::generator` `errors` and
   `error_rate` through the command the shell uses for them (`Command::ConfigureDecoder { id, setup }` with the key
   inserted into `setup.generator`, as `Message::DecoderGenerator` does in `crates/app/src/app.rs`), run a virtual capture and check that the lane holds error
   annotations at the planted positions; with the option off none. No shell code changes.
