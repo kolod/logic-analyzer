@@ -54,6 +54,9 @@ impl Registry {
             crate::generators::clocked_bits::claim,
         ));
         registry
+            .generators
+            .push((crate::decoders::i2c::ID, crate::generators::i2c::claim));
+        registry
     }
 
     /// Registers the generator of a decoder.

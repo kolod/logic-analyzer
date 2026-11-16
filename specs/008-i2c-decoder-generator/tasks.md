@@ -224,7 +224,7 @@ and check nothing is reported before the first valid start.
 
 ### Tests for User Story 2 (write first; they must fail)
 
-- [ ] T015 [P] [US2] `crates/decoders/tests/i2c_round_trip.rs`: for seeds `0..seeds()` (env
+- [X] T015 [P] [US2] `crates/decoders/tests/i2c_round_trip.rs`: for seeds `0..seeds()` (env
   `LA_ROUND_TRIP_SEEDS`, default 1,000) with `max_bytes` varied 1..=6, generate with
   `generators::i2c::source`, decode (same `decode` helper as `round_trip.rs`), and require the decoded
   items to equal `expected(...)` exactly and no error annotation; also: the same seed twice gives the same
@@ -234,35 +234,35 @@ and check nothing is reported before the first valid start.
   release mode. (These need items, which US5 emits; until then the test compares through a helper that
   rebuilds the transactions from the lane annotations — write it so it uses items once T033 lands, and
   note this in a comment so the helper is removed then.)
-- [ ] T016 [P] [US2] `crates/decoders/tests/i2c_chunking.rs` and `crates/decoders/tests/i2c_random.rs`:
+- [X] T016 [P] [US2] `crates/decoders/tests/i2c_chunking.rs` and `crates/decoders/tests/i2c_random.rs`:
   chunking: for 50 seeds, decode with `ChunkLimits { max_edges, max_span }` from (1, 1) up to the default
   and with a capture fed in pieces of 1, 7, 1,000 and 100,000 samples (`append_parts`), and require the
   complete set of annotations to be identical (SC-005). Random: `random.rs` feeds one million chunks of
   random levels (including one-sample pulses, long constant runs, and gaps made with the helpers) in many
   captures and requires: no panic, every annotation valid for the bounds, `finish` returns `Ok`, and with
   the property that the decoder never returns a `DecodeError` (SC-004).
-- [ ] T017 [P] [US2] In `crates/decoders/tests/composite.rs`: a registry claim for an `i2c` setup fills only
+- [X] T017 [P] [US2] In `crates/decoders/tests/composite.rs`: a registry claim for an `i2c` setup fills only
   its two channels (`claimed_channels`), leaves the others to the random signals, and an instance without
   both channels assigned gives no claim (FR-018).
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] `crates/decoders/src/generators/i2c.rs` per `contracts/i2c-generator.md` for the part
+- [X] T018 [US2] `crates/decoders/src/generators/i2c.rs` per `contracts/i2c-generator.md` for the part
   without errors, start-up and 10-bit: `Params::from_setup`, the pure `sample(position)`, the frame layout
   and sizing from `max_bytes`, 16 samples per period, the lead-in of 64 samples, random content from
   `mix(seed, k)` (reuse the `mix` of `generators/clocked_bits.rs` by making it `pub(super)`),
   `source`, `claim`, `claimed_channels`, and `expected` (items per `contracts/i2c-items.md`; write the
   item builder here once and share it with T033). Unknown keys and out-of-range values are clamped.
   `#![allow(clippy::arithmetic_side_effects)]` for the per-sample code only, with the justification.
-- [ ] T019 [US2] Register the generator: in `Registry::builtin()` push `(decoders::i2c::ID,
+- [X] T019 [US2] Register the generator: in `Registry::builtin()` push `(decoders::i2c::ID,
   generators::i2c::claim)` after the sample decoder's. T015 (through lanes), T016, T017 pass.
-- [ ] T020 [US2] Host end to end in `crates/host/tests/decoder_i2c.rs`: a virtual device capture with an
+- [X] T020 [US2] Host end to end in `crates/host/tests/decoder_i2c.rs`: a virtual device capture with an
   `i2c` instance (the channels assigned before the capture starts) decodes to the transactions that
   `generators::i2c::expected` returns for the seed and length; the same seed twice gives identical
   captures; with no instance the channels are the ordinary random signals; a capture of 10,000,000
   samples never lets one `Shell::poll` take more than 100 ms while decoding (the measurement of
   `opening_a_file_with_many_saved_results_does_not_hold_the_interface` is the model) (SC-006).
-- [ ] T021 [P] [US2] Benchmark: add an I2C case to `crates/decoders/benches/decode_throughput.rs`
+- [X] T021 [P] [US2] Benchmark: add an I2C case to `crates/decoders/benches/decode_throughput.rs`
   (generated dense traffic, `max_bytes` 4, edges per second) and record its baseline in
   `crates/decoders/benches/baseline.json` in the format the file already uses; the case must be
   deterministic (fixed seed).

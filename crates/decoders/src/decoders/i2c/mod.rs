@@ -12,6 +12,7 @@
 //! bounded number of edges per call (research R2).
 
 mod bus;
+pub mod items;
 pub mod period;
 mod text;
 

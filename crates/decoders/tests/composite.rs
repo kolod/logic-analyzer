@@ -96,3 +96,29 @@ fn without_claims_it_is_the_random_source() {
 fn a_setup_without_channels_makes_no_claim() {
     assert!(claim(&Setup::new(1, ID)).is_none());
 }
+
+#[test]
+fn the_i2c_claim_fills_only_its_two_channels_and_an_incomplete_setup_gives_none() {
+    use la_decoders::generators::i2c;
+    let mut setup = Setup::new(1, la_decoders::decoders::i2c::ID);
+    setup.channels.insert("scl".into(), 1);
+    setup.channels.insert("sda".into(), 2);
+    let claim = i2c::claim(&setup).unwrap();
+    assert_eq!(claim.channels, 0b110);
+    let mask = 0b1111_1111;
+    let factory = CompositeFactory::new(vec![claim], 10);
+    let composite = fill(factory.create(mask, 1_000_000, 42).as_mut(), 5_000, 5_000);
+    let generated = fill(&mut i2c::source(&setup, 42).unwrap(), 5_000, 5_000);
+    let random = fill(&mut RandomSource::new(mask & !0b110, 42, 10), 5_000, 5_000);
+    for (i, word) in composite.iter().enumerate() {
+        assert_eq!(
+            word & 0b110,
+            generated[i] & 0b110,
+            "claimed channels at {i}"
+        );
+        assert_eq!(word & !0b110, random[i] & !0b110, "other channels at {i}");
+    }
+    // A setup with a missing channel claims nothing: those channels stay with the random signals.
+    setup.channels.remove("sda");
+    assert!(i2c::claim(&setup).is_none());
+}

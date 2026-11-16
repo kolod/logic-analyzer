@@ -16,14 +16,14 @@ mod common;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use common::TempDir;
+use common::{TempDir, finished_shell};
 use la_decoders::decoders::i2c::ID;
 use la_decoders::model::{Kind, Target, Text};
 use la_decoders::run::Results;
 use la_devices::{CaptureDescription, SavedDescription};
 use la_host::decoders::InstanceState;
 use la_host::window::ViewSize;
-use la_host::{Command, Outcome, Shell, ShellConfig};
+use la_host::{Activity, Command, ConfigEdit, Decision, Outcome, Shell, ShellConfig};
 use la_session::{Control, SessionData};
 use la_storage::{Capture, CaptureConfig, Limits};
 
@@ -244,4 +244,169 @@ fn the_i2c_decoder_is_in_the_catalogue_and_reads_a_capture_of_a_bus() {
             Target::Lane | Target::Channel(_)
         ));
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The virtual device makes traffic that is valid for the configured decoder (spec 008, T020).
+// ---------------------------------------------------------------------------------------------
+
+const SEED: u64 = 99;
+
+fn wait_all(shell: &mut Shell) {
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        shell.poll(Instant::now());
+        if shell.state().activity == Activity::Idle && idle(shell) {
+            return;
+        }
+        assert!(Instant::now() < deadline, "did not finish");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+/// A shell with a small capture and an I2C decoder on channels 0 and 1, ready for the next capture.
+fn shell_with_decoder(dir: &TempDir) -> (Shell, u32) {
+    let mut shell = finished_shell(dir, 0b11, 2_000, 1);
+    done(
+        &mut shell,
+        Command::AddDecoder {
+            decoder: ID.to_owned(),
+        },
+    );
+    let id = shell.state().decoders.instances[0].id;
+    channels(&mut shell, id, Some(SCL), Some(SDA));
+    wait_all(&mut shell);
+    (shell, id)
+}
+
+fn capture_again(shell: &mut Shell, seed: u64, length: u64) {
+    for edit in [ConfigEdit::Seed(Some(seed)), ConfigEdit::Length(length)] {
+        done(shell, Command::EditConfig(edit));
+    }
+    let outcome = shell.apply(Command::StartCapture);
+    if matches!(outcome, Outcome::NeedsDecision(_)) {
+        done(shell, Command::Decide(Decision::Discard));
+    } else {
+        assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+    }
+}
+
+/// The addresses and data bytes the decoder showed in the lane, in order: `(key, value)`.
+fn decoded_bytes(shell: &Shell, id: u32) -> Vec<(String, u64)> {
+    let results = shell.decoder_results(id).unwrap();
+    let mut bytes: Vec<(u64, String, u64)> = results
+        .lane
+        .window(0, u64::MAX)
+        .iter()
+        .filter_map(|e| match (&e.annotation.kind, &e.annotation.text) {
+            (Kind::Range { start, .. }, Text::Message { key, args })
+                if key.starts_with("ann-i2c-address") || *key == "ann-i2c-data" =>
+            {
+                let value = u64::from_str_radix(args[0].trim_start_matches("0x"), 16).unwrap();
+                let kind = if *key == "ann-i2c-data" {
+                    "data"
+                } else {
+                    "address"
+                };
+                Some((*start, kind.to_owned(), value))
+            }
+            _ => None,
+        })
+        .collect();
+    bytes.sort();
+    bytes.into_iter().map(|(_, k, v)| (k, v)).collect()
+}
+
+fn expected_bytes(shell: &Shell, id: u32, seed: u64, length: u64) -> Vec<(String, u64)> {
+    let setup = shell.state().decoders.instance(id).unwrap().setup.clone();
+    la_decoders::generators::i2c::expected(&setup, seed, length)
+        .into_iter()
+        .filter_map(|item| {
+            let la_decoders::model::Payload::Bytes(bytes) = &item.payload else {
+                return None;
+            };
+            let kind = match bytes[0] {
+                la_decoders::decoders::i2c::items::ADDRESS => "address",
+                la_decoders::decoders::i2c::items::DATA => "data",
+                _ => return None,
+            };
+            Some((
+                kind.to_owned(),
+                u64::from(bytes[4]) << 8 | u64::from(bytes[5]),
+            ))
+        })
+        .collect()
+}
+
+#[test]
+fn a_virtual_capture_decodes_to_the_traffic_that_was_generated() {
+    let dir = TempDir::new("i2c-generated");
+    let (mut shell, id) = shell_with_decoder(&dir);
+    let length = 60_000;
+    capture_again(&mut shell, SEED, length);
+    wait_all(&mut shell);
+    let shown = decoded_bytes(&shell, id);
+    let wanted = expected_bytes(&shell, id, SEED, length);
+    assert!(wanted.len() > 100, "too little traffic: {}", wanted.len());
+    assert_eq!(shown, wanted);
+    assert!(!shell.state().decoders.instance(id).unwrap().incomplete);
+
+    // The same seed again gives the same signal and the same result; another seed another result.
+    capture_again(&mut shell, SEED, length);
+    wait_all(&mut shell);
+    assert_eq!(decoded_bytes(&shell, id), shown);
+    capture_again(&mut shell, SEED + 1, length);
+    wait_all(&mut shell);
+    assert_ne!(decoded_bytes(&shell, id), shown);
+}
+
+#[test]
+fn channels_without_a_decoder_keep_the_ordinary_random_signal() {
+    let dir = TempDir::new("i2c-other-channels");
+    let mut shell = finished_shell(&dir, 0b1111, 5_000, 3);
+    done(
+        &mut shell,
+        Command::AddDecoder {
+            decoder: ID.to_owned(),
+        },
+    );
+    let id = shell.state().decoders.instances[0].id;
+    channels(&mut shell, id, Some(0), Some(1));
+    wait_all(&mut shell);
+    capture_again(&mut shell, 4, 5_000);
+    wait_all(&mut shell);
+    let capture = shell.state().capture.as_ref().unwrap();
+    // Channels 2 and 3 were not claimed: they carry transitions of the random generator.
+    for channel in [2_u8, 3] {
+        let transitions = capture
+            .snapshot
+            .transitions(channel, 0, capture.snapshot.length())
+            .unwrap()
+            .count();
+        assert!(transitions > 10, "channel {channel}: {transitions}");
+    }
+}
+
+#[test]
+fn ten_million_samples_decode_without_holding_the_interface() {
+    let dir = TempDir::new("i2c-big");
+    let (mut shell, id) = shell_with_decoder(&dir);
+    shell.set_decoder_thread_cap(4);
+    capture_again(&mut shell, 5, 10_000_000);
+    let mut worst = Duration::ZERO;
+    let deadline = Instant::now() + Duration::from_secs(300);
+    loop {
+        let t = Instant::now();
+        shell.poll(Instant::now());
+        worst = worst.max(t.elapsed());
+        if shell.state().activity == Activity::Idle && idle(&shell) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "did not finish");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(worst < Duration::from_millis(100), "a poll took {worst:?}");
+    let view = shell.state().decoders.instance(id).unwrap();
+    assert_eq!(view.state, InstanceState::Finished);
+    assert!(view.annotations > 100_000, "{}", view.annotations);
 }

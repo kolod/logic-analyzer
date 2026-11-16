@@ -18,6 +18,7 @@
 
 use la_storage::Gap;
 
+use super::items::{self, Event};
 use super::text::{self, Display};
 use crate::input::{Level, SignalReader};
 use crate::model::{Annotation, Kind, Target, Text};
@@ -316,6 +317,12 @@ impl Bus {
             text::start()
         };
         put(sink, Kind::Point { at }, Target::Lane, (text, style), false)?;
+        let kind = if repeated {
+            items::REPEATED_START
+        } else {
+            items::START
+        };
+        sink.emit(Event::condition(kind, items::UNKNOWN).item(at, at.saturating_add(1)))?;
         let dot_text = if repeated {
             text::repeated_start_text()
         } else {
@@ -336,6 +343,12 @@ impl Bus {
             return Ok(());
         };
         self.byte = Byte::default();
+        let direction = match (transaction.address, transaction.read) {
+            (None, _) => items::UNKNOWN,
+            (Some(_), true) => items::READ,
+            (Some(_), false) => items::WRITE,
+        };
+        sink.emit(Event::condition(items::STOP, direction).item(at, at.saturating_add(1)))?;
         put(sink, Kind::Point { at }, Target::Lane, text::stop(), false)?;
         put(
             sink,
@@ -399,6 +412,11 @@ impl Bus {
             end: pulse.at.saturating_add(1),
         };
         let is_address = transaction.expect_address;
+        // A NAK is an error after an address and after a byte written to a target; the controller's
+        // own NAK of a byte it reads is how a read ends.
+        let error = !ack && (is_address || !transaction.read);
+        let acknowledgement = if ack { items::ACK } else { items::NAK };
+        let item_end = pulse.at.saturating_add(1);
         if is_address {
             let read = byte.value & 1 != 0;
             let address = byte.value >> 1;
@@ -415,6 +433,17 @@ impl Bus {
                 text::address(read, self.display.value(address)),
                 false,
             )?;
+            sink.emit(
+                Event {
+                    kind: items::ADDRESS,
+                    direction: if read { items::READ } else { items::WRITE },
+                    ack: acknowledgement,
+                    ten_bit: false,
+                    value: address,
+                    error,
+                }
+                .item(byte.first, item_end),
+            )?;
         } else {
             put(
                 sink,
@@ -423,10 +452,22 @@ impl Bus {
                 text::data(self.display.value(byte.value)),
                 false,
             )?;
+            sink.emit(
+                Event {
+                    kind: items::DATA,
+                    direction: if transaction.read {
+                        items::READ
+                    } else {
+                        items::WRITE
+                    },
+                    ack: acknowledgement,
+                    ten_bit: false,
+                    value: byte.value,
+                    error,
+                }
+                .item(byte.first, item_end),
+            )?;
         }
-        // A NAK is an error after an address and after a byte written to a target; the controller's
-        // own NAK of a byte it reads is how a read ends.
-        let error = !ack && (is_address || !transaction.read);
         put(
             sink,
             Kind::Point { at: pulse.at },
