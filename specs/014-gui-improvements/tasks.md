@@ -445,7 +445,7 @@ well-formed declarations.
   prove it; SC-002 measured (the signal width with and without the panel at 1180 px); SC-004 measured (the click on
   100 million samples); the benchmark numbers against the baseline; the manual checks left to the owner
   (quickstart section 4 on Windows and Debian, the icons in Explorer and a Debian file manager, the translations).
-- [ ] T057 Run the whole quickstart (`specs/014-gui-improvements/quickstart.md` sections 1–3 and 5), `cargo fmt --check`,
+- [X] T057 Run the whole quickstart (`specs/014-gui-improvements/quickstart.md` sections 1–3 and 5), `cargo fmt --check`,
   `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, and the CI of the pull request
   on both systems.
 
