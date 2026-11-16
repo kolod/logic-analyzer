@@ -980,7 +980,9 @@ impl SignalView<'_> {
         );
     }
 
-    /// The lane that is being moved, lifted under the pointer, and the line where it will land.
+    /// The lane that is being moved, lifted under the pointer as a whole (its background, its
+    /// bands and its signal, the full width of the view), the gap it leaves, and the line where it
+    /// will land.
     fn draw_lane_drag(&self, frame: &mut Frame, size: Size, theme: &Theme, state: &ViewState) {
         let Some(Drag::Lane { from, y }) = state.drag else {
             return;
@@ -989,28 +991,55 @@ impl SignalView<'_> {
         let palette = theme.palette();
         let line = layout.landing_line(layout.landing(y));
         frame.stroke(
-            &Path::line(Point::new(0.0, line), Point::new(GUTTER, line)),
+            &Path::line(Point::new(0.0, line), Point::new(size.width, line)),
             Stroke::default()
                 .with_color(palette.primary)
                 .with_width(2.0),
         );
-        let Some(lane) = layout.lane(from) else {
+        let (Some(lane), Some(channel)) = (layout.lane(from), self.plan.channels.get(from)) else {
             return;
         };
-        let top = y - lane.height / 2.0;
+        let colour = self.variant.channel(channel.colour);
+        // Where the lane was: dimmed, as a gap.
+        frame.fill_rectangle(
+            Point::new(0.0, lane.top.max(AXIS_HEIGHT)),
+            Size::new(size.width, lane.height),
+            Color {
+                a: 0.7,
+                ..palette.background
+            },
+        );
+        // The lifted lane follows the pointer, kept inside the lanes' area.
+        let top = (y - lane.height / 2.0)
+            .clamp(AXIS_HEIGHT, (size.height - lane.height).max(AXIS_HEIGHT));
+        frame.fill_rectangle(
+            Point::new(0.0, top),
+            Size::new(size.width, lane.height),
+            Color {
+                a: 0.96,
+                ..palette.background
+            },
+        );
+        let scale = (size.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+        self.draw_bands(frame, &channel.segments, top, lane.height, scale, colour);
+        frame.stroke(
+            &waveform(
+                &channel.segments,
+                scale,
+                top + WAVE_MARGIN,
+                top + lane.height - WAVE_MARGIN,
+            ),
+            Stroke::default().with_color(colour).with_width(1.6),
+        );
+        // The legend part on top of the signal, as in the lane at rest.
         frame.fill_rectangle(
             Point::new(0.0, top),
             Size::new(GUTTER, lane.height),
             Color {
-                a: 0.55,
+                a: 0.96,
                 ..palette.background
             },
         );
-        let colour = self
-            .plan
-            .channels
-            .get(from)
-            .map_or(palette.text, |c| self.variant.channel(c.colour));
         frame.fill_rectangle(
             Point::new(0.0, top),
             Size::new(BAR_WIDTH, lane.height),
@@ -1024,6 +1053,12 @@ impl SignalView<'_> {
             align_y: Vertical::Center,
             ..Text::default()
         });
+        // The outline of the lifted lane.
+        let outline = Path::rectangle(Point::new(0.0, top), Size::new(size.width, lane.height));
+        frame.stroke(
+            &outline,
+            Stroke::default().with_color(colour).with_width(1.5),
+        );
     }
 
     /// The time under the pointer, with a vertical hairline.
