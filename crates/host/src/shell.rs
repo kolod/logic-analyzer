@@ -22,12 +22,14 @@ use crate::devices::{ConfigDraft, fresh_seed, problems};
 use crate::error;
 use crate::markers::{Markers, MeasurementText, measurement, measurement_text, nearest_transition};
 use crate::notices::{Notice, NoticeContent, NoticeId, NoticeList, Severity, notice_text};
-use crate::plan::{ChannelView, FramePlan, MarkerPlan, build_plan};
+use crate::plan::{
+    ChannelView, FramePlan, MarkerPlan, build_plan, real_edge_after, real_edge_before,
+};
 use crate::presentation::Presentation;
 use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
 use crate::sessions::Operation;
 use crate::settings::{RealSettingsFs, Settings, SettingsFs};
-use crate::state::{Activity, State, Unsaved, Versions};
+use crate::state::{Activity, EdgeDirection, State, Unsaved, Versions};
 use crate::status::{StatusLine, status_line};
 use crate::window::{ViewSize, ViewWindow, WindowLimits};
 
@@ -959,9 +961,48 @@ impl Shell {
                 let saved = self.persist_settings(state);
                 changed(Changes::SETTINGS | saved)
             }
-            Command::ScrollToEdge { .. }
-            | Command::RemoveRecentFile(_)
-            | Command::ClearRecentFiles => Err(Reject::Ignored(error::INVALID_COMMAND)),
+            Command::ScrollToEdge { channel, direction } => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                let capture = state
+                    .capture
+                    .as_ref()
+                    .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                let shown = capture.description.enabled_mask() >> u32::from(channel).min(31) & 1
+                    == 1
+                    && state
+                        .presentation
+                        .channels
+                        .iter()
+                        .any(|style| style.index == channel && style.visible);
+                if !shown {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                let current = current_window(state, &limits);
+                let window = match direction {
+                    EdgeDirection::Next => {
+                        let edge = real_edge_after(
+                            &capture.snapshot,
+                            channel,
+                            current.end().saturating_sub(1),
+                        )
+                        .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                        current.with_edge_at(&limits, edge, current.length / 4)
+                    }
+                    EdgeDirection::Previous => {
+                        let edge = real_edge_before(&capture.snapshot, channel, current.start)
+                            .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                        current.with_edge_at(&limits, edge, current.length.saturating_mul(3) / 4)
+                    }
+                };
+                state.window = window;
+                state.auto_fit = false;
+                state.follow_latest = false;
+                changed(Changes::WINDOW)
+            }
+            Command::RemoveRecentFile(_) | Command::ClearRecentFiles => {
+                Err(Reject::Ignored(error::INVALID_COMMAND))
+            }
             Command::ResetPresentation => {
                 state.presentation = Presentation::defaults(
                     presentation_channels(state),

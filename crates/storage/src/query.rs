@@ -158,6 +158,55 @@ impl Snapshot {
         }))
     }
 
+    /// The first transition of `channel` with a position greater than `from`, if any. Cost
+    /// O(log N) (a binary search of the block, then of the position inside it).
+    ///
+    /// # Errors
+    ///
+    /// `storage.channel_out_of_range` if the channel does not exist.
+    pub fn next_transition(&self, channel: u8, from: u64) -> Result<Option<Edge>> {
+        let data = self.channel_data(channel)?;
+        let mut probes = 0;
+        let mut cursor = RankCursor::new(data);
+        let point = cursor.advance_to(from, &mut probes);
+        Ok(cursor
+            .next_transition(&point, &mut probes)
+            .map(|position| Edge {
+                position,
+                rising: data.high_after(point.rank),
+            }))
+    }
+
+    /// The last transition of `channel` with a position smaller than `before`, if any. Cost
+    /// O(log N).
+    ///
+    /// # Errors
+    ///
+    /// `storage.channel_out_of_range` if the channel does not exist.
+    pub fn previous_transition(&self, channel: u8, before: u64) -> Result<Option<Edge>> {
+        let data = self.channel_data(channel)?;
+        let Some(last) = before.checked_sub(1) else {
+            return Ok(None);
+        };
+        let mut probes = 0;
+        let point = RankCursor::new(data).advance_to(last, &mut probes);
+        let Some(index) = point.rank.checked_sub(1) else {
+            return Ok(None);
+        };
+        let position = point.block.and_then(|k| {
+            if let Some(i) = point.count_in_block.checked_sub(1) {
+                data.block(k)?.position(i)
+            } else {
+                let view = data.block(k.checked_sub(1)?)?;
+                view.position(view.len().checked_sub(1)?)
+            }
+        });
+        Ok(position.map(|position| Edge {
+            position,
+            rising: data.high_after(index),
+        }))
+    }
+
     /// Iterates over the transitions of `channel` with `start < position <= end`, in
     /// increasing order, each exactly once. Finding the first one costs O(log N); every
     /// further one is O(1).

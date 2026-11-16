@@ -269,13 +269,13 @@ the view from the left with the zoom unchanged; the same to the left.
 
 ### Tests for User Story 4 (write first; they must fail)
 
-- [ ] T031 [P] [US4] `crates/storage/tests/transition_search.rs`: `Snapshot::next_transition(channel, from)` and
+- [X] T031 [P] [US4] `crates/storage/tests/transition_search.rs`: `Snapshot::next_transition(channel, from)` and
   `previous_transition(channel, before)` against a brute-force scan (the list of `transitions(channel, 0, length)`)
   on 300 random captures (an LCG; runs of random lengths; some with gaps; some empty channels): for every
   position tried (0, 1, every transition position and one either side, the last sample, the length) the answers
   equal the scan; an out-of-range channel is `storage.channel_out_of_range`; edge cases by hand: a channel with
   no transition gives `None` both ways, a transition at position 1 (the first possible) and at the last sample.
-- [ ] T032 [P] [US4] `crates/host/tests/scroll_to_edge.rs`: on a constructed capture of 200,000 samples with edges on
+- [X] T032 [P] [US4] `crates/host/tests/scroll_to_edge.rs`: on a constructed capture of 200,000 samples with edges on
   channel 0 at 1,000 and 90,000 and a window of 400 samples at 0: `ScrollToEdge { 0, Next }` gives the window
   start 900 (edge 1,000 minus 100) and length 400; again gives 89,900; `Previous` from there gives
   `1,000 - 300 = 700`; the zoom (length) never changes; following the newest data is off afterwards; a window
@@ -285,24 +285,24 @@ the view from the left with the zoom unchanged; the same to the left.
   false when no edge lies beyond the window and `edge_before` is true only when one lies before, for every shown
   channel; hidden channels are not in the plan; cost: a capture of 100,000,000 samples answers in under 50 ms
   (a timing test with a generous limit, `#[ignore]`d in debug builds).
-- [ ] T033 [P] [US4] Headless rendering tests in `crates/app/src/app.rs`: with the pointer at 10 px from the right end of a
+- [X] T033 [P] [US4] Headless rendering tests in `crates/app/src/app.rs`: with the pointer at 10 px from the right end of a
   lane whose plan has `edge_after`, the arrow button is drawn (the overlay layer, not the cached one: the
   cache is not invalidated), none when `edge_after` is false, none when the pointer is over the legend or the
   axis or in the middle of the lane, and none for a decoder lane; the same on the left with `edge_before`.
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] `crates/storage/src/query.rs`: `next_transition` and `previous_transition` on the same block index as
+- [X] T034 [US4] `crates/storage/src/query.rs`: `next_transition` and `previous_transition` on the same block index as
   `TransitionIter::new` (binary search of the block, then of the position inside it), O(log N), returning the
   existing transition type. T031 passes.
-- [ ] T035 [US4] `crates/host/src/plan.rs`: `ChannelPlan.edge_before` and `edge_after` from the two queries (edges
+- [X] T035 [US4] `crates/host/src/plan.rs`: `ChannelPlan.edge_before` and `edge_after` from the two queries (edges
   next to a gap skipped, bounded by the number of gaps) for the shown channels, once per plan; `crates/host/src/window.rs` and
   `shell.rs`: the command `ScrollToEdge` per the host contract (start `edge - length / 4` rightwards,
   `edge - (3 * length) / 4` leftwards, clamped, length unchanged, follow off). T032 passes.
-- [ ] T036 [US4] `crates/host/benches/frame_plan.rs`: the plan of a large capture now includes the edge flags; record
+- [X] T036 [US4] `crates/host/benches/frame_plan.rs`: the plan of a large capture now includes the edge flags; record
   the baseline (`-- --write-baseline`) in the benchmark's baseline file and check that the cost does not grow
   with the capture length (the bench already has the sizes).
-- [ ] T037 [US4] `crates/app/src/signal_view.rs`: the pointer state of the canvas knows the lane and the distance to its left
+- [X] T037 [US4] `crates/app/src/signal_view.rs`: the pointer state of the canvas knows the lane and the distance to its left
   and right end; in the overlay layer draw the 24 px rounded square with an arrow at the end when the plan allows
   it (interaction contract); a press on it sends `ScrollToEdge` and is not a pan, a marker or an annotation click;
   tooltips are not available on a canvas, so the arrow is the whole affordance (the keys `edge-previous` and

@@ -18,7 +18,7 @@ use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
 use la_host::decoders::AnnotationRef;
 use la_host::plan::{FramePlan, FrameState, Segment};
 use la_host::presentation::{Colour, PALETTE_SIZE};
-use la_host::{Command, ZoomAnchor, ZoomFactor};
+use la_host::{Command, EdgeDirection, ZoomAnchor, ZoomFactor};
 use la_i18n::{Args, Key, Localizer};
 
 use crate::app::Message;
@@ -36,6 +36,12 @@ const DRAG_THRESHOLD: f32 = 4.0;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// How far one notch of the wheel scrolls the legend.
 const SCROLL_STEP: f32 = 30.0;
+/// The side of a button that scrolls to the next edge.
+const EDGE_BUTTON: f32 = 24.0;
+/// The distance of that button from the end of the waveform area.
+const EDGE_MARGIN: f32 = 4.0;
+/// How near to an end the pointer must be for the button to show.
+const EDGE_ZONE: f32 = EDGE_BUTTON + EDGE_MARGIN;
 
 /// What the canvas draws.
 pub struct SignalView<'a> {
@@ -151,6 +157,40 @@ impl SignalView<'_> {
 
     fn layout(&self, height: f32, scroll: f32) -> Layout {
         Layout::new(&self.specs(), height, scroll)
+    }
+
+    /// The button that scrolls to an edge under the pointer: the lane of the channel, the side and
+    /// where it is drawn. It exists only inside the waveform area of a channel lane, near the end
+    /// where the plan says an edge lies beyond the window.
+    fn edge_button(
+        &self,
+        position: Point,
+        width: f32,
+        layout: &Layout,
+    ) -> Option<(usize, EdgeDirection, Rectangle)> {
+        if self.plan.state != FrameState::Ok || position.x < GUTTER || position.y < AXIS_HEIGHT {
+            return None;
+        }
+        let index = (0..self.plan.channels.len()).find(|i| {
+            layout
+                .lane(*i)
+                .is_some_and(|l| position.y >= l.top && position.y < l.bottom())
+        })?;
+        let lane = layout.lane(index)?;
+        let channel = self.plan.channels.get(index)?;
+        let top = lane.top + (lane.height - EDGE_BUTTON) / 2.0;
+        let (direction, left) = if channel.edge_after && position.x >= width - EDGE_ZONE {
+            (EdgeDirection::Next, width - EDGE_ZONE)
+        } else if channel.edge_before && position.x <= GUTTER + EDGE_ZONE {
+            (EdgeDirection::Previous, GUTTER + EDGE_MARGIN)
+        } else {
+            return None;
+        };
+        Some((
+            index,
+            direction,
+            Rectangle::new(Point::new(left, top), Size::new(EDGE_BUTTON, EDGE_BUTTON)),
+        ))
     }
 
     fn centred_text(&self, frame: &mut Frame, size: Size, content: String, color: Color) {
@@ -623,6 +663,20 @@ impl canvas::Program<Message> for SignalView<'_> {
                     });
                     return Some(canvas::Action::capture());
                 }
+                // A click on the edge button scrolls to the edge and does nothing else.
+                if let Some((index, direction, rectangle)) =
+                    self.edge_button(position, bounds.width, &layout)
+                    && rectangle.contains(position)
+                {
+                    let channel = self.plan.channels.get(index)?;
+                    return Some(
+                        canvas::Action::publish(Message::Run(Command::ScrollToEdge {
+                            channel: channel.channel,
+                            direction,
+                        }))
+                        .and_capture(),
+                    );
+                }
                 let scale = (bounds.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
                 // A click on an annotation selects it.
                 let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
@@ -817,6 +871,16 @@ impl canvas::Program<Message> for SignalView<'_> {
             self.draw_hover(&mut overlay, size, position, theme, state.scroll);
         }
         self.draw_lane_drag(&mut overlay, size, theme, state);
+        if state.drag.is_none()
+            && state.drag_from.is_none()
+            && let Some(position) = cursor.position_in(bounds)
+        {
+            let layout = self.layout(size.height, state.scroll);
+            if let Some((_, direction, rectangle)) = self.edge_button(position, size.width, &layout)
+            {
+                self.draw_edge_button(&mut overlay, theme, direction, rectangle);
+            }
+        }
         vec![waveforms, overlay.into_geometry()]
     }
 
@@ -835,19 +899,71 @@ impl canvas::Program<Message> for SignalView<'_> {
         let Some(position) = cursor.position_in(bounds) else {
             return mouse::Interaction::default();
         };
+        let layout = self.layout(bounds.height, state.scroll);
         if position.x < GUTTER {
-            let layout = self.layout(bounds.height, state.scroll);
             return match layout.zone_at(position.x, position.y).map(|h| h.zone) {
                 Some(Zone::Border) => mouse::Interaction::ResizingVertically,
                 Some(Zone::Bar | Zone::Name) => mouse::Interaction::Pointer,
                 None => mouse::Interaction::default(),
             };
         }
+        if self
+            .edge_button(position, bounds.width, &layout)
+            .is_some_and(|(_, _, rectangle)| rectangle.contains(position))
+        {
+            return mouse::Interaction::Pointer;
+        }
         mouse::Interaction::Crosshair
     }
 }
 
 impl SignalView<'_> {
+    /// The rounded square with an arrow that scrolls to the next edge on its side.
+    fn draw_edge_button(
+        &self,
+        frame: &mut Frame,
+        theme: &Theme,
+        direction: EdgeDirection,
+        rectangle: Rectangle,
+    ) {
+        let palette = theme.palette();
+        let square = Path::rounded_rectangle(
+            rectangle.position(),
+            rectangle.size(),
+            iced::border::Radius::from(5.0),
+        );
+        frame.fill(
+            &square,
+            Color {
+                a: 0.9,
+                ..palette.background
+            },
+        );
+        frame.stroke(
+            &square,
+            Stroke::default()
+                .with_color(palette.primary)
+                .with_width(1.5),
+        );
+        // A chevron that points to the side the edge lies on.
+        let centre = rectangle.center();
+        let (tip, tail) = match direction {
+            EdgeDirection::Next => (centre.x + 4.0, centre.x - 3.0),
+            EdgeDirection::Previous => (centre.x - 4.0, centre.x + 3.0),
+        };
+        let chevron = Path::new(|b| {
+            b.move_to(Point::new(tail, centre.y - 6.0));
+            b.line_to(Point::new(tip, centre.y));
+            b.line_to(Point::new(tail, centre.y + 6.0));
+        });
+        frame.stroke(
+            &chevron,
+            Stroke::default()
+                .with_color(palette.primary)
+                .with_width(2.0),
+        );
+    }
+
     /// The lane that is being moved, lifted under the pointer, and the line where it will land.
     fn draw_lane_drag(&self, frame: &mut Frame, size: Size, theme: &Theme, state: &ViewState) {
         let Some(Drag::Lane { from, y }) = state.drag else {
@@ -1155,6 +1271,172 @@ mod tests {
             canvas::Event::Mouse(mouse::Event::CursorMoved { position: at }),
             at,
         )
+    }
+
+    /// A plan whose first channel has edges on both sides and whose second has none.
+    fn plan_with_edges() -> (FramePlan, Shell) {
+        let (mut plan, shell) = plan_with_channels();
+        for (index, channel) in plan.channels.iter_mut().enumerate() {
+            channel.edge_before = index == 0 || index == 2;
+            channel.edge_after = index == 0;
+        }
+        (plan, shell)
+    }
+
+    fn view_of<'a>(
+        plan: &'a FramePlan,
+        cache: &'a Cache,
+        localizer: &'a Localizer,
+    ) -> SignalView<'a> {
+        SignalView {
+            plan,
+            cache,
+            variant: Variant::Dark,
+            localizer,
+            selected: None,
+            editing: false,
+        }
+    }
+
+    #[test]
+    fn the_edge_button_shows_only_near_an_end_that_has_an_edge_beyond() {
+        let (plan, _shell) = plan_with_edges();
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let layout = view.layout(500.0, 0.0);
+        // Lane 0 is 28..100: ten pixels from the right end of the waveform area (900 wide).
+        let right = view.edge_button(Point::new(890.0, 60.0), 900.0, &layout);
+        let (index, direction, rectangle) = right.expect("the right button");
+        assert_eq!((index, direction), (0, EdgeDirection::Next));
+        assert!((rectangle.width - EDGE_BUTTON).abs() < f32::EPSILON);
+        // Centred in the lane.
+        assert!((rectangle.center_y() - 64.0).abs() < 0.01, "{rectangle:?}");
+        let left = view.edge_button(Point::new(120.0, 60.0), 900.0, &layout);
+        assert_eq!(left.map(|(_, d, _)| d), Some(EdgeDirection::Previous));
+        // The middle of the lane, the legend and the axis show nothing.
+        for at in [
+            Point::new(500.0, 60.0),
+            Point::new(60.0, 60.0),
+            Point::new(890.0, 10.0),
+        ] {
+            assert!(view.edge_button(at, 900.0, &layout).is_none(), "{at:?}");
+        }
+        // Lane 1 has no edge on either side; lane 2 only before.
+        assert!(
+            view.edge_button(Point::new(890.0, 130.0), 900.0, &layout)
+                .is_none()
+        );
+        assert!(
+            view.edge_button(Point::new(120.0, 130.0), 900.0, &layout)
+                .is_none()
+        );
+        assert!(
+            view.edge_button(Point::new(890.0, 200.0), 900.0, &layout)
+                .is_none()
+        );
+        assert!(
+            view.edge_button(Point::new(120.0, 200.0), 900.0, &layout)
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn a_decoder_lane_has_no_edge_button() {
+        let (mut plan, _shell) = plan_with_edges();
+        // Lanes below the channels are decoders; lane 4 would be the first one.
+        plan.lanes.push(la_host::plan::LanePlan {
+            instance: 1,
+            name: "d".into(),
+            state: la_host::decoders::InstanceState::Finished,
+            incomplete: false,
+            outdated: false,
+            plan: la_decoders::lanes::Plan::default(),
+        });
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let layout = view.layout(500.0, 0.0);
+        let decoder = layout.lane(4).expect("the decoder lane");
+        let y = decoder.top + decoder.height / 2.0;
+        assert!(
+            view.edge_button(Point::new(890.0, y), 900.0, &layout)
+                .is_none()
+        );
+        assert!(
+            view.edge_button(Point::new(120.0, y), 900.0, &layout)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_press_on_the_button_scrolls_and_a_press_next_to_it_does_not() {
+        let (plan, _shell) = plan_with_edges();
+        let channel = plan.channels[0].channel;
+        // The button is x 872..896 (900 - 28 .. 900 - 4) and y 52..76 for lane 0.
+        let on = Point::new(884.0, 64.0);
+        let published = drive(&plan, &mut ViewState::default(), &[press(on), release(on)]);
+        assert!(
+            matches!(
+                published.as_slice(),
+                [Message::Run(Command::ScrollToEdge { channel: c, direction: EdgeDirection::Next })] if *c == channel
+            ),
+            "{published:?}"
+        );
+        let on_left = Point::new(124.0, 64.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(on_left), release(on_left)],
+        );
+        assert!(
+            matches!(
+                published.as_slice(),
+                [Message::Run(Command::ScrollToEdge {
+                    direction: EdgeDirection::Previous,
+                    ..
+                })]
+            ),
+            "{published:?}"
+        );
+        // Inside the zone but outside the button (above it): it is a press on the waveform.
+        let beside = Point::new(884.0, 33.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(beside), release(beside)],
+        );
+        assert!(
+            !published
+                .iter()
+                .any(|m| matches!(m, Message::Run(Command::ScrollToEdge { .. }))),
+            "{published:?}"
+        );
+    }
+
+    #[test]
+    fn the_button_is_drawn_in_the_overlay_and_the_cache_is_not_cleared() {
+        // The press and the hover never clear the cache: only the plan, the theme and the layout do.
+        let (plan, _shell) = plan_with_edges();
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let mut state = ViewState::default();
+        let at = Point::new(884.0, 64.0);
+        let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
+        state.reported_width = bounds.width - GUTTER;
+        let hover = canvas::Event::Mouse(mouse::Event::CursorMoved { position: at });
+        let action = view.update(&mut state, &hover, bounds, mouse::Cursor::Available(at));
+        assert!(action.is_some_and(|a| a.into_inner().0.is_none()));
+        assert!(matches!(
+            view.mouse_interaction(&state, bounds, mouse::Cursor::Available(at)),
+            mouse::Interaction::Pointer
+        ));
+        assert!(matches!(
+            view.mouse_interaction(
+                &state,
+                bounds,
+                mouse::Cursor::Available(Point::new(500.0, 64.0))
+            ),
+            mouse::Interaction::Crosshair
+        ));
     }
 
     // Four channels in an area of 500: the automatic height is clamp(472 / 4, 30, 72) = 72, so the

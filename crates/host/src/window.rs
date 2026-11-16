@@ -184,6 +184,17 @@ impl ViewWindow {
         )
     }
 
+    /// The same length, placed so that `edge` is `offset` samples from the left side (clamped
+    /// to the capture; a window longer than the capture starts at 0).
+    #[must_use]
+    pub fn with_edge_at(self, limits: &WindowLimits, edge: u64, offset: u64) -> Self {
+        Self {
+            start: edge.saturating_sub(offset),
+            length: self.length,
+        }
+        .clamp(limits)
+    }
+
     /// The same length at the start of the capture.
     #[must_use]
     pub fn go_to_start(self, limits: &WindowLimits) -> Self {
