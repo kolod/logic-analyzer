@@ -30,13 +30,16 @@ pub enum SecondsError {
     NoRate,
 }
 
-/// The number of samples of `text` seconds at `rate_hz` samples a second, rounded half up.
+/// The number of samples of `text` seconds at `rate_hz` samples a second, rounded half up. The
+/// fraction may be separated by a point or by a comma.
 ///
 /// # Errors
 ///
 /// See [`SecondsError`].
 pub fn samples_for_seconds(rate_hz: u64, text: &str) -> Result<u64, SecondsError> {
-    let text = text.trim();
+    // A comma and a point both separate the whole part from the fraction, whatever the language.
+    let text = text.trim().replace(',', ".");
+    let text = text.as_str();
     if text.is_empty() {
         return Err(SecondsError::Empty);
     }

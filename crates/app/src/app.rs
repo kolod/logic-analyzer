@@ -2863,6 +2863,24 @@ mod tests {
     }
 
     #[test]
+    fn a_comma_and_a_point_both_separate_the_fraction_of_the_length_in_every_language() {
+        let mut app = app_with_capture("length-comma");
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            for text in ["1.5", "1,5"] {
+                let _ = app.update(Message::RateText("1000".to_owned()));
+                let _ = app.update(Message::LengthText(text.to_owned()));
+                assert_eq!(
+                    app.shell.state().config.length,
+                    1_500,
+                    "{language:?} {text}"
+                );
+                assert!(app.length_error.is_none(), "{language:?} {text}");
+            }
+        }
+    }
+
+    #[test]
     fn the_channel_buttons_are_eight_to_a_row() {
         assert_eq!(App::button_rows(0), 0);
         assert_eq!(App::button_rows(1), 1);

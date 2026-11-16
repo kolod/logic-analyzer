@@ -31,6 +31,13 @@ fn seconds_become_samples_exactly_and_round_half_up() {
         "leading zeros are fine"
     );
     assert_eq!(samples_for_seconds(1, "0.9"), Ok(1));
+    // A comma separates the fraction as well as a point does, whatever the language.
+    assert_eq!(samples_for_seconds(1_000_000, "2,5"), Ok(2_500_000));
+    assert_eq!(samples_for_seconds(1_000, "0,001"), Ok(1));
+    assert_eq!(
+        samples_for_seconds(1_000_000, "1,5"),
+        samples_for_seconds(1_000_000, "1.5")
+    );
     // The largest that fits.
     assert_eq!(samples_for_seconds(1, "18446744073709551615"), Ok(u64::MAX));
 }
@@ -69,8 +76,8 @@ fn what_is_not_a_positive_amount_of_time_is_refused() {
         );
     }
     for text in [
-        "-1", "+1", "1e3", "abc", "1,5", "1.", ".5", "1.2.3", "1 2", "0x10", "\u{660}", "١٢",
-        "1\u{0}", "..", "-", ".",
+        "-1", "+1", "1e3", "abc", "1,", ",5", "1.", ".5", "1.2.3", "1,2,3", "1.2,3", "1,,5", ",",
+        "1 2", "0x10", "\u{660}", "١٢", "1\u{0}", "..", "-", ".",
     ] {
         assert_eq!(
             samples_for_seconds(1_000, text),

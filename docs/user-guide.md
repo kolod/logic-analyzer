@@ -27,7 +27,7 @@ Set up a capture in the **Capture** view of the panel at the right edge (see bel
 | Control | Meaning |
 |---------|---------|
 | Sample rate (Hz) | samples per second |
-| Length (seconds) | when the capture stops by itself; type seconds such as `2.5` or `0.001` (at most nine digits after the point) and the number of samples is shown beside it. Changing the sample rate keeps the seconds and recalculates the samples |
+| Length (seconds) | when the capture stops by itself; type seconds such as `2.5` or `0.001` (a point or a comma, whatever the language; at most nine digits after it) and the number of samples is shown beside it. Changing the sample rate keeps the seconds and recalculates the samples |
 | Seed | the simulated device repeats exactly the same signal for the same seed; empty means random |
 | Signal | how busy the simulated signal is: Sparse, Normal or Dense |
 | Real time | the capture takes as long as the signal would; off fills the capture as fast as possible |
