@@ -55,11 +55,11 @@ signing fails, ask the owner to unlock GPG, never bypass it.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the empty modules with their doc comments and declarations: `crates/app/src/lane_layout.rs`,
+- [X] T001 Create the empty modules with their doc comments and declarations: `crates/app/src/lane_layout.rs`,
   `crates/app/src/side_panel.rs`, `crates/app/src/icons.rs` (declared in `crates/app/src/main.rs`) and
   `crates/host/src/layout_section.rs` (declared in `crates/host/src/lib.rs`). Nothing uses them yet; the
   workspace builds and clippy is clean.
-- [ ] T002 Keep what earlier versions wrote, **before** anything changes: add an `#[ignore]`d test
+- [X] T002 Keep what earlier versions wrote, **before** anything changes: add an `#[ignore]`d test
   `crates/host/tests/make_compat_fixtures.rs` that saves two session files with the current code (a
   capture from the virtual device with names, colours, a marker and a saved window, as feature 006 and 007
   write them; and one with an I2C decoder with saved results, as feature 008 writes it) into
@@ -73,9 +73,9 @@ signing fails, ask the owner to unlock GPG, never bypass it.
 
 **Purpose**: the version, the types and the commands that every story's tests refer to.
 
-- [ ] T003 `HOST_API_VERSION = "1.2"` in `crates/host/src/lib.rs` and `Version: 1.2` in `docs/host-api.md`
+- [X] T003 `HOST_API_VERSION = "1.2"` in `crates/host/src/lib.rs` and `Version: 1.2` in `docs/host-api.md`
   (the test `host_api_doc.rs` keeps them in step).
-- [ ] T004 Add the types and the commands of the host contract with no behaviour yet: `SidePanel` (`Capture`,
+- [X] T004 Add the types and the commands of the host contract with no behaviour yet: `SidePanel` (`Capture`,
   `Decoders`, `Markers`, `Hidden`) and `EdgeDirection` (`Previous`, `Next`) in `crates/host/src/state.rs`
   (re-exported from `lib.rs`), and the commands `SetChannelHeight { channel, height }`, `SetSidePanel(SidePanel)`,
   `ScrollToEdge { channel, direction }`, `RemoveRecentFile(PathBuf)` and `ClearRecentFiles` in

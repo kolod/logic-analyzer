@@ -8,6 +8,9 @@ mod decoder_view;
 mod dialogs;
 mod fonts;
 mod frame_log;
+mod icons;
+mod lane_layout;
+mod side_panel;
 mod signal_view;
 mod theme;
 

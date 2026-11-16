@@ -195,8 +195,29 @@ pub enum Command {
         /// New position in the order.
         to: usize,
     },
-    /// Restores the default names, colours, order and visibility.
+    /// Sets the height of the signal of a channel (0: automatic, otherwise 24 to 240 pixels).
+    SetChannelHeight {
+        /// The channel.
+        channel: u8,
+        /// The height in logical pixels.
+        height: u16,
+    },
+    /// Restores the default names, colours, order, heights and visibility.
     ResetPresentation,
+    /// Chooses the view of the panel at the right edge (or hides it).
+    SetSidePanel(crate::state::SidePanel),
+    /// Scrolls to the next edge of a channel beyond the visible window, a quarter of the view from
+    /// the side it came from; the zoom does not change.
+    ScrollToEdge {
+        /// The channel.
+        channel: u8,
+        /// The side to look on.
+        direction: crate::state::EdgeDirection,
+    },
+    /// Removes a file from the list of recent files.
+    RemoveRecentFile(PathBuf),
+    /// Empties the list of recent files.
+    ClearRecentFiles,
     /// Places a marker.
     PlaceMarker {
         /// Sample position.
@@ -364,6 +385,7 @@ impl Command {
                 | Command::SetChannelColour { .. }
                 | Command::SetChannelVisible { .. }
                 | Command::MoveChannel { .. }
+                | Command::SetChannelHeight { .. }
                 | Command::ResetPresentation
                 | Command::PlaceMarker { .. }
                 | Command::MoveMarker { .. }
@@ -408,6 +430,11 @@ impl Command {
             Command::SetChannelVisible { .. } => "set_channel_visible",
             Command::MoveChannel { .. } => "move_channel",
             Command::ResetPresentation => "reset_presentation",
+            Command::SetChannelHeight { .. } => "set_channel_height",
+            Command::SetSidePanel(_) => "set_side_panel",
+            Command::ScrollToEdge { .. } => "scroll_to_edge",
+            Command::RemoveRecentFile(_) => "remove_recent_file",
+            Command::ClearRecentFiles => "clear_recent_files",
             Command::PlaceMarker { .. } => "place_marker",
             Command::MoveMarker { .. } => "move_marker",
             Command::RenameMarker { .. } => "rename_marker",

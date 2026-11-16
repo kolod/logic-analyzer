@@ -193,6 +193,7 @@ impl Shell {
             language: localizer.language(),
             settings: loaded.settings,
             decoders: decoder_state,
+            side_panel: crate::state::SidePanel::default(),
         };
         revalidate(&mut state);
         sync_presentation(&mut state);
@@ -945,6 +946,11 @@ impl Shell {
             Command::MoveChannel { from, to } => {
                 edit_presentation(state, |p| p.move_channel(from, to))
             }
+            Command::SetChannelHeight { .. }
+            | Command::SetSidePanel(_)
+            | Command::ScrollToEdge { .. }
+            | Command::RemoveRecentFile(_)
+            | Command::ClearRecentFiles => Err(Reject::Ignored(error::INVALID_COMMAND)),
             Command::ResetPresentation => {
                 state.presentation = Presentation::defaults(
                     presentation_channels(state),

@@ -61,6 +61,53 @@ pub enum Unsaved {
     Running,
 }
 
+/// Which view the panel at the right edge shows (`docs/host-api.md`, 1.2).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SidePanel {
+    /// The settings of the capture.
+    #[default]
+    Capture,
+    /// The decoders.
+    Decoders,
+    /// The markers and the measurement.
+    Markers,
+    /// No panel: the signals take the width.
+    Hidden,
+}
+
+impl SidePanel {
+    /// The name kept in the settings file.
+    #[must_use]
+    pub fn as_setting(self) -> &'static str {
+        match self {
+            SidePanel::Capture => "capture",
+            SidePanel::Decoders => "decoders",
+            SidePanel::Markers => "markers",
+            SidePanel::Hidden => "hidden",
+        }
+    }
+
+    /// The view named in the settings file; anything else is the default.
+    #[must_use]
+    pub fn from_setting(text: &str) -> Self {
+        match text {
+            "decoders" => SidePanel::Decoders,
+            "markers" => SidePanel::Markers,
+            "hidden" => SidePanel::Hidden,
+            _ => SidePanel::Capture,
+        }
+    }
+}
+
+/// The side of a signal on which `ScrollToEdge` looks for an edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeDirection {
+    /// The last edge before the visible window.
+    Previous,
+    /// The first edge after the visible window.
+    Next,
+}
+
 /// Counters that increase when a part of the state changes, so a user interface can invalidate
 /// exactly the caches that depend on it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -154,4 +201,6 @@ pub struct State {
     pub language: Language,
     /// The decoder instances and what is selected in their results.
     pub decoders: DecoderState,
+    /// The view of the panel at the right edge.
+    pub side_panel: SidePanel,
 }

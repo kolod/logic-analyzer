@@ -1,6 +1,6 @@
 # Host API
 
-Version: 1.1
+Version: 1.2
 
 This is the authoritative description of the API between a user interface and the core. The crate
 is `la-host`; its constant `la_host::HOST_API_VERSION` and the version line above must agree (a test
@@ -89,7 +89,11 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetChannelColour { channel, colour }` | a palette entry or a chosen colour |
 | | `SetChannelVisible { channel, visible }` | the one flag of a channel: shows it (a lane is drawn when the capture on screen has data for it) and makes the next capture record it, so it also changes `EditConfig(Channels)`; ignored while a capture runs |
 | | `MoveChannel { from, to }` | changes the order |
-| | `ResetPresentation` | defaults for names, colours, order and visibility |
+| | `SetChannelHeight { channel, height }` | the height of the signal of a channel in logical pixels: 0 is automatic, anything else is clamped into 24 to 240; allowed at any time; saved with the session in the optional `LAYT` section |
+| | `ResetPresentation` | defaults for names, colours, order, heights and visibility |
+| Side panel | `SetSidePanel(SidePanel)` | the view of the panel at the right edge: `Capture` (the default), `Decoders`, `Markers` or `Hidden`; kept in the settings |
+| | `ScrollToEdge { channel, direction }` | the window moves, zoom unchanged, so that the first real edge of the channel beyond the window on that side (`Next`: at or after its end; `Previous`: before its start) is a quarter of the window from the side it came from; follow-latest turns off; ignored when there is no such edge |
+| Recent files | `RemoveRecentFile(path)` / `ClearRecentFiles` | edit the list of the 15 most recent files |
 | Markers | `PlaceMarker { position, channel }` | at most 64; snaps to the nearest transition of `channel` when snapping is on |
 | | `MoveMarker { id, position, channel }` | snaps like a new marker |
 | | `RenameMarker { id, name }` | sanitized like a channel name |
