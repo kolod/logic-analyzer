@@ -11,6 +11,7 @@ publish.workspace = true
 directories = "6.0.0"
 la-core = { path = "../core" }
 la-devices = { path = "../devices" }
+la-decoders = { path = "../decoders" }
 la-diagnostics = { path = "../diagnostics" }
 la-i18n = { path = "../i18n" }
 la-session = { path = "../session" }
@@ -21,9 +22,10 @@ tracing = "0.1.44"
 
 [features]
 # Commands and helpers that provoke failures, for tests and the manual failure checks.
-test-support = ["la-session/test-support"]
+test-support = ["la-session/test-support", "la-decoders/test-support"]
 
 [dev-dependencies]
+la-decoders = { path = "../decoders", features = ["test-support"] }
 la-host = { path = ".", features = ["test-support"] }
 la-devices = { path = "../devices", features = ["test-support"] }
 la-i18n = { path = "../i18n", features = ["test-support"] }
@@ -31,6 +33,10 @@ la-session = { path = "../session", features = ["test-support"] }
 
 [[bench]]
 name = "frame_plan"
+harness = false
+
+[[bench]]
+name = "annotation_plan"
 harness = false
 
 [lints]

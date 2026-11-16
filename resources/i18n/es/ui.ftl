@@ -140,3 +140,69 @@ dialog-close = Cerrar
 about-title = Acerca de
 about-body = Logic Analyzer { $version }. Registra señales digitales y las muestra en una línea de tiempo; un dispositivo simulado permite probarlo sin hardware.
 about-license = Software libre bajo la GNU General Public License, versión 3.
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = Bits con reloj
+decoder-sample-clocked-bits-description = Lee bits de una línea de datos en los flancos de una línea de reloj y los agrupa en bytes. Un decodificador de ejemplo que muestra lo que pueden hacer los decodificadores.
+decoder-sample-clocked-bits-signal-clock = Reloj
+decoder-sample-clocked-bits-signal-data = Datos
+decoder-sample-clocked-bits-option-clock_edge = Flanco del reloj
+decoder-sample-clocked-bits-choice-clock_edge-rising = Ascendente
+decoder-sample-clocked-bits-choice-clock_edge-falling = Descendente
+decoder-sample-clocked-bits-option-bit_order = Orden de los bits
+decoder-sample-clocked-bits-choice-bit_order-msb = Primero el bit más significativo
+decoder-sample-clocked-bits-choice-bit_order-lsb = Primero el bit menos significativo
+decoder-sample-clocked-bits-option-bits = Bits por byte
+decoder-sample-clocked-bits-option-idle = Límite de inactividad (muestras)
+ann-sample-clocked-bits-byte = Byte { $value }
+ann-sample-clocked-bits-bit = Bit { $value }
+ann-sample-clocked-bits-incomplete = Byte incompleto: { $value } bits
+ann-sample-clocked-bits-gap = Aquí se perdieron muestras
+
+### Decoders: menu, panel and the selected annotation
+menu-decoders = Decodificadores
+menu-decoders-add = Añadir decodificador
+menu-decoders-previous = Anotación anterior
+menu-decoders-next = Anotación siguiente
+menu-decoders-goto = Ir a la anotación seleccionada
+panel-decoders = Decodificadores
+decoders-add = Añadir decodificador
+decoders-empty = Aún no hay decodificadores. Añada uno para ver qué dicen las señales.
+decoders-need-capture = Primero capture o abra señales.
+decoder-state-waiting = En espera
+decoder-state-running = En ejecución
+decoder-state-finished = Terminado
+decoder-state-cancelled = Cancelado
+decoder-state-failed = Falló
+decoder-needs-channels = Elija los canales para iniciar la decodificación.
+decoder-channel-none = (ninguno)
+decoder-lane-show = Mostrar el carril
+decoder-remove = Quitar decodificador
+decoder-annotations = Anotaciones: { $number }
+decoder-incomplete = Resultados incompletos
+decoder-selected = Anotación seleccionada
+decoder-detail-length = Duración: { $value }
+decoder-detail-error = Indica un problema en la señal
+decoder-detail-position = Posición: de { $first } a { $second }
+
+### Decoders: the simulation of signals that are valid for a decoder
+decoder-generator-errors = Introducir errores a propósito en las señales simuladas
+decoder-generator-rate = Aproximadamente uno de cada tantos bytes se corta
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = Ejecutar de nuevo
+decoder-cancel = Cancelar
+settings-decoder-memory = Límite de memoria de los resultados de los decodificadores
+settings-decoder-memory-note = Compartido por todos los decodificadores. Se aplica a la próxima pasada.
+
+### Decoders: stacking
+decoder-source = Lee de
+decoder-source-capture = La captura
+dialog-remove-decoder-title = Quitar decodificador
+dialog-remove-decoder-body = Otros decodificadores leen de este. Si lo quita, también se quitan ellos. La captura no se ve afectada.
+dialog-remove-decoder-confirm = Quitar todos
+
+### Decoders: saving and opening
+notice-decoders-newer = Este archivo tiene decodificadores de una versión más reciente de la aplicación. Se conservan tal cual y no se muestran; la captura se abre con normalidad.
+settings-save-decoder-results = Guardar los resultados decodificados con la sesión
+settings-save-decoder-results-note = El archivo es más grande. Sin esto, los decodificadores se ejecutan de nuevo al abrir el archivo.

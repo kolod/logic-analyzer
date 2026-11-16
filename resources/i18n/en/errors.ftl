@@ -121,3 +121,20 @@ error-host-render_failed = The signals could not be drawn. The capture is not af
 error-host-internal = An unexpected problem occurred while carrying out your command, and it was not carried out. Your capture is not affected. Please try again; if it keeps happening, report it with the log file.
 # An action is not valid in the current state.
 error-host-invalid_command = That action is not possible right now. Wait for the current operation to finish and try again.
+
+# Decoders: faults, refused choices and the saved decoder setup.
+error-decoder-failed = A decoder stopped with an error. The annotations it produced before that are kept and marked incomplete. Try changing its settings or running it again; the capture is not affected.
+error-decoder-panicked = A decoder failed unexpectedly. The annotations it produced before that are kept and marked incomplete. Try running it again; if it keeps happening, report it with the log file. The capture is not affected.
+error-decoder-not_responding = A decoder stopped responding and was abandoned. What it produced before is kept and marked incomplete. Try running it again or removing it; the capture is not affected.
+error-decoder-memory_limit = The decoder results reached the memory limit, so decoding stopped. Everything found so far is kept and marked incomplete. Try removing other decoders or raising the limit in the settings.
+error-decoder-annotation_limit = A decoder reached the limit on the number of annotations and stopped. Everything found so far is kept and marked incomplete. Choose stricter settings or decode a shorter part of the capture.
+error-decoder-invalid_output = A decoder produced some results that were not valid. They were skipped; the valid results are shown. If you see this again, report it with the log file.
+error-decoder-invalid_setup = That setup choice is not valid for this decoder, so nothing was changed. Choose another channel or value.
+error-decoder-stack_cycle = That choice would make decoders depend on each other in a circle, so nothing was changed. Choose a different source.
+error-decoder-stack_incompatible = That decoder cannot read the results of the chosen decoder, so nothing was changed. Choose a different source.
+error-decoder-stack_too_deep = That chain of decoders would be too long, so nothing was changed. Choose a shorter chain.
+error-decoder-too_many_instances = The limit on decoders for one capture is reached, so no decoder was added. Try removing one first.
+error-decoder-too_many_stuck = Several decoders stopped responding and are still stuck, so no new decoding is started. Try restarting the application to free them; the capture is not affected.
+error-decoder-section_invalid = The decoder part of this session file is damaged. The decoders that could be read are restored; the capture and the rest of the session are not affected. Check the decoders and set up any that are missing again.
+error-decoder-unknown_decoder = This session uses a decoder that this version of the application does not have. It was skipped and the rest of the session is restored. Update the application if you need that decoder.
+error-decoder-options_skipped = Some saved decoder options were not understood and were skipped, so the defaults are used for them. Check the decoder settings.

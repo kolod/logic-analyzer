@@ -37,6 +37,21 @@ impl Class {
             Some(Class::Label)
         } else if key.starts_with("dialog-") && !key.ends_with("-body") {
             Some(Class::Button)
+        } else if matches!(
+            key,
+            "decoders-add"
+                | "decoder-run"
+                | "decoder-cancel"
+                | "decoder-remove"
+                | "decoder-lane-show"
+                | "decoder-source"
+                | "decoder-source-capture"
+                | "decoder-channel-none"
+                | "panel-decoders"
+        ) || key.starts_with("decoder-state-")
+        {
+            // The controls of the Decoders panel sit in a column 280 pixels wide.
+            Some(Class::Label)
         } else {
             None
         }

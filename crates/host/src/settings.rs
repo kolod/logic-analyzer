@@ -80,6 +80,10 @@ pub struct Settings {
     pub ui_scale_percent: u16,
     /// The memory limit of a capture, in bytes.
     pub memory_limit_bytes: u64,
+    /// The memory limit of the results of all decoders together, in bytes.
+    pub decoder_memory_limit_bytes: u64,
+    /// Whether the results of the decoders are saved with the session.
+    pub save_decoder_results: bool,
     /// Whether markers snap to transitions.
     pub snap_markers: bool,
     /// Whether the view follows the newest data of a running capture.
@@ -105,6 +109,8 @@ impl Default for Settings {
             theme: Theme::System,
             ui_scale_percent: 100,
             memory_limit_bytes: default_memory_limit(),
+            decoder_memory_limit_bytes: la_decoders::store::DEFAULT_MEMORY_LIMIT,
+            save_decoder_results: false,
             snap_markers: true,
             follow_latest: true,
             recent_files: Vec::new(),
@@ -130,6 +136,15 @@ pub fn memory_limit_bounds() -> (u64, u64) {
     (low, MAX_MEMORY_LIMIT_BYTES)
 }
 
+/// The smallest and the largest memory limit of decoder results, in bytes (16 MiB to 4 GiB).
+pub const DECODER_MEMORY_LIMIT_RANGE: (u64, u64) = (16 << 20, 4 << 30);
+
+/// Whether `bytes` is an acceptable memory limit for decoder results.
+#[must_use]
+pub fn decoder_memory_limit_is_valid(bytes: u64) -> bool {
+    (DECODER_MEMORY_LIMIT_RANGE.0..=DECODER_MEMORY_LIMIT_RANGE.1).contains(&bytes)
+}
+
 /// Whether `bytes` is an acceptable memory limit for a capture.
 pub fn memory_limit_is_valid(bytes: u64) -> bool {
     bytes <= MAX_MEMORY_LIMIT_BYTES
@@ -151,6 +166,9 @@ impl Settings {
             .clamp(UI_SCALE_RANGE.0, UI_SCALE_RANGE.1);
         if !memory_limit_is_valid(self.memory_limit_bytes) {
             self.memory_limit_bytes = default_memory_limit();
+        }
+        if !decoder_memory_limit_is_valid(self.decoder_memory_limit_bytes) {
+            self.decoder_memory_limit_bytes = la_decoders::store::DEFAULT_MEMORY_LIMIT;
         }
         self.recent_files.truncate(MAX_RECENT_FILES);
         if self.window.is_some_and(|w| !w.is_usable()) {

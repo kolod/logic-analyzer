@@ -140,3 +140,69 @@ dialog-close = Закрити
 about-title = Про програму
 about-body = Logic Analyzer { $version }. Записує цифрові сигнали та показує їх на часовій шкалі; змодельований пристрій дозволяє спробувати програму без обладнання.
 about-license = Вільне програмне забезпечення за ліцензією GNU General Public License, версія 3.
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = Тактовані біти
+decoder-sample-clocked-bits-description = Читає біти з лінії даних за фронтами тактової лінії та збирає їх у байти. Зразковий декодер, що показує можливості декодерів.
+decoder-sample-clocked-bits-signal-clock = Такт
+decoder-sample-clocked-bits-signal-data = Дані
+decoder-sample-clocked-bits-option-clock_edge = Фронт такту
+decoder-sample-clocked-bits-choice-clock_edge-rising = Зростаючий
+decoder-sample-clocked-bits-choice-clock_edge-falling = Спадний
+decoder-sample-clocked-bits-option-bit_order = Порядок бітів
+decoder-sample-clocked-bits-choice-bit_order-msb = Старший біт першим
+decoder-sample-clocked-bits-choice-bit_order-lsb = Молодший біт першим
+decoder-sample-clocked-bits-option-bits = Бітів у байті
+decoder-sample-clocked-bits-option-idle = Межа простою (відліків)
+ann-sample-clocked-bits-byte = Байт { $value }
+ann-sample-clocked-bits-bit = Біт { $value }
+ann-sample-clocked-bits-incomplete = Неповний байт: { $value } бітів
+ann-sample-clocked-bits-gap = Тут втрачено відліки
+
+### Decoders: menu, panel and the selected annotation
+menu-decoders = Декодери
+menu-decoders-add = Додати декодер
+menu-decoders-previous = Попередня анотація
+menu-decoders-next = Наступна анотація
+menu-decoders-goto = Перейти до вибраної анотації
+panel-decoders = Декодери
+decoders-add = Додати декодер
+decoders-empty = Декодерів ще немає. Додайте один, щоб побачити, що кажуть сигнали.
+decoders-need-capture = Спершу захопіть або відкрийте сигнали.
+decoder-state-waiting = Очікує
+decoder-state-running = Працює
+decoder-state-finished = Завершено
+decoder-state-cancelled = Скасовано
+decoder-state-failed = Збій
+decoder-needs-channels = Оберіть канали, щоб почати декодування.
+decoder-channel-none = (немає)
+decoder-lane-show = Показувати доріжку
+decoder-remove = Прибрати декодер
+decoder-annotations = Анотацій: { $number }
+decoder-incomplete = Неповні результати
+decoder-selected = Вибрана анотація
+decoder-detail-length = Тривалість: { $value }
+decoder-detail-error = Повідомляє про проблему в сигналі
+decoder-detail-position = Позиція: від { $first } до { $second }
+
+### Decoders: the simulation of signals that are valid for a decoder
+decoder-generator-errors = Навмисно додавати помилки в змодельовані сигнали
+decoder-generator-rate = Приблизно кожен такий за рахунком байт обривається
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = Запустити знову
+decoder-cancel = Скасувати
+settings-decoder-memory = Обмеження пам'яті для результатів декодерів
+settings-decoder-memory-note = Спільне для всіх декодерів. Діє з наступного проходу.
+
+### Decoders: stacking
+decoder-source = Читає з
+decoder-source-capture = Захоплення
+dialog-remove-decoder-title = Прибрати декодер
+dialog-remove-decoder-body = Інші декодери читають з цього. Якщо його прибрати, їх буде прибрано теж. Захоплення це не зачіпає.
+dialog-remove-decoder-confirm = Прибрати всі
+
+### Decoders: saving and opening
+notice-decoders-newer = У цьому файлі є декодери з новішої версії застосунку. Їх збережено як є й не показано; захоплення відкривається як зазвичай.
+settings-save-decoder-results = Зберігати результати декодування разом із сеансом
+settings-save-decoder-results-note = Файл стає більшим. Без цього декодери запускаються знову, коли файл відкривають.

@@ -9,6 +9,9 @@ use std::path::PathBuf;
 use la_devices::{DeviceId, Trigger};
 use la_i18n::Language;
 
+use la_decoders::setup::{Setup, Source, Value};
+
+use crate::decoders::AnnotationRef;
 use crate::devices::SignalProfile;
 use crate::notices::NoticeId;
 use crate::presentation::Colour;
@@ -97,10 +100,23 @@ pub enum Guarded {
     StartCapture,
     /// Opening a session file.
     OpenSession(PathBuf),
+    /// Removing a decoder that other decoders are stacked on (they go with it).
+    RemoveDecoder(u32),
     /// Closing the window.
     Close,
     /// Quitting.
     Quit,
+}
+
+/// Which annotation `GoToAnnotation` moves to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnnotationTarget {
+    /// The selected one.
+    Selected,
+    /// The next one by start, in the store of the selected annotation.
+    Next,
+    /// The previous one by start, in the store of the selected annotation.
+    Previous,
 }
 
 /// Everything a user interface can ask of the host.
@@ -219,6 +235,78 @@ pub enum Command {
     GoToMarker(u32),
     /// Turns snapping of markers to transitions on or off.
     SetSnap(bool),
+    /// Adds an instance of a registered decoder with default options and no channels yet.
+    AddDecoder {
+        /// The decoder id.
+        decoder: String,
+    },
+    /// Replaces the setup of an instance in one step (validated as a whole).
+    ConfigureDecoder {
+        /// The instance.
+        id: u32,
+        /// The new setup.
+        setup: Setup,
+    },
+    /// Assigns a channel to a signal role of an instance, or none.
+    SetDecoderChannel {
+        /// The instance.
+        id: u32,
+        /// The signal role.
+        role: String,
+        /// The channel, or none.
+        channel: Option<u8>,
+    },
+    /// Sets one option of an instance.
+    SetDecoderOption {
+        /// The instance.
+        id: u32,
+        /// The option.
+        option: String,
+        /// The value.
+        value: Value,
+    },
+    /// Renames an instance (sanitized, at most 64 characters).
+    RenameDecoder {
+        /// The instance.
+        id: u32,
+        /// The new name.
+        name: String,
+    },
+    /// Shows or hides the lane and overlays of an instance.
+    ShowDecoderLane {
+        /// The instance.
+        id: u32,
+        /// Whether they are shown.
+        visible: bool,
+    },
+    /// Removes an instance and its results (asks first when other instances read from it).
+    RemoveDecoder(u32),
+    /// Makes the capture or another instance the input of an instance.
+    StackDecoder {
+        /// The instance.
+        id: u32,
+        /// Where it reads from.
+        source: Source,
+    },
+    /// Starts a new pass of an instance that is not running.
+    RunDecoder(u32),
+    /// Stops the running pass of an instance within a second, keeping its results (incomplete).
+    CancelDecoder(u32),
+    /// Sets the memory limit of decoder results in bytes (for passes that start afterwards).
+    SetDecoderMemoryLimit(u64),
+    /// Chooses whether the results of the decoders are saved with the session.
+    SetSaveDecoderResults(bool),
+    /// Selects an annotation.
+    SelectAnnotation {
+        /// The instance.
+        instance: u32,
+        /// The annotation.
+        annotation: AnnotationRef,
+    },
+    /// Moves the view to the selected, next or previous annotation.
+    GoToAnnotation(AnnotationTarget),
+    /// Clears the annotation selection.
+    ClearAnnotationSelection,
     /// Saves to the current path.
     SaveSession,
     /// Saves to a new path.
@@ -282,6 +370,15 @@ impl Command {
                 | Command::RenameMarker { .. }
                 | Command::RemoveMarker(_)
                 | Command::RemoveAllMarkers
+                | Command::AddDecoder { .. }
+                | Command::ConfigureDecoder { .. }
+                | Command::SetDecoderChannel { .. }
+                | Command::SetDecoderOption { .. }
+                | Command::RenameDecoder { .. }
+                | Command::ShowDecoderLane { .. }
+                | Command::RemoveDecoder(_)
+                | Command::StackDecoder { .. }
+                | Command::RunDecoder(_)
                 | Command::Decide(Decision::Save | Decision::Discard)
         )
     }
@@ -319,6 +416,21 @@ impl Command {
             Command::SelectMarkers { .. } => "select_markers",
             Command::GoToMarker(_) => "go_to_marker",
             Command::SetSnap(_) => "set_snap",
+            Command::AddDecoder { .. } => "add_decoder",
+            Command::ConfigureDecoder { .. } => "configure_decoder",
+            Command::SetDecoderChannel { .. } => "set_decoder_channel",
+            Command::SetDecoderOption { .. } => "set_decoder_option",
+            Command::RenameDecoder { .. } => "rename_decoder",
+            Command::ShowDecoderLane { .. } => "show_decoder_lane",
+            Command::RemoveDecoder(_) => "remove_decoder",
+            Command::StackDecoder { .. } => "stack_decoder",
+            Command::RunDecoder(_) => "run_decoder",
+            Command::CancelDecoder(_) => "cancel_decoder",
+            Command::SetDecoderMemoryLimit(_) => "set_decoder_memory_limit",
+            Command::SetSaveDecoderResults(_) => "set_save_decoder_results",
+            Command::SelectAnnotation { .. } => "select_annotation",
+            Command::GoToAnnotation(_) => "go_to_annotation",
+            Command::ClearAnnotationSelection => "clear_annotation_selection",
             Command::SaveSession => "save_session",
             Command::SaveSessionAs(_) => "save_session_as",
             Command::OpenSession(_) => "open_session",
@@ -376,6 +488,8 @@ impl Changes {
     pub const THEME: Changes = Changes(1 << 12);
     /// The application should close.
     pub const QUIT: Changes = Changes(1 << 13);
+    /// Decoder instances, their state, results or the annotation selection.
+    pub const DECODERS: Changes = Changes(1 << 14);
 
     /// Whether nothing changed.
     #[must_use]

@@ -140,3 +140,69 @@ dialog-close = 閉じる
 about-title = バージョン情報
 about-body = Logic Analyzer { $version }。デジタル信号を記録してタイムライン上に表示します。シミュレーションデバイスで、ハードウェアなしで試せます。
 about-license = GNU General Public License バージョン3のもとで公開されている自由ソフトウェアです。
+
+### Decoders: the sample decoder
+decoder-sample-clocked-bits-name = クロック付きビット
+decoder-sample-clocked-bits-description = クロック線のエッジでデータ線からビットを読み取り、バイトにまとめます。デコーダーにできることを示すサンプルのデコーダーです。
+decoder-sample-clocked-bits-signal-clock = クロック
+decoder-sample-clocked-bits-signal-data = データ
+decoder-sample-clocked-bits-option-clock_edge = クロックエッジ
+decoder-sample-clocked-bits-choice-clock_edge-rising = 立ち上がり
+decoder-sample-clocked-bits-choice-clock_edge-falling = 立ち下がり
+decoder-sample-clocked-bits-option-bit_order = ビット順
+decoder-sample-clocked-bits-choice-bit_order-msb = 最上位ビットが先
+decoder-sample-clocked-bits-choice-bit_order-lsb = 最下位ビットが先
+decoder-sample-clocked-bits-option-bits = 1 バイトのビット数
+decoder-sample-clocked-bits-option-idle = アイドル上限（サンプル数）
+ann-sample-clocked-bits-byte = バイト { $value }
+ann-sample-clocked-bits-bit = ビット { $value }
+ann-sample-clocked-bits-incomplete = 不完全なバイト：{ $value } ビット
+ann-sample-clocked-bits-gap = ここでサンプルが失われました
+
+### Decoders: menu, panel and the selected annotation
+menu-decoders = デコーダー
+menu-decoders-add = デコーダーを追加
+menu-decoders-previous = 前の注釈
+menu-decoders-next = 次の注釈
+menu-decoders-goto = 選択した注釈へ移動
+panel-decoders = デコーダー
+decoders-add = デコーダーを追加
+decoders-empty = デコーダーはまだありません。追加すると、信号の内容が分かります。
+decoders-need-capture = 先に信号をキャプチャするか開いてください。
+decoder-state-waiting = 待機中
+decoder-state-running = 実行中
+decoder-state-finished = 完了
+decoder-state-cancelled = キャンセル済み
+decoder-state-failed = 失敗
+decoder-needs-channels = デコードを開始するチャンネルを選んでください。
+decoder-channel-none = （なし）
+decoder-lane-show = レーンを表示
+decoder-remove = デコーダーを削除
+decoder-annotations = 注釈数: { $number }
+decoder-incomplete = 結果は不完全です
+decoder-selected = 選択中の注釈
+decoder-detail-length = 長さ: { $value }
+decoder-detail-error = 信号の問題を示しています
+decoder-detail-position = 位置: { $first } から { $second }
+
+### Decoders: the simulation of signals that are valid for a decoder
+decoder-generator-errors = シミュレートした信号にわざとエラーを入れる
+decoder-generator-rate = おおよそこの数に 1 バイトが途中で切れます
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = もう一度実行
+decoder-cancel = キャンセル
+settings-decoder-memory = デコーダーの結果のメモリ上限
+settings-decoder-memory-note = すべてのデコーダーで共有します。次の実行から有効です。
+
+### Decoders: stacking
+decoder-source = 入力元
+decoder-source-capture = キャプチャ
+dialog-remove-decoder-title = デコーダーを削除
+dialog-remove-decoder-body = このデコーダーから他のデコーダーが読み取っています。削除するとそれらも削除されます。キャプチャには影響しません。
+dialog-remove-decoder-confirm = すべて削除
+
+### Decoders: saving and opening
+notice-decoders-newer = このファイルには、より新しいバージョンのアプリケーションのデコーダーが含まれています。そのまま保持され表示されませんが、キャプチャは通常どおり開きます。
+settings-save-decoder-results = デコード結果をセッションと一緒に保存する
+settings-save-decoder-results-note = ファイルが大きくなります。保存しない場合は、ファイルを開くときにデコーダーが再実行されます。

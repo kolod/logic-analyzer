@@ -96,7 +96,7 @@ impl<'a> Reader<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 struct Model {
-    /// The format minor version of the file (the current writer emits 1).
+    /// The format minor version of the file (the current writer emits 2).
     minor: u16,
     simulated: bool,
     seed: Option<u64>,
@@ -480,7 +480,7 @@ fn assert_agrees(model: &Model, session: &la_session::Session, what: &str) {
 fn fixture_files() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut files = Vec::new();
-    for dir in ["reference", "v1_0", "v1_1"] {
+    for dir in ["reference", "v1_0", "v1_1", "v1_2"] {
         for entry in std::fs::read_dir(root.join(dir)).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|e| e == "lasession") {
@@ -544,7 +544,7 @@ fn the_independent_reader_agrees_with_the_loader_on_generated_files() {
 #[test]
 fn a_file_written_by_the_independent_writer_loads_in_the_crate() {
     let model = Model {
-        minor: 1,
+        minor: 2,
         simulated: true,
         seed: Some(42),
         device_id: "virtual:0".into(),

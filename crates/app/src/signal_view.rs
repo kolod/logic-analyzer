@@ -8,11 +8,13 @@ use iced::alignment::Vertical;
 use iced::mouse;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, LineDash, Path, Stroke, Text};
 use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
+use la_host::decoders::AnnotationRef;
 use la_host::plan::{FramePlan, FrameState, Segment};
 use la_host::{Command, ZoomAnchor, ZoomFactor};
 use la_i18n::{Args, Key, Localizer};
 
 use crate::app::Message;
+use crate::decoder_view::{self, Look};
 use crate::theme::Variant;
 
 /// Width of the column with the channel names, in logical pixels.
@@ -33,6 +35,8 @@ pub struct SignalView<'a> {
     pub variant: Variant,
     /// The language of every text.
     pub localizer: &'a Localizer,
+    /// The selected annotation, if any.
+    pub selected: Option<(u32, AnnotationRef)>,
 }
 
 /// What the canvas remembers between events.
@@ -46,6 +50,8 @@ pub struct ViewState {
     drag_from: Option<f32>,
     /// The marker being dragged and the channel under the pointer.
     drag_marker: Option<u32>,
+    /// The last click on an annotation (a second one on it soon after is a double click).
+    last_click: Option<(std::time::Instant, u32, AnnotationRef)>,
 }
 
 fn lane_height(total: f32, lanes: usize) -> f32 {
@@ -106,7 +112,7 @@ impl SignalView<'_> {
                 .window
                 .start
                 .saturating_add((x / columns * plan.window.length as f64) as u64);
-            let lane = lane_height(height, plan.channels.len());
+            let lane = lane_height(height, plan.channels.len().saturating_add(plan.lanes.len()));
             let index = (((position.y - AXIS_HEIGHT) / lane).max(0.0) as usize)
                 .min(plan.channels.len().saturating_sub(1));
             let channel = plan.channels.get(index).map_or(0, |c| c.channel);
@@ -141,7 +147,10 @@ impl SignalView<'_> {
         }
         let area_width = (size.width - GUTTER).max(1.0);
         let scale = area_width / plan.pixels.max(1) as f32;
-        let lane = lane_height(size.height, plan.channels.len());
+        let lane = lane_height(
+            size.height,
+            plan.channels.len().saturating_add(plan.lanes.len()),
+        );
         let hairline = self.variant.hairline();
 
         // Time axis.
@@ -200,6 +209,34 @@ impl SignalView<'_> {
                 Stroke::default().with_color(colour).with_width(1.6),
             );
         }
+        let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
+        let look = Look {
+            variant: self.variant,
+            localizer: self.localizer,
+            selected: self.selected,
+            theme,
+        };
+        // The lanes of the decoders come after the channels.
+        for index in 0..plan.lanes.len() {
+            let top = lane_top(plan.channels.len().saturating_add(index));
+            frame.stroke(
+                &Path::line(
+                    Point::new(0.0, top + lane),
+                    Point::new(size.width, top + lane),
+                ),
+                Stroke::default().with_color(hairline).with_width(1.0),
+            );
+        }
+        decoder_view::draw_lanes(
+            frame,
+            plan,
+            plan.channels.len(),
+            &lane_top,
+            lane,
+            scale,
+            &look,
+        );
+        decoder_view::draw_overlays(frame, plan, &lane_top, lane, scale, &look);
         for marker in &plan.markers {
             let x = GUTTER + marker.x as f32 * scale;
             let accent = palette.primary;
@@ -431,6 +468,45 @@ impl canvas::Program<Message> for SignalView<'_> {
                 let position = cursor.position_in(bounds)?;
                 if position.x >= GUTTER {
                     let scale = (bounds.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+                    // A click on an annotation selects it.
+                    let lane = lane_height(
+                        bounds.height,
+                        self.plan
+                            .channels
+                            .len()
+                            .saturating_add(self.plan.lanes.len()),
+                    );
+                    let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
+                    if let Some(decoder_view::Hit {
+                        instance,
+                        annotation,
+                        ..
+                    }) = decoder_view::hit_test(
+                        self.plan,
+                        position,
+                        self.plan.channels.len(),
+                        &lane_top,
+                        lane,
+                        scale,
+                    ) {
+                        let now = std::time::Instant::now();
+                        let double = state.last_click.is_some_and(|(at, i, a)| {
+                            i == instance
+                                && a == annotation
+                                && now.saturating_duration_since(at)
+                                    < std::time::Duration::from_millis(400)
+                        });
+                        state.last_click = Some((now, instance, annotation));
+                        let command = if double {
+                            Command::GoToAnnotation(la_host::AnnotationTarget::Selected)
+                        } else {
+                            Command::SelectAnnotation {
+                                instance,
+                                annotation,
+                            }
+                        };
+                        return Some(canvas::Action::publish(Message::Run(command)).and_capture());
+                    }
                     state.drag_marker = self
                         .plan
                         .markers
@@ -549,6 +625,66 @@ impl SignalView<'_> {
             align_x: iced::alignment::Horizontal::Right.into(),
             ..Text::default()
         });
+        self.draw_annotation_readout(frame, size, position, theme);
+    }
+
+    /// The full text of the annotation under the pointer and its length in time, in a box next to
+    /// the pointer (a span's text may be cut in the lane).
+    fn draw_annotation_readout(
+        &self,
+        frame: &mut Frame,
+        size: Size,
+        position: Point,
+        theme: &Theme,
+    ) {
+        let plan = self.plan;
+        let lane = lane_height(
+            size.height,
+            plan.channels.len().saturating_add(plan.lanes.len()),
+        );
+        let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
+        let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
+        let Some(hit) =
+            decoder_view::hit_test(plan, position, plan.channels.len(), &lane_top, lane, scale)
+        else {
+            return;
+        };
+        let seconds = hit.end.saturating_sub(hit.start) as f64 / plan.sample_rate_hz.max(1) as f64;
+        let content = format!(
+            "{}  \u{b7}  {}",
+            la_host::decoders::annotation_text(self.localizer, &hit.text),
+            self.localizer.format_duration(seconds)
+        );
+        let width = content.chars().count() as f32 * 7.0 + 12.0;
+        let x = (position.x + 12.0).min((size.width - width - 4.0).max(0.0));
+        let y = (position.y + 14.0).min((size.height - 24.0).max(0.0));
+        let palette = theme.palette();
+        frame.fill_rectangle(
+            Point::new(x, y),
+            Size::new(width, 20.0),
+            Color {
+                a: 0.92,
+                ..palette.background
+            },
+        );
+        frame.stroke(
+            &Path::rectangle(Point::new(x, y), Size::new(width, 20.0)),
+            Stroke::default()
+                .with_color(if hit.error {
+                    palette.danger
+                } else {
+                    palette.text
+                })
+                .with_width(1.0),
+        );
+        frame.fill_text(Text {
+            content,
+            position: Point::new(x + 6.0, y + 10.0),
+            color: palette.text,
+            size: Pixels(TEXT_SIZE),
+            align_y: Vertical::Center,
+            ..Text::default()
+        });
     }
 }
 
@@ -574,6 +710,7 @@ mod tests {
             cache: &cache,
             variant: Variant::Dark,
             localizer: &localizer,
+            selected: None,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         // The width is reported first, as the view does on its first event.

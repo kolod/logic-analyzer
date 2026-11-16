@@ -147,6 +147,33 @@ logic**: if a rule can be tested without a window, it belongs in `la-host`, with
 5. Write the test first, in `crates/host/tests/`. The random walk (`random_walk`) will pick the
    command up when you add it to its action list; add it there.
 
+### Adding a decoder
+
+A decoder is built into the application and described by data; the interface, the setup form, the
+lane and the saved setup are all made from that description, so **`la-app` needs no change** (a test,
+`a_registered_test_decoder_appears_without_changing_the_shell`, checks this). The contract is
+[docs/decoder-api.md](docs/decoder-api.md).
+
+1. Write the descriptor (`crates/decoders/src/decoders/<name>.rs`): a stable id, a version, the
+   signal roles, the options with their types and defaults, what it reads (`Signals` or the items of
+   another decoder) and what it produces. Every text is a **message key written as a string
+   literal** in the source (`decoder-<id>-name`, `-description`, `-signal-<role>`, `-option-<id>`,
+   `-choice-<option>-<value>`, and `ann-<id>-<kind>` for annotations), so that the parity check finds
+   it; add the keys to `ui.ftl` in all six languages.
+2. Write the state machine (`Run::process` and `finish`). It is called with one chunk after another,
+   keeps its own state, never blocks or loops, never reads the clock or random numbers, and reports a
+   problem **in the signal** as an error annotation; only a decoder that cannot continue returns an
+   error. A decoder that reads items implements `process_items`.
+3. Write the tests first, in `crates/decoders/tests/`: hand-drawn captures with the exact expected
+   annotations, malformed and truncated input, gaps, and the same output for every chunk size.
+4. If the decoder can be tried without hardware, write its generator (a deterministic function of the
+   position, see `generators/clocked_bits.rs`) with `expected()`, and a round-trip test over many
+   seeds with deliberate errors, as `tests/round_trip.rs` does (constitution Principle XI).
+5. Register it in `Registry::builtin` (`crates/decoders/src/registry.rs`). Registration validates the
+   descriptor; an invalid one is refused and logged.
+6. Run `cargo test -p la-decoders -p la-host -p la-i18n`; `error_sweep` and the parity check fail for
+   a missing message.
+
 ### Adding or changing a user interface string
 
 Every text the user sees is a message in `resources/i18n/<language>/ui.ftl`, in all six languages

@@ -11,7 +11,9 @@ use iced::widget::{
     scrollable, stack, text, text_input, tooltip,
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
+use la_decoders::setup::{Source, Value};
 use la_devices::DeviceId;
+use la_host::decoders::{CatalogueOptionKind, InstanceState};
 use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::shortcuts::{Accelerator, Action, ShortcutEntry};
 use la_host::window::ViewSize;
@@ -86,6 +88,8 @@ pub enum Message {
     ScaleStep(i8),
     /// The text of the memory limit field changed.
     MemoryText(String),
+    /// The text of the decoder memory limit field changed.
+    DecoderMemoryText(String),
     /// The window moved or changed size.
     WindowEvent(window::Event),
     /// Ask for a file and open it.
@@ -102,6 +106,26 @@ pub enum Message {
     MarkerName(u32, String),
     /// A marker becomes the first (0) or second (1) of the measurement.
     MarkerMeasure(usize, u32),
+    /// The menu entry that adds a decoder.
+    AddDecoderMenu,
+    /// A source was chosen for a decoder instance (the capture, or another instance).
+    DecoderSourcePicked(u32, Choice<Source>),
+    /// A decoder was chosen in the list of decoders to add.
+    AddDecoderPicked(Choice<String>),
+    /// A decoder instance was renamed in the panel.
+    DecoderName(u32, String),
+    /// A channel was chosen for a signal of a decoder instance.
+    DecoderChannelPicked(u32, String, Choice<Option<u8>>),
+    /// A choice option of a decoder instance was changed.
+    DecoderOptionPicked(u32, String, Choice<String>),
+    /// The text of a number option of a decoder instance changed.
+    DecoderOptionText(u32, String, String),
+    /// A switch option of a decoder instance was changed.
+    DecoderOptionFlag(u32, String, bool),
+    /// A generator option of a decoder instance changed (`errors` or `error_rate`).
+    DecoderGenerator(u32, &'static str, i64),
+    /// The text of the generator's error rate changed.
+    DecoderRateText(u32, String),
     /// Nothing to do.
     Noop,
 }
@@ -285,7 +309,7 @@ pub struct App {
     variant: Variant,
     system_mode: theme::Mode,
     plan: la_host::plan::FramePlan,
-    plan_key: (u64, u64, u64, u64, u32, bool),
+    plan_key: (u64, u64, u64, u64, u64, u32, bool),
     cache: canvas::Cache,
     cache_key: (u64, Variant, la_i18n::Language),
     open_menu: Option<usize>,
@@ -294,10 +318,13 @@ pub struct App {
     seed_text: String,
     names: std::collections::BTreeMap<u8, String>,
     marker_names: std::collections::BTreeMap<u32, String>,
+    decoder_names: std::collections::BTreeMap<u32, String>,
+    option_texts: std::collections::BTreeMap<(u32, String), String>,
     messages_open: bool,
     settings_open: bool,
     about_open: bool,
     memory_text: String,
+    decoder_memory_text: String,
     window_rect: [i32; 4],
 }
 
@@ -319,7 +346,7 @@ impl App {
             table,
             variant,
             system_mode: theme::Mode::Dark,
-            plan_key: (0, 0, 0, 0, 0, false),
+            plan_key: (0, 0, 0, 0, 0, 0, false),
             cache: canvas::Cache::new(),
             cache_key: (0, variant, la_i18n::Language::En),
             open_menu: None,
@@ -328,10 +355,13 @@ impl App {
             seed_text: String::new(),
             names: std::collections::BTreeMap::new(),
             marker_names: std::collections::BTreeMap::new(),
+            decoder_names: std::collections::BTreeMap::new(),
+            option_texts: std::collections::BTreeMap::new(),
             messages_open: false,
             settings_open: false,
             about_open: false,
             memory_text: String::new(),
+            decoder_memory_text: String::new(),
             window_rect: [0, 0, 0, 0],
         };
         app.sync_texts();
@@ -356,6 +386,12 @@ impl App {
     fn memory_limit_ok(&self, mib: u64) -> bool {
         mib.checked_mul(1 << 20)
             .is_some_and(la_host::settings::memory_limit_is_valid)
+    }
+
+    /// Whether `mib` is a decoder memory limit the host accepts.
+    fn decoder_memory_ok(mib: u64) -> bool {
+        mib.checked_mul(1 << 20)
+            .is_some_and(la_host::settings::decoder_memory_limit_is_valid)
     }
 
     /// The settings dialog: language, theme, interface scale and memory limit. Every choice
@@ -435,9 +471,41 @@ impl App {
                 .into()
             ),
             text(self.t("settings-memory-note")).size(12),
+            labelled(
+                self.t("settings-decoder-memory"),
+                row![
+                    text_input("", &self.decoder_memory_text)
+                        .on_input(Message::DecoderMemoryText)
+                        .width(110),
+                    text(self.t("settings-memory-unit")),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+                .into()
+            ),
+            text(self.t("settings-decoder-memory-note")).size(12),
+            checkbox(self.shell.state().decoders.save_results)
+                .label(self.t("settings-save-decoder-results"))
+                .on_toggle(|save| Message::Run(Command::SetSaveDecoderResults(save))),
+            text(self.t("settings-save-decoder-results-note")).size(12),
         ]
         .spacing(10)
         .max_width(460);
+        let (decoder_low, decoder_high) = la_host::settings::DECODER_MEMORY_LIMIT_RANGE;
+        let decoder_memory_valid = self
+            .decoder_memory_text
+            .trim()
+            .parse::<u64>()
+            .is_ok_and(Self::decoder_memory_ok);
+        if !decoder_memory_valid {
+            let message = self.shell.localizer().message(
+                &Key::from_static("settings-memory-invalid"),
+                &Args::new()
+                    .uint("min", decoder_low >> 20)
+                    .uint("max", decoder_high >> 20),
+            );
+            body = body.push(text(message).size(13).style(text::danger));
+        }
         if !memory_valid {
             let message = self.shell.localizer().message(
                 &Key::from_static("settings-memory-invalid"),
@@ -613,6 +681,7 @@ impl App {
             state.versions.window,
             state.versions.presentation,
             state.versions.markers,
+            state.versions.decoders,
             state.view_size.pixels,
             state.auto_fit,
         );
@@ -772,6 +841,7 @@ impl App {
                     Some(Action::RemoveSelectedMarker) => {
                         self.update(Message::MarkerAction(MarkerAction::RemoveSelected))
                     }
+                    Some(Action::AddDecoder) => self.update(Message::AddDecoderMenu),
                     Some(Action::ToggleSnap) => {
                         self.update(Message::MarkerAction(MarkerAction::ToggleSnap))
                     }
@@ -809,6 +879,8 @@ impl App {
                 self.about_open = false;
                 self.memory_text =
                     (self.shell.state().settings.memory_limit_bytes >> 20).to_string();
+                self.decoder_memory_text =
+                    (self.shell.state().settings.decoder_memory_limit_bytes >> 20).to_string();
                 self.settings_open = true;
                 Task::none()
             }
@@ -845,6 +917,15 @@ impl App {
                 match self.memory_text.trim().parse::<u64>() {
                     Ok(mib) if self.memory_limit_ok(mib) => {
                         self.run(Command::SetMemoryLimit(mib << 20))
+                    }
+                    _ => Task::none(),
+                }
+            }
+            Message::DecoderMemoryText(text) => {
+                self.decoder_memory_text = text;
+                match self.decoder_memory_text.trim().parse::<u64>() {
+                    Ok(mib) if Self::decoder_memory_ok(mib) => {
+                        self.run(Command::SetDecoderMemoryLimit(mib << 20))
                     }
                     _ => Task::none(),
                 }
@@ -948,6 +1029,81 @@ impl App {
                 self.open_menu = None;
                 self.run(command)
             }
+            Message::AddDecoderMenu => {
+                self.open_menu = None;
+                let catalogue = &self.shell.state().decoders.catalogue;
+                match catalogue.as_slice() {
+                    [only] => {
+                        let decoder = only.id.clone();
+                        self.run(Command::AddDecoder { decoder })
+                    }
+                    _ => Task::none(),
+                }
+            }
+            Message::DecoderSourcePicked(id, choice) => self.run(Command::StackDecoder {
+                id,
+                source: choice.value,
+            }),
+            Message::AddDecoderPicked(choice) => self.run(Command::AddDecoder {
+                decoder: choice.value,
+            }),
+            Message::DecoderName(id, name) => {
+                self.decoder_names.insert(id, name.clone());
+                self.run(Command::RenameDecoder { id, name })
+            }
+            Message::DecoderChannelPicked(id, role, choice) => {
+                self.run(Command::SetDecoderChannel {
+                    id,
+                    role,
+                    channel: choice.value,
+                })
+            }
+            Message::DecoderOptionPicked(id, option, choice) => {
+                self.run(Command::SetDecoderOption {
+                    id,
+                    option,
+                    value: Value::Choice(choice.value),
+                })
+            }
+            Message::DecoderOptionText(id, option, text) => {
+                let parsed = text.trim().parse::<i64>().ok();
+                self.option_texts.insert((id, option.clone()), text);
+                match parsed {
+                    Some(number) => self.run(Command::SetDecoderOption {
+                        id,
+                        option,
+                        value: Value::Integer(number),
+                    }),
+                    None => Task::none(),
+                }
+            }
+            Message::DecoderGenerator(id, key, value) => {
+                let Some(mut setup) = self
+                    .shell
+                    .state()
+                    .decoders
+                    .instance(id)
+                    .map(|i| i.setup.clone())
+                else {
+                    return Task::none();
+                };
+                setup.generator.insert(key.to_owned(), value);
+                self.run(Command::ConfigureDecoder { id, setup })
+            }
+            Message::DecoderRateText(id, text) => {
+                let parsed = text.trim().parse::<i64>().ok();
+                self.option_texts
+                    .insert((id, "error_rate".to_owned()), text);
+                match parsed {
+                    Some(rate) => self.update(Message::DecoderGenerator(id, "error_rate", rate)),
+                    None => Task::none(),
+                }
+            }
+            Message::DecoderOptionFlag(id, option, on) => self.run(Command::SetDecoderOption {
+                id,
+                option,
+                value: Value::Boolean(on),
+            }),
             Message::MenuToggled(index) => {
                 self.open_menu = if self.open_menu == Some(index) {
                     None
@@ -1072,6 +1228,7 @@ impl App {
                     Action::ToggleSnap => {
                         item = item.on_press(Message::MarkerAction(MarkerAction::ToggleSnap));
                     }
+                    Action::AddDecoder => item = item.on_press(Message::AddDecoderMenu),
                 }
             }
             items = items.push(item);
@@ -1286,8 +1443,384 @@ impl App {
         }
         container(scrollable(list))
             .width(Fill)
-            .height(Length::FillPortion(2))
+            .height(Length::FillPortion(1))
             .style(container::bordered_box)
+            .into()
+    }
+
+    /// The panel of the decoders: the instances, their channels and options, the state of each
+    /// pass and the selected annotation.
+    fn decoders_panel(&self) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let mut list = column![].spacing(6).padding(iced::Padding {
+            top: 6.0,
+            right: 18.0,
+            bottom: 6.0,
+            left: 6.0,
+        });
+        list = list.push(text(self.t("panel-decoders")).size(14));
+        if state.capture.is_none() {
+            list = list.push(text(self.t("decoders-need-capture")).size(12));
+        } else {
+            let catalogue = &state.decoders.catalogue;
+            if catalogue.len() == 1 {
+                list = list.push(
+                    button(text(self.t("decoders-add")).size(13))
+                        .padding([3, 8])
+                        .on_press(Message::AddDecoderMenu),
+                );
+            } else {
+                let choices: Vec<Choice<String>> = catalogue
+                    .iter()
+                    .map(|entry| Choice {
+                        value: entry.id.clone(),
+                        label: entry.name.clone(),
+                    })
+                    .collect();
+                list = list.push(
+                    pick_list(choices, None::<Choice<String>>, Message::AddDecoderPicked)
+                        .placeholder(self.t("decoders-add"))
+                        .text_size(13),
+                );
+            }
+            if state.decoders.instances.is_empty() {
+                list = list.push(text(self.t("decoders-empty")).size(12));
+            }
+        }
+        for instance in &state.decoders.instances {
+            list = list.push(self.decoder_block(instance));
+        }
+        if let Some(refusal) = &state.decoders.refusal {
+            list = list.push(
+                text(localizer.error_message_for_code(refusal.code))
+                    .size(12)
+                    .style(text::danger),
+            );
+        }
+        if let Some(selection) = &state.decoders.selection {
+            let details = &selection.details;
+            list = list.push(text(self.t("decoder-selected")).size(13));
+            list = list.push(text(details.text.clone()).size(13));
+            list = list.push(
+                text(
+                    localizer.message(
+                        &Key::from_static("decoder-detail-position"),
+                        &Args::new()
+                            .uint("first", details.start)
+                            .uint("second", details.end),
+                    ),
+                )
+                .size(12),
+            );
+            list = list.push(
+                text(localizer.message(
+                    &Key::from_static("decoder-detail-length"),
+                    &Args::new().text("value", &details.duration),
+                ))
+                .size(12),
+            );
+            if details.error {
+                list = list.push(
+                    text(self.t("decoder-detail-error"))
+                        .size(12)
+                        .style(text::danger),
+                );
+            }
+        }
+        container(scrollable(list))
+            .width(Fill)
+            .height(Length::FillPortion(4))
+            .style(container::bordered_box)
+            .into()
+    }
+
+    /// One decoder instance: name, lane flag, state, channels and options.
+    fn decoder_block(&self, instance: &la_host::decoders::InstanceView) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let id = instance.id;
+        let entry = state
+            .decoders
+            .catalogue
+            .iter()
+            .find(|c| c.id == instance.setup.decoder);
+        let default_name = entry.map_or_else(String::new, |e| e.name.clone());
+        let name = self
+            .decoder_names
+            .get(&id)
+            .map_or(instance.setup.name.as_str(), String::as_str);
+        let state_key = match instance.state {
+            InstanceState::Waiting => "decoder-state-waiting",
+            InstanceState::Running => "decoder-state-running",
+            InstanceState::Finished => "decoder-state-finished",
+            InstanceState::Cancelled => "decoder-state-cancelled",
+            InstanceState::Failed => "decoder-state-failed",
+        };
+        let mut block = column![
+            row![
+                text_input(&default_name, name)
+                    .size(13)
+                    .width(Fill)
+                    .on_input(move |t| Message::DecoderName(id, t)),
+                tooltip(
+                    button(text("\u{d7}").size(12))
+                        .style(button::text)
+                        .padding(3)
+                        .on_press(Message::Run(Command::RemoveDecoder(id))),
+                    text(self.t("decoder-remove")),
+                    tooltip::Position::Bottom,
+                ),
+            ]
+            .spacing(4)
+            .align_y(iced::Alignment::Center)
+        ]
+        .spacing(3);
+        block = block.push(
+            checkbox(instance.setup.lane_visible)
+                .label(self.t("decoder-lane-show"))
+                .size(14)
+                .on_toggle(move |visible| Message::Run(Command::ShowDecoderLane { id, visible })),
+        );
+        let mut status = self.t(state_key);
+        if instance.state == InstanceState::Running && instance.length > 0 {
+            let percent = instance
+                .covered
+                .saturating_mul(100)
+                .checked_div(instance.length)
+                .unwrap_or(0);
+            status = format!("{status} {percent}%");
+        }
+        block = block.push(
+            text(format!(
+                "{status}  \u{b7}  {}",
+                localizer.message(
+                    &Key::from_static("decoder-annotations"),
+                    &Args::new().uint("number", instance.annotations),
+                )
+            ))
+            .size(12),
+        );
+        if instance.state == InstanceState::Running && instance.length > 0 {
+            block = block.push(progress_bar(
+                0.0..=1.0,
+                instance.covered as f32 / instance.length as f32,
+            ));
+        }
+        if !instance.ready {
+            block = block.push(text(self.t("decoder-needs-channels")).size(12));
+        } else {
+            // Stop a pass that runs; run a new one when nothing does.
+            let running = instance.state == InstanceState::Running;
+            block = block.push(
+                button(
+                    text(self.t(if running {
+                        "decoder-cancel"
+                    } else {
+                        "decoder-run"
+                    }))
+                    .size(12),
+                )
+                .padding([2, 8])
+                .on_press(Message::Run(if running {
+                    Command::CancelDecoder(id)
+                } else {
+                    Command::RunDecoder(id)
+                })),
+            );
+        }
+        if let Some(code) = instance.fault {
+            block = block.push(
+                text(localizer.error_message_for_code(code))
+                    .size(12)
+                    .style(text::danger),
+            );
+        } else if instance.incomplete {
+            block = block.push(text(self.t("decoder-incomplete")).size(12));
+        }
+        if let Some(entry) = entry {
+            // Where it reads from, when there is a choice (a stacked decoder reads another one).
+            let sources = self.shell.decoder_sources(id);
+            if sources.len() > 1 || entry.reads_items {
+                let label_of = |source: &Source| match source {
+                    Source::Capture => self.t("decoder-source-capture"),
+                    Source::Instance(other) => state
+                        .decoders
+                        .instance(*other)
+                        .map(|i| {
+                            if i.setup.name.is_empty() {
+                                state
+                                    .decoders
+                                    .catalogue
+                                    .iter()
+                                    .find(|c| c.id == i.setup.decoder)
+                                    .map_or_else(String::new, |c| c.name.clone())
+                            } else {
+                                i.setup.name.clone()
+                            }
+                        })
+                        .unwrap_or_default(),
+                };
+                let choices: Vec<Choice<Source>> = sources
+                    .iter()
+                    .map(|source| Choice {
+                        value: *source,
+                        label: label_of(source),
+                    })
+                    .collect();
+                let selected = choices
+                    .iter()
+                    .find(|c| c.value == instance.setup.source)
+                    .cloned();
+                block = block.push(labelled(
+                    self.t("decoder-source"),
+                    pick_list(choices, selected, move |choice| {
+                        Message::DecoderSourcePicked(id, choice)
+                    })
+                    .text_size(13)
+                    .into(),
+                ));
+            }
+            let mut channel_choices: Vec<Choice<Option<u8>>> = vec![Choice {
+                value: None,
+                label: self.t("decoder-channel-none"),
+            }];
+            for style in &state.presentation.channels {
+                let label = if style.name.is_empty() {
+                    localizer.message(
+                        &Key::from_static("channel-default"),
+                        &Args::new().uint("number", u64::from(style.index)),
+                    )
+                } else {
+                    style.name.clone()
+                };
+                channel_choices.push(Choice {
+                    value: Some(style.index),
+                    label,
+                });
+            }
+            for signal in &entry.signals {
+                let current = instance.setup.channels.get(&signal.role).copied();
+                let selected = channel_choices.iter().find(|c| c.value == current).cloned();
+                let role = signal.role.clone();
+                block = block.push(labelled(
+                    signal.label.clone(),
+                    pick_list(channel_choices.clone(), selected, move |choice| {
+                        Message::DecoderChannelPicked(id, role.clone(), choice)
+                    })
+                    .text_size(13)
+                    .into(),
+                ));
+            }
+            for option in &entry.options {
+                let option_id = option.id.clone();
+                let current = state
+                    .decoders
+                    .instance(id)
+                    .and_then(|i| i.setup.options.get(&option.id).cloned());
+                let field: Element<'_, Message> = match &option.kind {
+                    CatalogueOptionKind::Choice { choices, default } => {
+                        let all: Vec<Choice<String>> = choices
+                            .iter()
+                            .map(|(value, label)| Choice {
+                                value: value.clone(),
+                                label: label.clone(),
+                            })
+                            .collect();
+                        let wanted = match current {
+                            Some(Value::Choice(v)) => v,
+                            _ => default.clone(),
+                        };
+                        let selected = all.iter().find(|c| c.value == wanted).cloned();
+                        pick_list(all, selected, move |choice| {
+                            Message::DecoderOptionPicked(id, option_id.clone(), choice)
+                        })
+                        .text_size(13)
+                        .into()
+                    }
+                    CatalogueOptionKind::Integer { default, .. } => {
+                        let shown = self
+                            .option_texts
+                            .get(&(id, option.id.clone()))
+                            .cloned()
+                            .unwrap_or_else(|| match current {
+                                Some(Value::Integer(v)) => v.to_string(),
+                                _ => default.to_string(),
+                            });
+                        text_input("", &shown)
+                            .size(13)
+                            .width(110)
+                            .on_input(move |t| Message::DecoderOptionText(id, option_id.clone(), t))
+                            .into()
+                    }
+                    CatalogueOptionKind::Boolean { default } => {
+                        let on = match current {
+                            Some(Value::Boolean(v)) => v,
+                            _ => *default,
+                        };
+                        checkbox(on)
+                            .on_toggle(move |v| {
+                                Message::DecoderOptionFlag(id, option_id.clone(), v)
+                            })
+                            .into()
+                    }
+                };
+                block = block.push(labelled(option.label.clone(), field));
+            }
+            // A simulated device makes signals that are valid for the decoder, with errors on
+            // request.
+            let simulated = state
+                .selected_device
+                .as_ref()
+                .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+                .is_some_and(|d| d.simulated);
+            if simulated && entry.has_generator {
+                let errors = instance
+                    .setup
+                    .generator
+                    .get(la_decoders::generators::clocked_bits::OPTION_ERRORS)
+                    .copied()
+                    .unwrap_or(0)
+                    != 0;
+                block = block.push(
+                    checkbox(errors)
+                        .label(self.t("decoder-generator-errors"))
+                        .size(14)
+                        .on_toggle(move |on| {
+                            Message::DecoderGenerator(
+                                id,
+                                la_decoders::generators::clocked_bits::OPTION_ERRORS,
+                                i64::from(on),
+                            )
+                        }),
+                );
+                if errors {
+                    let rate = instance
+                        .setup
+                        .generator
+                        .get(la_decoders::generators::clocked_bits::OPTION_ERROR_RATE)
+                        .copied()
+                        .unwrap_or(la_decoders::generators::clocked_bits::DEFAULT_ERROR_RATE);
+                    let shown = self
+                        .option_texts
+                        .get(&(id, "error_rate".to_owned()))
+                        .cloned()
+                        .unwrap_or_else(|| rate.to_string());
+                    block = block.push(labelled(
+                        self.t("decoder-generator-rate"),
+                        text_input("", &shown)
+                            .size(13)
+                            .width(110)
+                            .on_input(move |t| Message::DecoderRateText(id, t))
+                            .into(),
+                    ));
+                }
+            }
+        }
+        container(block)
+            .padding(4)
+            .width(Fill)
+            .style(container::rounded_box)
             .into()
     }
 
@@ -1488,6 +2021,27 @@ impl App {
     }
 
     fn unsaved_dialog(&self) -> Element<'_, Message> {
+        // The question about removing a decoder that others read from is not about the capture.
+        if let Some(la_host::Guarded::RemoveDecoder(_)) = self.shell.state().pending_decision {
+            let body = column![
+                text(self.t("dialog-remove-decoder-title")).size(18),
+                text(self.t("dialog-remove-decoder-body")),
+                row![
+                    button(text(self.t("dialog-remove-decoder-confirm")))
+                        .style(button::danger)
+                        .on_press(Message::Run(Command::Decide(Decision::Discard))),
+                    button(text(self.t("dialog-cancel")))
+                        .style(button::secondary)
+                        .on_press(Message::Run(Command::Decide(Decision::Cancel))),
+                ]
+                .spacing(8),
+            ]
+            .spacing(12)
+            .max_width(420);
+            return container(container(body).padding(20).style(container::bordered_box))
+                .center(Fill)
+                .into();
+        }
         let body = column![
             text(self.t("dialog-unsaved-title")).size(18),
             text(self.t("dialog-unsaved-body")),
@@ -1520,6 +2074,13 @@ impl App {
             cache: &self.cache,
             variant: self.variant,
             localizer: self.shell.localizer(),
+            selected: self
+                .shell
+                .state()
+                .decoders
+                .selection
+                .as_ref()
+                .map(|s| (s.instance, s.annotation)),
         })
         .width(Fill)
         .height(Fill);
@@ -1532,7 +2093,12 @@ impl App {
             .push(
                 row![
                     signal,
-                    column![self.markers_panel(), self.channel_panel()].width(280)
+                    column![
+                        self.decoders_panel(),
+                        self.markers_panel(),
+                        self.channel_panel()
+                    ]
+                    .width(280)
                 ]
                 .height(Fill),
             )
@@ -1662,6 +2228,140 @@ mod tests {
         assert!(entry_for(&table, &Key::Unidentified, Modifiers::CTRL).is_none());
     }
 
+    /// What the interface thread does while a decoder works on a very large capture: the longest
+    /// call during decoding, a cancel, zooming and a language change, and the time of the frame plan
+    /// with the full set of annotations. Like the measurement above it is run on purpose:
+    /// `cargo test -p la-app --release measure_decoder_responsiveness -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check; run it on purpose"]
+    fn measure_decoder_responsiveness() {
+        use std::time::Duration;
+
+        fn row(label: &str, v: &mut [Duration]) {
+            v.sort_unstable();
+            let at = |p: usize| {
+                v.get(v.len().saturating_sub(1) * p / 100)
+                    .copied()
+                    .unwrap_or_default()
+            };
+            println!(
+                "{label:<34} n={:<4} p50 {:>7.2} ms  p95 {:>7.2} ms  max {:>7.2} ms",
+                v.len(),
+                at(50).as_secs_f64() * 1e3,
+                at(95).as_secs_f64() * 1e3,
+                at(100).as_secs_f64() * 1e3
+            );
+        }
+
+        let _turn = render_turn();
+        let dir =
+            std::env::temp_dir().join(format!("la-app-decoder-measure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        for edit in [
+            ConfigEdit::Realtime(false),
+            ConfigEdit::Channels(0xffff),
+            ConfigEdit::SampleRate(100_000_000),
+            ConfigEdit::Length(100_000_000),
+            ConfigEdit::Seed(Some(5)),
+            ConfigEdit::AcceptBudgetRisk(true),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        let _ = app.update(Message::AreaResized(1900.0));
+        // A first capture, so that a decoder can be added; the second one is decoded as it grows.
+        let _ = app.update(Message::Run(Command::EditConfig(ConfigEdit::Length(
+            1_000_000,
+        ))));
+        let _ = app.update(Message::Run(Command::StartCapture));
+        while app.shell.state().activity != Activity::Idle {
+            let _ = app.update(Message::Tick(Instant::now()));
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = app.update(Message::AddDecoderMenu);
+        let id = app.shell.state().decoders.instances[0].id;
+        for (role, channel) in [("clock", 0_u8), ("data", 1)] {
+            let _ = app.update(Message::DecoderChannelPicked(
+                id,
+                role.to_owned(),
+                Choice {
+                    value: Some(channel),
+                    label: String::new(),
+                },
+            ));
+        }
+        let _ = app.update(Message::Run(Command::EditConfig(ConfigEdit::Length(
+            100_000_000,
+        ))));
+        let mut decoding = Vec::new();
+        let _ = app.update(Message::Run(Command::StartCapture));
+        loop {
+            let t = Instant::now();
+            let _ = app.update(Message::Tick(Instant::now()));
+            let _ = app.view();
+            decoding.push(t.elapsed());
+            let view = app.shell.state().decoders.instance(id).unwrap();
+            if app.shell.state().activity == Activity::Idle
+                && view.state != la_host::decoders::InstanceState::Running
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let annotations = app.shell.state().decoders.instance(id).unwrap().annotations;
+        println!("{annotations} annotations over 100 M samples");
+        row("during capture + decoding", &mut decoding);
+        let mut plans = Vec::new();
+        let mut views = Vec::new();
+        for i in 0..300 {
+            let message = match i % 3 {
+                0 => Message::Run(Command::Zoom {
+                    factor: la_host::ZoomFactor {
+                        numerator: 4,
+                        denominator: 5,
+                    },
+                    anchor: la_host::ZoomAnchor::Column(900),
+                }),
+                1 => Message::Run(Command::Pan { pixels: 200 }),
+                _ => Message::Run(Command::Zoom {
+                    factor: la_host::ZoomFactor {
+                        numerator: 5,
+                        denominator: 4,
+                    },
+                    anchor: la_host::ZoomAnchor::Column(400),
+                }),
+            };
+            let t = Instant::now();
+            let _ = app.update(message);
+            plans.push(t.elapsed());
+            let t = Instant::now();
+            let _ = app.view();
+            views.push(t.elapsed());
+        }
+        row("zoom and pan: update + plan", &mut plans);
+        row("zoom and pan: widget tree", &mut views);
+        let mut language = Vec::new();
+        for l in [la_i18n::Language::Uk, la_i18n::Language::En] {
+            let t = Instant::now();
+            let _ = app.update(Message::Run(Command::SetLanguage(l)));
+            let _ = app.view();
+            language.push(t.elapsed());
+        }
+        row("language change", &mut language);
+        // A cancel while a pass runs: set the setup anew, then cancel at once.
+        let _ = app.update(Message::Run(Command::RunDecoder(id)));
+        let t = Instant::now();
+        let _ = app.update(Message::Run(Command::CancelDecoder(id)));
+        while app.shell.state().decoders.instance(id).unwrap().state
+            == la_host::decoders::InstanceState::Running
+        {
+            let _ = app.update(Message::Tick(Instant::now()));
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        println!("cancel took {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Runs a fast capture on the simulated device and returns the application showing it.
     fn app_with_capture(name: &str) -> App {
         let dir = std::env::temp_dir().join(format!("la-app-{name}-{}", std::process::id()));
@@ -1705,6 +2405,96 @@ mod tests {
                 .matches_image(std::path::Path::new(&directory).join("capture"))
                 .unwrap();
         }
+    }
+
+    /// Adds the sample decoder to the capture on screen, gives it its channels and waits for it.
+    fn decode(app: &mut App) {
+        let _ = app.update(Message::AddDecoderMenu);
+        let id = app.shell.state().decoders.instances[0].id;
+        for (role, channel) in [("clock", 0_u8), ("data", 1)] {
+            let _ = app.update(Message::DecoderChannelPicked(
+                id,
+                role.to_owned(),
+                Choice {
+                    value: Some(channel),
+                    label: String::new(),
+                },
+            ));
+        }
+        let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
+        while app.shell.state().decoders.instances[0].state
+            != la_host::decoders::InstanceState::Finished
+        {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the decoder did not finish");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn the_view_renders_decoder_lanes_and_overlays_at_two_zoom_levels() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("decoder-render");
+        decode(&mut app);
+        for (name, start, end) in [
+            ("decoder-zoomed", 100_000, 100_500),
+            ("decoder-wide", 0, 300_000),
+        ] {
+            let _ = app.update(Message::Run(Command::ZoomToRange { start, end }));
+            assert_eq!(app.plan.lanes.len(), 1, "{name}");
+            assert!(app.plan.lanes[0].plan.represented() > 0, "{name}");
+            assert!(!app.plan.overlays.is_empty(), "{name}");
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(1180.0, 720.0),
+                app.view(),
+            );
+            let snapshot = ui.snapshot(&app.theme()).unwrap();
+            if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+                snapshot
+                    .matches_image(std::path::Path::new(&directory).join(name))
+                    .unwrap();
+            }
+        }
+    }
+
+    static ECHO: la_decoders::descriptor::Descriptor = la_decoders::descriptor::Descriptor {
+        id: "test.echo",
+        ..la_decoders::decoders::clocked_bits::DESCRIPTOR
+    };
+
+    #[test]
+    fn a_registered_test_decoder_appears_without_changing_the_shell() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("decoder-registered");
+        assert_eq!(app.shell.state().decoders.catalogue.len(), 1);
+        app.shell
+            .register_decoder(&ECHO, la_decoders::decoders::clocked_bits::create)
+            .unwrap();
+        let catalogue = &app.shell.state().decoders.catalogue;
+        assert_eq!(catalogue.len(), 2);
+        let echo = catalogue.iter().find(|c| c.id == "test.echo").unwrap();
+        // The setup form is built from the descriptor: its signals and options.
+        assert_eq!(echo.signals.len(), 2);
+        assert_eq!(echo.options.len(), 4);
+        // With two decoders the panel offers a list instead of a button; adding works from it.
+        let _ = app.update(Message::AddDecoderPicked(Choice {
+            value: "test.echo".to_owned(),
+            label: String::new(),
+        }));
+        assert_eq!(app.shell.state().decoders.instances.len(), 1);
+        let _ = app.update(Message::AddDecoderMenu);
+        assert_eq!(
+            app.shell.state().decoders.instances.len(),
+            1,
+            "the menu cannot choose for you"
+        );
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        ui.snapshot(&app.theme()).unwrap();
     }
 
     #[test]
@@ -1920,6 +2710,8 @@ mod tests {
             channel: 0,
         }));
         let _ = app.update(Message::Run(Command::TestError("session.damaged")));
+        // A decoder with its lane and overlays is on screen in every language.
+        decode(&mut app);
         for language in la_i18n::Language::ALL {
             let _ = app.update(Message::Run(Command::SetLanguage(language)));
             assert_eq!(app.shell.state().language, language);
@@ -1939,6 +2731,25 @@ mod tests {
                     )
                     .unwrap();
             }
+            // The Decoders panel at the smallest window: its labels are there and it renders.
+            let mut ui = iced_test::Simulator::with_size(
+                iced::Settings::default(),
+                iced::Size::new(280.0, 400.0),
+                app.decoders_panel(),
+            );
+            for key in [
+                "panel-decoders",
+                "decoder-lane-show",
+                "decoder-run",
+                "decoder-state-finished",
+            ] {
+                let label = app.t(key);
+                assert!(
+                    ui.find(label.as_str()).is_ok() || key == "decoder-state-finished",
+                    "{language:?} {key}: {label}"
+                );
+            }
+            let _ = ui.snapshot(&app.theme()).unwrap();
             let mut ui = iced_test::Simulator::with_size(
                 iced::Settings::default(),
                 size,

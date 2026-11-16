@@ -62,6 +62,15 @@ jobs:
       - name: Frame plan benchmark
         run: cargo bench -p la-host --bench frame_plan
         continue-on-error: true
+      - name: Annotation plan benchmark
+        run: cargo bench -p la-host --bench annotation_plan
+        continue-on-error: true
+      - name: Decoder store insertion benchmark
+        run: cargo bench -p la-decoders --bench store_insert
+        continue-on-error: true
+      - name: Decoder throughput benchmark
+        run: cargo bench -p la-decoders --bench decode_throughput
+        continue-on-error: true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -72,4 +81,5 @@ jobs:
             target/la-session-bench/*.json
             target/la-i18n-bench/*.json
             target/la-host-bench/*.json
+            target/la-decoders-bench/*.json
           if-no-files-found: warn

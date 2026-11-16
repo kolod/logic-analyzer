@@ -4,7 +4,7 @@
 //! every action has exactly one place where it is defined and a test can check that every command
 //! is reachable and that no accelerator is used twice (contract `shell-layout.md`).
 
-use crate::command::{Command, PanStep, ZoomDirection};
+use crate::command::{AnnotationTarget, Command, PanStep, ZoomDirection};
 use crate::state::{Activity, State};
 
 /// A keyboard shortcut. `key` is a name from a small fixed vocabulary: a letter or digit, `F1`..
@@ -100,6 +100,8 @@ pub enum Action {
     RemoveSelectedMarker,
     /// Turn snapping of markers on or off.
     ToggleSnap,
+    /// Open the dialog that asks which decoder to add, then send `AddDecoder`.
+    AddDecoder,
 }
 
 /// When an entry can be used.
@@ -121,6 +123,10 @@ pub enum EnabledWhen {
     MarkersExist,
     /// Idle, a device is selected and its configuration has no problem.
     CanStart,
+    /// A capture is on screen (decoders work on it).
+    CanDecode,
+    /// An annotation is selected.
+    AnnotationSelected,
 }
 
 impl EnabledWhen {
@@ -139,6 +145,8 @@ impl EnabledWhen {
             EnabledWhen::Capturing => state.activity == Activity::Capturing,
             EnabledWhen::CaptureExists => state.capture.is_some(),
             EnabledWhen::MarkersExist => !state.markers.list.is_empty(),
+            EnabledWhen::CanDecode => state.capture.is_some() && state.operation.is_none(),
+            EnabledWhen::AnnotationSelected => state.decoders.selection.is_some(),
             EnabledWhen::CanStart => {
                 state.activity == Activity::Idle
                     && state.selected_device.is_some()
@@ -349,6 +357,30 @@ pub fn table() -> Vec<ShortcutEntry> {
             Some(Accelerator::shift("Right")),
             EnabledWhen::CaptureExists,
         ),
+        ShortcutEntry::new(
+            Action::AddDecoder,
+            ["menu-decoders", "menu-decoders-add"],
+            Some(Accelerator::key("D")),
+            EnabledWhen::CanDecode,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::GoToAnnotation(AnnotationTarget::Previous)),
+            ["menu-decoders", "menu-decoders-previous"],
+            Some(Accelerator::shift("F8")),
+            EnabledWhen::AnnotationSelected,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::GoToAnnotation(AnnotationTarget::Next)),
+            ["menu-decoders", "menu-decoders-next"],
+            Some(Accelerator::key("F8")),
+            EnabledWhen::AnnotationSelected,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::GoToAnnotation(AnnotationTarget::Selected)),
+            ["menu-decoders", "menu-decoders-goto"],
+            Some(Accelerator::ctrl("F8")),
+            EnabledWhen::AnnotationSelected,
+        ),
     ];
     // The menus appear in this order; entries keep their order inside a menu.
     let rank = |entry: &ShortcutEntry| match entry.menu[0] {
@@ -356,8 +388,9 @@ pub fn table() -> Vec<ShortcutEntry> {
         "menu-capture" => 1,
         "menu-view" => 2,
         "menu-markers" => 3,
-        "menu-help" => 4,
-        _ => 5,
+        "menu-decoders" => 4,
+        "menu-help" => 5,
+        _ => 6,
     };
     entries.sort_by_key(rank);
     entries

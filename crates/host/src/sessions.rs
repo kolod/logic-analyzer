@@ -105,7 +105,7 @@ fn view_state(state: &State) -> Option<ViewState> {
 }
 
 /// What to save for the capture on screen.
-fn session_data(state: &State) -> Result<SessionData, Error> {
+fn session_data(shell: &Shell, state: &State) -> Result<SessionData, Error> {
     let capture = state
         .capture
         .as_ref()
@@ -113,6 +113,12 @@ fn session_data(state: &State) -> Result<SessionData, Error> {
     let mut data = SessionData::new(capture.description.clone(), capture.snapshot.clone());
     for section in &state.session_extras {
         data = data.with_section(section.clone())?;
+    }
+    // The decoders: a section of a newer version that was kept is not replaced by ours.
+    for section in shell.decoder_sections(state)? {
+        if !state.session_extras.iter().any(|s| s.tag == section.tag) {
+            data = data.with_section(section)?;
+        }
     }
     if let (Some(view), Some(tag)) = (view_state(state), view_tag()) {
         // A newer VIEW section of the opened file is kept as it is; ours would replace it.
@@ -141,7 +147,7 @@ impl Shell {
         {
             return Err(Reject::Ignored(error::INVALID_COMMAND));
         }
-        let data = session_data(state).map_err(Reject::Failed)?;
+        let data = session_data(self, state).map_err(Reject::Failed)?;
         let then = state.pending_decision.clone();
         #[cfg(feature = "test-support")]
         let op =
@@ -200,11 +206,19 @@ impl Shell {
                 changes.insert(Changes::CAPTURE | Changes::PROGRESS | Changes::WINDOW);
             }
             Guarded::StartCapture => {
+                // The decoders stay: they decode the new capture too.
+                let kept = state.decoders.instances.clone();
                 clear_capture(state);
+                state.decoders.instances = kept;
                 let Executed::Changed(started) = self.begin_capture(state)? else {
                     return Err(Reject::Ignored(error::INVALID_COMMAND));
                 };
                 changes.insert(started);
+            }
+            Guarded::RemoveDecoder(id) => {
+                if let Executed::Changed(removed) = self.remove_with_dependants(state, id)? {
+                    changes.insert(removed);
+                }
             }
             Guarded::Close | Guarded::Quit => changes.insert(Changes::QUIT),
             Guarded::OpenSession(path) => {
@@ -298,7 +312,19 @@ impl Shell {
         let mut window = None;
         let mut extras: Vec<Section> = Vec::new();
         let mut notices = false;
+        let deco_tag = SectionTag::new(crate::decoder_sessions::DECO_TAG).ok();
+        let dann_tag = SectionTag::new(crate::decoder_sessions::DANN_TAG).ok();
+        let mut deco_section: Option<&Section> = None;
+        let mut dann_section: Option<&Section> = None;
         for section in session.extras() {
+            if Some(&section.tag) == deco_tag.as_ref() {
+                deco_section = Some(section);
+                continue;
+            }
+            if Some(&section.tag) == dann_tag.as_ref() {
+                dann_section = Some(section);
+                continue;
+            }
             if Some(&section.tag) != view_tag().as_ref() {
                 extras.push(section.clone());
                 continue;
@@ -332,6 +358,7 @@ impl Shell {
             }
         }
         let limits = window_limits(bounds.length, state.view_size.pixels);
+        state.decoders.reset();
         state.capture = Some(view);
         state.presentation = presentation;
         // The one flag of a channel is also what the next capture records.
@@ -340,6 +367,10 @@ impl Shell {
             state.presentation.visible_mask() & device_channel_mask(state);
         revalidate(state);
         state.markers = markers;
+        let (decoder_extras, decoder_notices) =
+            self.apply_decoder_sections(state, deco_section, dann_section, bounds);
+        extras.extend(decoder_extras);
+        notices |= decoder_notices;
         state.session_extras = extras;
         match window {
             Some((start, length)) => {
@@ -357,6 +388,7 @@ impl Shell {
         state.pending_decision = None;
         state.session_path = Some(path.to_path_buf());
         let mut changes = Changes::CAPTURE
+            | Changes::DECODERS
             | Changes::PROGRESS
             | Changes::WINDOW
             | Changes::PRESENTATION

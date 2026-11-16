@@ -86,6 +86,56 @@ and next marker.
 With two markers chosen the panel shows the **distance** in time and its **frequency**, formatted for
 your language. The frequency shows only as many digits as the distance really resolves.
 
+## Decoders
+
+A decoder reads the signals of the capture on screen and says what they mean. The first one is the
+sample decoder **Clocked bits**: it samples a data channel on every edge of a clock channel and groups
+the bits into bytes.
+
+1. Capture (or open) signals, then press **D** or choose **Decoders → Add decoder**.
+2. In the **Decoders** panel choose the channel for each signal (here **Clock** and **Data**) and, if
+   you like, the options: which clock edge, the bit order, the bits per byte and the idle limit in
+   samples. The decoding starts as soon as the channels are chosen, and again whenever a channel or
+   an option changes.
+3. A **lane** with the decoder's name appears below the channels. A range is a byte (its value in
+   hexadecimal), a dot is a bit, and an arrow on the clock channel marks every sampled edge; a dot on
+   the data channel marks the first bit of a byte. Annotations drawn in red report a problem in the
+   signal, such as a byte that was cut short or samples that were lost. When there are too many
+   marks for the width of the view to tell them apart, none of them is drawn (the ranges that are wide
+   enough still are); zoom in and they appear.
+4. Click an annotation to select it: the panel shows its text, position, length in time and whether it
+   is an error. Click it twice to bring it into view. **F8** and **Shift+F8** select the next and the
+   previous annotation, and **Ctrl+F8** goes to the selected one.
+5. The check box **Show the lane** hides the lane and its overlays; the cross removes the decoder.
+
+**Trying a decoder without hardware.** When the selected device is the simulated one, the virtual
+device makes signals that are valid for the decoder on the channels you chose (the other channels stay
+random), and the same seed gives the same signals. Add the decoder to a capture on screen, then start
+the next capture: the decoder stays and decodes it from the start. Tick **Plant deliberate errors in the
+simulated signals** in the decoder's block to cut some bytes short on purpose and look for the red
+marks where they were planted.
+
+A decoder that fails never harms anything else: its block says what happened and what to do, the
+results it had found before the failure stay (marked incomplete), the other decoders and the capture
+are untouched, and **Run again** starts it again. **Cancel** stops a running pass. A decoder that does
+not answer in time is given up on after a few seconds; if several are stuck, restart the application.
+The memory the results of all decoders may use is set in the settings (16 MiB to 4 GiB).
+
+**Stacking.** A decoder that reads what another decoder produced (a higher-level protocol on top of a
+lower one) has a **Reads from** chooser in its block, listing only what it can read. A chain is at most
+four decoders deep and a decoder cannot read itself or one that reads it. When you run the lower
+decoder again, the ones above show their old results (flagged as outdated) until the new ones arrive;
+if the lower one fails, the results above are marked incomplete. Removing a decoder that others read
+from asks first, because they go with it. Lanes are in stack order, lowest first.
+
+**Saving.** The decoders you set up are saved with the session and decode again when it is opened. The
+setting **Save decoded results with the session** also saves what they found, so that it shows at once
+when the file is opened (the file is larger); press **Run again** to decode anew. A file from a newer
+version keeps decoders this version does not have, and they are written back unchanged.
+
+Decoding never changes the capture. A dashed line along the bottom of a lane means that its results
+are not whole (the decoder was cancelled or stopped).
+
 ## Saving and opening
 
 The program saves a capture with its channel names, colours, order, markers and the zoom in a
@@ -140,6 +190,7 @@ contains signal data, channel names or marker names.
 | F1 | about |
 | `+` `-` Ctrl+0 Home End Left Right (with Shift: a whole view) | the view |
 | M `[` `]` Delete S | markers |
+| D, F8, Shift+F8, Ctrl+F8 | add a decoder, next / previous / selected annotation |
 | Ctrl+= Ctrl+- | interface scale |
 
 Every menu entry shows its shortcut, and every command can be reached from the keyboard.

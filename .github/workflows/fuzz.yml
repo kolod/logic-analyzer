@@ -1,6 +1,7 @@
 # Long fuzzing runs: the session file loader (specs/003-session-file-format, SC-005), the random
-# walk of two million actions on the host (specs/006-ui-shell-signal-view, SC-005) and the decoder
-# of the VIEW section.
+# walk of two million actions on the host (specs/006-ui-shell-signal-view, SC-005), the decoder
+# of the VIEW section, and the decoder framework (specs/007-decoder-framework-annotations): the
+# DECO and DANN mutation fuzzers and the round trip of the sample decoder with 10,000 seeds.
 #
 # Informational, NOT a required check: it runs one million mutated inputs in a release build
 # and uploads the failing input, if any, as an artifact. A shorter run (20,000 inputs) is part
@@ -53,6 +54,16 @@ jobs:
         run: cargo test -p la-host --release --test view_section -- --ignored
         env:
           LA_VIEW_FUZZ_ITERATIONS: "1000000"
+      - name: One million mutated DECO sections
+        run: cargo test -p la-decoders --release --test deco_section -- --ignored
+        env:
+          LA_DECO_FUZZ_ITERATIONS: "1000000"
+      - name: One million mutated DANN sections
+        run: cargo test -p la-decoders --release --test dann_section -- --ignored
+        env:
+          LA_DECO_FUZZ_ITERATIONS: "1000000"
+      - name: Round trip of the sample decoder, ten thousand seeds
+        run: cargo test -p la-decoders --release --test round_trip -- --ignored
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

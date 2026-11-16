@@ -18,6 +18,7 @@ iced = { version = "0.14.0", features = ["canvas", "tokio"] }
 la-devices = { path = "../devices" }
 la-diagnostics = { path = "../diagnostics" }
 la-host = { path = "../host" }
+la-decoders = { path = "../decoders" }
 la-i18n = { path = "../i18n" }
 rfd = "0.18.0"
 tracing = "0.1.44"
@@ -26,6 +27,7 @@ tracing = "0.1.44"
 iced_test = "0.14.0"
 read-fonts = "0.35.0"
 la-host = { path = "../host", features = ["test-support"] }
+la-decoders = { path = "../decoders", features = ["test-support"] }
 
 [lints]
 workspace = true

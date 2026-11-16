@@ -1,6 +1,6 @@
 # Host API
 
-Version: 1.0
+Version: 1.1
 
 This is the authoritative description of the API between a user interface and the core. The crate
 is `la-host`; its constant `la_host::HOST_API_VERSION` and the version line above must agree (a test
@@ -110,11 +110,27 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetWindowGeometry(WindowGeometry)` | kept in memory; written by `save_settings` |
 | Notices | `DismissNotice(NoticeId)` | |
 | | `DismissAllNotices` | |
+| Decoders | `AddDecoder { decoder }` | needs a capture on screen; creates an instance of the registered decoder with default options and no channels yet; refused with `decoder.too_many_instances` at eight instances |
+| | `ConfigureDecoder { id, setup }` | replaces channels, options, name, lane visibility and generator options in one step; validated as a whole (`decoder.invalid_setup` names the setting in `decoders.refusal`); a valid change that alters results starts a new pass |
+| | `SetDecoderChannel { id, role, channel }` | one channel assignment (or none); same validation and effect |
+| | `SetDecoderOption { id, option, value }` | one option value; same validation and effect |
+| | `RenameDecoder { id, name }` | sanitized, at most 64 characters |
+| | `ShowDecoderLane { id, visible }` | shows or hides the lane and its overlays |
+| | `RemoveDecoder(id)` | removes the instance, its pass and its results; when instances are stacked on it the answer is `NeedsDecision(Guarded::RemoveDecoder(id))`: `Decide(Discard)` removes it and everything above it, `Decide(Cancel)` keeps all, `Decide(Save)` is ignored; the capture is not touched |
+| | `StackDecoder { id, source }` | makes `source` (the capture or another instance) the input of `id`; refused with `decoder.stack_incompatible`, `decoder.stack_cycle` or `decoder.stack_too_deep` (in `decoders.refusal`); a valid change starts a new pass, and the instances stacked on `id` start again after it |
+| | `RunDecoder(id)` | starts a new pass of an instance that is not running (finished, cancelled, failed) |
+| | `CancelDecoder(id)` | stops the running pass within a second; what it found is kept and marked incomplete; a decoder that does not stop in time is abandoned (`decoder.not_responding`) |
+| | `SetSaveDecoderResults(bool)` | whether the results of the decoders are saved with the session (the setup is always saved); remembered |
+| | `SetDecoderMemoryLimit(bytes)` | 16 MiB to 4 GiB, remembered; applies to passes that start afterwards, never to a running one |
+| Annotations | `SelectAnnotation { instance, annotation }` | selects it and fills `decoders.selection` with its details |
+| | `GoToAnnotation(AnnotationTarget)` | `Selected`, `Next` or `Previous` by start in the store of the selected annotation; moves the window so that it is shown whole and centred; costs O(log n) |
+| | `ClearAnnotationSelection` | |
 | App | `RequestClose` | the window close button; guarded |
 | | `Quit` | guarded; the shell closes only when `Done` carries `QUIT` |
 
 While a save or load runs, the commands that change what is being saved or replace what is being
 loaded (starting or clearing a capture, edits of names, colours, order, visibility and markers,
+adding, changing and removing decoders,
 opening and saving again, `Decide(Save)` and `Decide(Discard)`) are ignored; `CancelOperation`,
 `Decide(Cancel)` and everything about the view still work.
 
@@ -159,6 +175,46 @@ every zoom level (a test sweeps the zoom). A failure returns a plan whose `state
 `CannotDraw(host.render_failed)` instead of panicking. The plan includes the markers inside the
 window.
 
+Since 1.1 it also carries `lanes` (one lane plan per visible decoder instance: rows of spans and marks
+and a row of dense cells, at most `4·W` cells) and `overlays` (per shown channel and instance, the marks,
+edges and dense cells that instance draws on the channel, at most `2·W`), built with one window query per
+store (`la_decoders::lanes`). Every annotation intersecting the window is represented exactly once; an
+error is never hidden in a dense cell without its error count. The plan never reads samples and never
+fails.
+
+## Decoders
+
+`State.decoders` holds the catalogue of registered decoders in the current language (name, description,
+signals, options with their types and defaults), the instances (setup, state `Waiting`, `Running`,
+`Finished`, `Cancelled` or `Failed`, whether the setup is complete, progress, the flags `incomplete`,
+`outdated` and `loaded`, the stable code of the last fault, and the counts of annotations and refused
+records), the reason the last command was refused (`refusal`: code and the setting), the selected
+annotation with its details, and the limits in force. `Versions.decoders` and the change flag
+`DECODERS` tell a shell what to redraw; results growing during a pass bump them. A pass runs on a
+supervised worker and never blocks `apply` or `poll`; closing the capture, opening a file or starting a
+capture removes every instance. The lanes come in stack order (an instance after the one it reads from). The instances stacked on one that runs again start again after it and show their old results, flagged `outdated`, until the new ones arrive; a fault below makes the results above incomplete without failing them. `Host::decoder_sources(id)` lists what an instance could read from.
+
+At most half of the cores (at least one) decode at once; the other instances are `Waiting` and take their
+turn. A pass yields after every chunk and follows a capture that is still growing, finishing only when
+the capture is closed. A change of the setup that alters results starts a new pass and keeps the old
+results, flagged `outdated`, until the new pass publishes its first results, which replace them at
+once. The decoder side of the contract is `docs/decoder-api.md`.
+
+## The `DECO` and `DANN` sections of a session file
+
+Saving writes `DECO` (the setup of every instance, in stack order) when there are instances, and `DANN`
+(the annotations and items) only when `SetSaveDecoderResults` is on and results exist; the writer emits
+format minor 2. The payloads are defined by `specs/007-decoder-framework-annotations/contracts/deco-section.md`
+(canonical varints, every value validated, the same state giving the same bytes). Opening restores the
+instances and starts their passes again, or, when the file has valid results, shows them at once flagged
+`loaded` without starting a pass until the user runs one or changes the setup. A damaged section never
+fails the open: the capture opens, a warning with `decoder.section_invalid` is shown and the section is
+dropped (a damaged `DANN` keeps the setup, and the decoders run again). A record of a decoder this
+version does not know, or an option it does not know, is kept as it was read and written back byte for
+byte (`decoder.unknown_decoder`, `decoder.options_skipped`); a section of a newer version is kept
+untouched with an information notice. `Unsaved` becomes `Dirty` when a setup changes, not when a pass
+finishes.
+
 ## Text and localization
 
 `text` and `notice_text` go through `la-i18n` with the current language and the English fallback.
@@ -183,6 +239,6 @@ signal data, channel names or marker names.
 
 ## Compatibility
 
-Version 1.0 is the first. Additions of commands or `State` fields that existing shells can ignore
+Version 1.0 is the first; 1.1 adds the decoder commands, state and plan parts. Additions of commands or `State` fields that existing shells can ignore
 are minor versions. Removing or changing the meaning of a command, a state field or an invariant is
 a major version and requires every shell in the repository to be updated in the same merge.

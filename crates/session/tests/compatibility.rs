@@ -180,10 +180,10 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/v1_0")
 }
 
-/// The files the writer produced at format 1.1 (the current writer); the 1.0 files above stay as
+/// The files the writer produced at format 1.2 (the current writer); the 1.0 files above stay as
 /// they are and must keep loading.
 fn writer_fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/v1_1")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/v1_2")
 }
 
 /// The sessions behind the committed version 1.0 fixtures (fixed seeds, integer-only generators).
@@ -231,7 +231,7 @@ fn regenerate_fixtures() {
 }
 
 #[test]
-fn the_writer_still_produces_the_committed_version_1_1_files() {
+fn the_writer_still_produces_the_committed_version_1_2_files() {
     let dir = TempDir::new("regen");
     for (name, session) in fixture_sessions() {
         let produced = dir.join(name);

@@ -35,6 +35,7 @@ pub use driver::{
 };
 pub use registry::{DeviceRegistry, RegistryConfig};
 pub use virtual_device::{
-    FailureKind, PROVIDER_NAME as VIRTUAL_PROVIDER_NAME, Pacing, ScriptedFailure, SignalSource,
-    SignalSourceFactory, VirtualDevice, VirtualOptions, VirtualProvider, virtual_descriptor,
+    FailureKind, PROVIDER_NAME as VIRTUAL_PROVIDER_NAME, Pacing, RandomSource, ScriptedFailure,
+    SignalSource, SignalSourceFactory, VirtualDevice, VirtualOptions, VirtualProvider,
+    virtual_descriptor,
 };

@@ -136,6 +136,7 @@ impl ConfigDraft {
         device: &DeviceDescriptor,
         seed: u64,
         failures: &[ScriptedFailure],
+        source: Option<std::sync::Arc<dyn la_devices::SignalSourceFactory>>,
     ) -> DeviceConfig {
         let options = if device.id.provider() == VIRTUAL_PROVIDER_NAME {
             DeviceOptions::Virtual(VirtualOptions {
@@ -147,6 +148,7 @@ impl ConfigDraft {
                     Pacing::Fast
                 },
                 failures: failures.to_vec(),
+                source,
                 ..VirtualOptions::default()
             })
         } else {
@@ -171,7 +173,7 @@ pub fn problems(
     draft: &ConfigDraft,
     limits: &Limits,
 ) -> Vec<ConfigProblem> {
-    let config = draft.to_device_config(device, 1, &[]);
+    let config = draft.to_device_config(device, 1, &[], None);
     match validate(&device.capabilities, &config, limits) {
         Ok(_) => Vec::new(),
         Err(error) => {

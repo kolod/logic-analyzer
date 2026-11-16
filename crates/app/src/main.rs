@@ -4,6 +4,7 @@
 //! No domain logic lives here (see `specs/006-ui-shell-signal-view`).
 
 mod app;
+mod decoder_view;
 mod dialogs;
 mod fonts;
 mod frame_log;

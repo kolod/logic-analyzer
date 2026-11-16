@@ -255,3 +255,74 @@ about-title = About
 about-body = Logic Analyzer { $version }. Records digital signals and shows them on a timeline; a simulated device lets you try it without hardware.
 # License line of the about dialog.
 about-license = Free software under the GNU General Public License, version 3.
+
+### Decoders: the sample decoder
+# The sample decoder (decoders describe themselves with these keys).
+decoder-sample-clocked-bits-name = Clocked bits
+decoder-sample-clocked-bits-description = Reads bits from a data line on the edges of a clock line and groups them into bytes. A sample decoder that shows what decoders can do.
+decoder-sample-clocked-bits-signal-clock = Clock
+decoder-sample-clocked-bits-signal-data = Data
+decoder-sample-clocked-bits-option-clock_edge = Clock edge
+decoder-sample-clocked-bits-choice-clock_edge-rising = Rising
+decoder-sample-clocked-bits-choice-clock_edge-falling = Falling
+decoder-sample-clocked-bits-option-bit_order = Bit order
+decoder-sample-clocked-bits-choice-bit_order-msb = Most significant bit first
+decoder-sample-clocked-bits-choice-bit_order-lsb = Least significant bit first
+decoder-sample-clocked-bits-option-bits = Bits per byte
+decoder-sample-clocked-bits-option-idle = Idle limit (samples)
+# Annotation: a byte. $value is the value in hexadecimal, such as 0x5A.
+ann-sample-clocked-bits-byte = Byte { $value }
+# Annotation: one sampled bit. $value is 0 or 1.
+ann-sample-clocked-bits-bit = Bit { $value }
+# Annotation (error): a byte that ended early. $value is the number of bits it had.
+ann-sample-clocked-bits-incomplete = Incomplete byte: { $value } bits
+# Annotation (error): positions of the capture were lost here.
+ann-sample-clocked-bits-gap = Samples lost here
+
+### Decoders: menu, panel and the selected annotation
+menu-decoders = Decoders
+menu-decoders-add = Add decoder
+menu-decoders-previous = Previous annotation
+menu-decoders-next = Next annotation
+menu-decoders-goto = Go to selected annotation
+panel-decoders = Decoders
+decoders-add = Add decoder
+decoders-empty = No decoders yet. Add one to see what the signals say.
+decoders-need-capture = Capture or open signals first.
+decoder-state-waiting = Waiting
+decoder-state-running = Running
+decoder-state-finished = Finished
+decoder-state-cancelled = Cancelled
+decoder-state-failed = Failed
+decoder-needs-channels = Choose the channels to start decoding.
+decoder-channel-none = (none)
+decoder-lane-show = Show the lane
+decoder-remove = Remove decoder
+decoder-annotations = Annotations: { $number }
+decoder-incomplete = Incomplete results
+decoder-selected = Selected annotation
+decoder-detail-length = Length: { $value }
+decoder-detail-error = Reports a problem in the signal
+decoder-detail-position = Position: { $first } to { $second }
+
+### Decoders: the simulation of signals that are valid for a decoder
+decoder-generator-errors = Plant deliberate errors in the simulated signals
+decoder-generator-rate = About one byte in this many is cut short
+
+### Decoders: running, cancelling and the memory limit
+decoder-run = Run again
+decoder-cancel = Cancel
+settings-decoder-memory = Memory limit of decoder results
+settings-decoder-memory-note = Shared by all decoders. Applies to the next pass.
+
+### Decoders: stacking
+decoder-source = Reads from
+decoder-source-capture = The capture
+dialog-remove-decoder-title = Remove decoder
+dialog-remove-decoder-body = Other decoders read from this one. Removing it removes them too. The capture is not affected.
+dialog-remove-decoder-confirm = Remove them all
+
+### Decoders: saving and opening
+notice-decoders-newer = This file has decoders from a newer version of the application. They are kept as they are and not shown; the capture opens normally.
+settings-save-decoder-results = Save decoded results with the session
+settings-save-decoder-results-note = Makes the file larger. Without it the decoders run again when the file is opened.

@@ -12,6 +12,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use la_storage::{Activity, LevelState, PixelSummary, Snapshot};
 
 use crate::axis::{AxisPlan, build_ticks};
+use crate::decoders::InstanceState;
 use crate::error;
 use crate::presentation::Colour;
 use crate::window::ViewWindow;
@@ -125,6 +126,34 @@ pub struct MarkerPlan {
     pub name: String,
 }
 
+/// The lane of one decoder instance: what to draw in it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LanePlan {
+    /// The instance.
+    pub instance: u32,
+    /// Its name (the localized name of the decoder when the user gave none).
+    pub name: String,
+    /// Where the instance is in its life.
+    pub state: InstanceState,
+    /// The results are not whole.
+    pub incomplete: bool,
+    /// The results no longer match the setup or the source.
+    pub outdated: bool,
+    /// The rows of spans and marks and the dense cells.
+    pub plan: la_decoders::lanes::Plan,
+}
+
+/// What a decoder instance draws on top of one channel.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverlayPlan {
+    /// The channel.
+    pub channel: u8,
+    /// The instance.
+    pub instance: u32,
+    /// The marks, edges and dense cells.
+    pub plan: la_decoders::lanes::Plan,
+}
+
 /// Cost counters of one plan, for the benchmarks and the frame log.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlanStats {
@@ -153,6 +182,10 @@ pub struct FramePlan {
     pub axis: AxisPlan,
     /// The markers inside the window (filled in by the shell; see `Shell::frame_plan`).
     pub markers: Vec<MarkerPlan>,
+    /// One lane per visible decoder instance (filled in by the shell).
+    pub lanes: Vec<LanePlan>,
+    /// The overlays of decoder instances on the shown channels (filled in by the shell).
+    pub overlays: Vec<OverlayPlan>,
     /// Cost counters.
     pub stats: PlanStats,
 }
@@ -168,6 +201,8 @@ impl FramePlan {
             channels: Vec::new(),
             axis: AxisPlan::empty(),
             markers: Vec::new(),
+            lanes: Vec::new(),
+            overlays: Vec::new(),
             stats: PlanStats::default(),
         }
     }
@@ -223,6 +258,8 @@ fn build_inner(
         channels: Vec::with_capacity(channels.len()),
         axis,
         markers: Vec::new(),
+        lanes: Vec::new(),
+        overlays: Vec::new(),
         stats: PlanStats::default(),
     };
     if length == 0 {
