@@ -98,6 +98,9 @@ pub struct Settings {
     pub last_config: Option<serde_json::Value>,
     /// The view of the panel at the right edge: `capture`, `decoders`, `markers` or `hidden`.
     pub side_panel: Option<String>,
+    /// What to do, without asking, when a command would lose an unsaved capture: `save`, `discard`
+    /// or `cancel`; absent means ask every time.
+    pub unsaved_choice: Option<String>,
     /// Fields written by a newer version, kept as they are.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, serde_json::Value>,
@@ -120,6 +123,7 @@ impl Default for Settings {
             last_device: None,
             last_config: None,
             side_panel: None,
+            unsaved_choice: None,
             unknown: BTreeMap::new(),
         }
     }

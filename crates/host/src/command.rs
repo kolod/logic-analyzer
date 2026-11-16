@@ -91,6 +91,29 @@ pub enum Decision {
     Cancel,
 }
 
+impl Decision {
+    /// The word the settings file keeps for a remembered answer.
+    #[must_use]
+    pub fn as_setting(self) -> &'static str {
+        match self {
+            Decision::Save => "save",
+            Decision::Discard => "discard",
+            Decision::Cancel => "cancel",
+        }
+    }
+
+    /// The answer a settings word stands for; `None` for a word that is none of the three.
+    #[must_use]
+    pub fn from_setting(word: &str) -> Option<Self> {
+        match word {
+            "save" => Some(Decision::Save),
+            "discard" => Some(Decision::Discard),
+            "cancel" => Some(Decision::Cancel),
+            _ => None,
+        }
+    }
+}
+
 /// A command that waits for a [`Decision`] because unsaved data would be lost.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Guarded {
@@ -206,6 +229,9 @@ pub enum Command {
     ResetPresentation,
     /// Chooses the view of the panel at the right edge (or hides it).
     SetSidePanel(crate::state::SidePanel),
+    /// Remembers the answer to the question about an unsaved capture (`Some`: the question is not
+    /// asked again and the answer is applied) or goes back to asking (`None`). Saved in the settings.
+    SetUnsavedChoice(Option<Decision>),
     /// Scrolls to the next edge of a channel beyond the visible window, a quarter of the view from
     /// the side it came from; the zoom does not change.
     ScrollToEdge {
@@ -432,6 +458,7 @@ impl Command {
             Command::ResetPresentation => "reset_presentation",
             Command::SetChannelHeight { .. } => "set_channel_height",
             Command::SetSidePanel(_) => "set_side_panel",
+            Command::SetUnsavedChoice(_) => "set_unsaved_choice",
             Command::ScrollToEdge { .. } => "scroll_to_edge",
             Command::RemoveRecentFile(_) => "remove_recent_file",
             Command::ClearRecentFiles => "clear_recent_files",

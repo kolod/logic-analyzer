@@ -234,6 +234,8 @@ menu-view-scale-down = Smaller interface
 menu-help-about = About
 # Title of the settings dialog.
 settings-title = Settings
+settings-unsaved-title = Unsaved capture
+settings-remember-choice = Remember my choice
 # Label of the language choice.
 settings-language = Language
 # Label of the colour theme choice.

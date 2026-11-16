@@ -93,6 +93,7 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `ResetPresentation` | defaults for names, colours, order, heights and visibility |
 | Side panel | `SetSidePanel(SidePanel)` | the view of the panel at the right edge: `Capture` (the default), `Decoders`, `Markers` or `Hidden`; kept in the settings |
 | | `ScrollToEdge { channel, direction }` | the window moves, zoom unchanged, so that the first real edge of the channel beyond the window on that side (`Next`: at or after its end; `Previous`: before its start) is a quarter of the window from the side it came from; follow-latest turns off; ignored when there is no such edge |
+| Unsaved data | `SetUnsavedChoice(Option<Decision>)` | remembers the answer to the question about an unsaved capture (`Some`: the question is no longer asked and the answer is applied as if it had been given; `None`: ask every time); kept in the settings (`unsaved_choice`: `save`, `discard` or `cancel`). A remembered Save of a capture that has no file yet still asks for a name (`needs_path`); the question about removing a decoder is always asked |
 | Recent files | `RemoveRecentFile(path)` / `ClearRecentFiles` | edit the list of the 15 most recent files |
 | Markers | `PlaceMarker { position, channel }` | at most 64; snaps to the nearest transition of `channel` when snapping is on |
 | | `MoveMarker { id, position, channel }` | snaps like a new marker |

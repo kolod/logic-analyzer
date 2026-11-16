@@ -7,8 +7,8 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use iced::widget::{
-    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, progress_bar, row,
-    scrollable, stack, text, text_input, tooltip,
+    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, progress_bar, radio,
+    row, scrollable, stack, text, text_input, tooltip,
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
 use la_decoders::setup::{Source, Value};
@@ -81,6 +81,14 @@ pub enum Message {
     ChannelVisible(u8, bool),
     /// All the channels (`true`) or none (`false`) are recorded.
     ChannelsAll(bool),
+    /// The box of the question about an unsaved capture.
+    RememberToggled(bool),
+    /// An answer to the question about an unsaved capture, remembered if the box is ticked.
+    UnsavedAnswer(Decision),
+    /// The box of the settings: remember an answer (`true`) or ask every time.
+    RememberInSettings(bool),
+    /// The remembered answer chosen in the settings.
+    RememberedAnswer(Decision),
     /// Follow the newest data on or off.
     ToggleFollow,
     /// Open the folder with the log files.
@@ -344,6 +352,8 @@ pub struct App {
     option_texts: std::collections::BTreeMap<(u32, String), String>,
     messages_open: bool,
     settings_open: bool,
+    /// The box "Remember my choice" of the question about an unsaved capture is ticked.
+    remember_choice: bool,
     about_open: bool,
     memory_text: String,
     decoder_memory_text: String,
@@ -408,6 +418,7 @@ impl App {
             option_texts: std::collections::BTreeMap::new(),
             messages_open: false,
             settings_open: false,
+            remember_choice: false,
             about_open: false,
             memory_text: String::new(),
             decoder_memory_text: String::new(),
@@ -500,6 +511,10 @@ impl App {
         .collect();
         let current_theme = themes.iter().find(|c| c.value == settings.theme).cloned();
         let scale = settings.ui_scale_percent;
+        let remembered = settings
+            .unsaved_choice
+            .as_deref()
+            .and_then(Decision::from_setting);
         let (low, high) = la_host::settings::memory_limit_bounds();
         let (low_mib, high_mib) = (low >> 20, high >> 20);
         let memory_valid = self
@@ -562,9 +577,33 @@ impl App {
                 .label(self.t("settings-save-decoder-results"))
                 .on_toggle(|save| Message::Run(Command::SetSaveDecoderResults(save))),
             text(self.t("settings-save-decoder-results-note")).size(12),
+            text(self.t("settings-unsaved-title")).size(14),
+            checkbox(remembered.is_some())
+                .label(self.t("settings-remember-choice"))
+                .on_toggle(Message::RememberInSettings),
         ]
         .spacing(10)
         .max_width(460);
+        if remembered.is_some() {
+            // The three answers as buttons side by side; the remembered one is the filled one.
+            let mut answers = row![].spacing(8);
+            for (decision, key) in [
+                (Decision::Save, "dialog-save"),
+                (Decision::Discard, "dialog-discard"),
+                (Decision::Cancel, "dialog-cancel"),
+            ] {
+                answers = answers.push(
+                    button(text(self.t(key)))
+                        .style(if remembered == Some(decision) {
+                            button::primary
+                        } else {
+                            button::secondary
+                        })
+                        .on_press(Message::RememberedAnswer(decision)),
+                );
+            }
+            body = body.push(answers);
+        }
         let (decoder_low, decoder_high) = la_host::settings::DECODER_MEMORY_LIMIT_RANGE;
         let decoder_memory_valid = self
             .decoder_memory_text
@@ -1094,6 +1133,22 @@ impl App {
                 self.open_menu = None;
                 let follow = !self.shell.state().follow_latest;
                 self.run(Command::SetFollowLatest(follow))
+            }
+            Message::RememberToggled(on) => {
+                self.remember_choice = on;
+                Task::none()
+            }
+            Message::UnsavedAnswer(decision) => {
+                if std::mem::take(&mut self.remember_choice) {
+                    let _ = self.run(Command::SetUnsavedChoice(Some(decision)));
+                }
+                self.run(Command::Decide(decision))
+            }
+            Message::RememberInSettings(on) => {
+                self.run(Command::SetUnsavedChoice(on.then_some(Decision::Save)))
+            }
+            Message::RememberedAnswer(decision) => {
+                self.run(Command::SetUnsavedChoice(Some(decision)))
             }
             Message::ChannelsAll(on) => {
                 // One edit of the recording mask: the flags of the channels follow it.
@@ -2337,18 +2392,22 @@ impl App {
         let body = column![
             text(self.t("dialog-unsaved-title")).size(18),
             text(self.t("dialog-unsaved-body")),
+            checkbox(self.remember_choice)
+                .label(self.t("settings-remember-choice"))
+                .size(14)
+                .on_toggle(Message::RememberToggled),
             row![
                 button(text(self.t("dialog-save"))).on_press_maybe(
                     (self.shell.state().activity == Activity::Idle
                         && self.shell.state().operation.is_none())
-                    .then_some(Message::Run(Command::Decide(Decision::Save)))
+                    .then_some(Message::UnsavedAnswer(Decision::Save))
                 ),
                 button(text(self.t("dialog-discard")))
                     .style(button::danger)
-                    .on_press(Message::Run(Command::Decide(Decision::Discard))),
+                    .on_press(Message::UnsavedAnswer(Decision::Discard)),
                 button(text(self.t("dialog-cancel")))
                     .style(button::secondary)
-                    .on_press(Message::Run(Command::Decide(Decision::Cancel))),
+                    .on_press(Message::UnsavedAnswer(Decision::Cancel)),
             ]
             .spacing(8),
         ]
@@ -2947,6 +3006,98 @@ mod tests {
                 let instance = app.shell.state().decoders.instances[0].id;
                 let _ = app.update(Message::DecoderToggled(instance));
             }
+        }
+    }
+
+    #[test]
+    fn the_question_about_an_unsaved_capture_can_remember_the_answer() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("remember-dialog");
+        let remember = app.t("settings-remember-choice");
+        // The dialog has the box, unticked.
+        let _ = app.update(Message::Run(Command::NewCapture));
+        assert!(app.shell.state().pending_decision.is_some());
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(800.0, 560.0),
+            app.view(),
+        );
+        assert!(ui.find(remember.as_str()).is_ok());
+        drop(ui);
+        assert!(!app.remember_choice);
+        // An answer with the box unticked is not remembered.
+        let _ = app.update(Message::UnsavedAnswer(Decision::Cancel));
+        assert!(app.shell.state().settings.unsaved_choice.is_none());
+        assert!(app.shell.state().capture.is_some());
+        // With the box ticked it is, and the question is not asked again.
+        let _ = app.update(Message::Run(Command::NewCapture));
+        let _ = app.update(Message::RememberToggled(true));
+        let _ = app.update(Message::UnsavedAnswer(Decision::Discard));
+        assert_eq!(
+            app.shell.state().settings.unsaved_choice.as_deref(),
+            Some("discard")
+        );
+        assert!(!app.remember_choice, "the box is clear again");
+        assert!(app.shell.state().capture.is_none());
+        let mut again = app_with_capture("remember-dialog-again");
+        let _ = again.update(Message::Run(Command::SetUnsavedChoice(Some(
+            Decision::Discard,
+        ))));
+        let _ = again.update(Message::Run(Command::NewCapture));
+        assert!(again.shell.state().pending_decision.is_none());
+        assert!(again.shell.state().capture.is_none());
+    }
+
+    #[test]
+    fn the_settings_have_the_box_and_the_three_answers() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("remember-settings");
+        let _ = app.update(Message::OpenSettings);
+        let answers = [
+            app.t("dialog-save"),
+            app.t("dialog-discard"),
+            app.t("dialog-cancel"),
+        ];
+        let has = |app: &App, label: &str| {
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 700.0),
+                app.view(),
+            );
+            ui.find(label).is_ok()
+        };
+        let remember = app.t("settings-remember-choice");
+        assert!(has(&app, &remember));
+        // Nothing is remembered: the three answers are not offered.
+        assert!(app.shell.state().settings.unsaved_choice.is_none());
+        // Ticking the box remembers Save, and the choice can be changed.
+        let _ = app.update(Message::RememberInSettings(true));
+        assert_eq!(
+            app.shell.state().settings.unsaved_choice.as_deref(),
+            Some("save")
+        );
+        for answer in &answers {
+            assert!(has(&app, answer), "{answer}");
+        }
+        let _ = app.update(Message::RememberedAnswer(Decision::Discard));
+        assert_eq!(
+            app.shell.state().settings.unsaved_choice.as_deref(),
+            Some("discard")
+        );
+        let _ = app.update(Message::RememberedAnswer(Decision::Cancel));
+        assert_eq!(
+            app.shell.state().settings.unsaved_choice.as_deref(),
+            Some("cancel")
+        );
+        // Unticking goes back to asking.
+        let _ = app.update(Message::RememberInSettings(false));
+        assert!(app.shell.state().settings.unsaved_choice.is_none());
+        // Every language shows it at the minimum size.
+        let _ = app.update(Message::RememberInSettings(true));
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let label = app.t("settings-remember-choice");
+            assert!(has(&app, &label), "{language:?}");
         }
     }
 

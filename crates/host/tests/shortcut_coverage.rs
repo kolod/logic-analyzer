@@ -134,7 +134,8 @@ const NOT_USER_TRIGGERED: [&str; 5] = [
 /// Controls of feature 014 that are operated with the mouse only. Their keyboard operation is not
 /// part of that feature (its spec, assumptions: a gap of feature 006 that stays); the list is here so
 /// that the gap is explicit and every new command still has to be named.
-const MOUSE_ONLY_BY_DESIGN: [&str; 5] = [
+const MOUSE_ONLY_BY_DESIGN: [&str; 6] = [
+    "SetUnsavedChoice",
     "SetChannelHeight",
     "SetSidePanel",
     "ScrollToEdge",

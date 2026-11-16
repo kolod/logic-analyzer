@@ -542,11 +542,26 @@ impl Shell {
                 Outcome::Done(changes)
             }
             Ok(Ok(Executed::Needs(guarded))) => {
+                // The answer to a question about unsaved data may be remembered: it is applied at
+                // once, as if it had been given (a question about removing a decoder is not about
+                // unsaved data and is always asked).
+                let remembered = working
+                    .settings
+                    .unsaved_choice
+                    .as_deref()
+                    .and_then(Decision::from_setting)
+                    .filter(|_| !matches!(guarded, Guarded::RemoveDecoder(_)));
                 working.pending_decision = Some(guarded.clone());
                 working.version = working.version.saturating_add(1);
                 working.versions.bump(Changes::DECISION);
                 self.state = working;
-                Outcome::NeedsDecision(guarded)
+                match remembered {
+                    Some(decision) => {
+                        tracing::info!(target: "la_host", answer = decision.as_setting(), "remembered answer");
+                        self.apply(Command::Decide(decision))
+                    }
+                    None => Outcome::NeedsDecision(guarded),
+                }
             }
             Ok(Err(Reject::Ignored(code))) => {
                 tracing::debug!(target: "la_host", command = name, code, "command ignored");
@@ -958,6 +973,11 @@ impl Shell {
             Command::SetSidePanel(view) => {
                 state.side_panel = view;
                 state.settings.side_panel = Some(view.as_setting().to_owned());
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | saved)
+            }
+            Command::SetUnsavedChoice(choice) => {
+                state.settings.unsaved_choice = choice.map(|c| c.as_setting().to_owned());
                 let saved = self.persist_settings(state);
                 changed(Changes::SETTINGS | saved)
             }
