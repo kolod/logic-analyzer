@@ -9,8 +9,10 @@ Supported systems: Windows 10 and 11, and Debian 13.
 ## Starting
 
 Run `logic-analyzer` (after `cargo build --release -p la-app` the program is
-`target/release/logic-analyzer`). The window opens with the toolbar on top, the signal area in the
-middle, two panels on the right (markers and channels) and a status line at the bottom. The first
+`target/release/logic-analyzer`). The window opens with the toolbar (**Start** and **Stop**) on top,
+the signal area in the middle, a panel and a strip of icons at the right edge, and a status line at
+the bottom. The window and the executable carry the application icon, and session files have an icon
+of their own once an installer registers them (`packaging/`). The first
 start uses your system language when it is one of English, German, French, Spanish, Japanese or
 Ukrainian, and English otherwise; you can change it at any time in the settings.
 
@@ -21,17 +23,17 @@ always there: it produces repeatable pseudo-random signals, so you can try every
 hardware. A simulated capture is marked as such in the status line and in saved files, and the mark
 cannot be removed.
 
-Set up a capture in the toolbar (the channels to record are chosen in the **Channels** panel, below):
+Set up a capture in the **Capture** view of the panel at the right edge (see below):
 
 | Control | Meaning |
 |---------|---------|
 | Sample rate (Hz) | samples per second |
-| Length (samples) | when the capture stops by itself |
+| Length (seconds) | when the capture stops by itself; type seconds such as `2.5` or `0.001` (at most nine digits after the point) and the number of samples is shown beside it. Changing the sample rate keeps the seconds and recalculates the samples |
 | Seed | the simulated device repeats exactly the same signal for the same seed; empty means random |
 | Signal | how busy the simulated signal is: Sparse, Normal or Dense |
 | Real time | the capture takes as long as the signal would; off fills the capture as fast as possible |
 
-A setting the device cannot do is explained under the toolbar and **Start** stays unavailable until
+A setting the device cannot do is explained under the settings and **Start** stays unavailable until
 it is fixed. **Start** (F5) begins; **Stop** (Shift+F5) ends a running capture early and keeps what
 was recorded. The status line shows the state, the length, the memory in use against the limit, how
 the capture ended, the sample rate, whether the data is simulated and whether there are unsaved
@@ -55,24 +57,48 @@ a stretch with many changes is drawn as a hatched band and a stretch with no dat
 dimmed one; neither is ever drawn as a level. A single glitch stays visible at every zoom: if you
 see nothing there is nothing, and if you see a band, zoom in and the edges appear.
 
-## Channels
+## The panel at the right edge
 
-The **Channels** panel is always there, with or without a capture, and lists every channel of the
-device. Each row has **one flag**, a name, a colour and arrows:
+A strip of three icons is always at the right edge: **Capture**, **Decoders** and **Markers**. Click
+an icon to show that view in the panel next to it; click the icon of the view that is shown to hide the
+panel and give the signals the room. Only one view is shown at a time. Your choice is remembered for
+the next start.
 
-- **The flag** does two things at once. When it is on, the channel is shown (if the capture on
-  screen has data for it) and the next capture records it. Turn it off and the lane disappears and
-  the channel is left out of the next capture. Any combination works (for example channels 0, 2 and
-  5 only). With no flag on, Start stays unavailable. A channel the capture
-  on screen has no data for gets a lane only after the next capture records it. The flag is locked
-  while a capture runs, because what that capture records cannot change.
-- The text field names the channel, the colour square steps through the palette and the arrows
-  change the order.
+### The Capture view
 
-Names, colours, order and the flags can be changed at any time, before the first capture included,
-and they stay for the next capture. They are saved with a capture, and opening a file sets the flags
-(and with them what the next capture records) from it. Names are yours: they are never translated.
-**Reset channels** brings back the default names, colours and order; the flags stay as they are.
+It holds the device, the sample rate, the length in seconds, the settings of the simulated device and
+the **channels to record**: one button for each channel, eight to a row. A button with only a frame
+and a number in the channel's colour is **off**; a filled one is **on**. Click one to switch the
+channel. Any combination works (for example channels 0, 2 and 5 only); with none on, **Start** stays
+unavailable and the view says why. The buttons are locked while a capture runs, because what that
+capture records cannot change. A channel that is off has no lane, and the next capture does not record
+it.
+
+### Editing a channel in the legend
+
+The legend is the strip at the left of the signals, one row for each channel:
+
+- **Click the coloured bar** at its left edge to step to the next colour of the palette.
+- **Click the name** to rename the channel in place: Enter accepts, Escape cancels. An empty name
+  gives back the default one. Names are yours and are never translated.
+- **Drag the name** up or down to move the channel; a line shows where it will land. Release outside
+  the legend to cancel.
+- **Drag the border** below a row to make the signal taller or shorter (24 to 240 pixels);
+  **double-click** the border to give the height back to the program.
+- The mouse wheel over the legend scrolls it when the signals do not fit.
+
+Names, colours, order and heights can be changed at any time, before the first capture included, and
+they stay for the next capture. They are saved with a capture and come back when you open it; a file
+written by an older version opens with automatic heights. **Reset channels** (in the Capture view)
+brings back the default names, colours, order and heights.
+
+### Jumping to the next edge
+
+Move the pointer to the left or right end of a signal: when that signal has a change beyond the
+window on that side, a small button with an arrow appears. Click it and the view jumps, with the zoom
+unchanged, so that the edge is a quarter of the window from the side it came from. Nothing appears
+when there is no edge on that side. A change next to a gap (where samples were lost) is not counted
+as an edge.
 
 ## Markers and measuring
 
@@ -174,7 +200,9 @@ are not whole (the decoder was cancelled or stopped).
 The program saves a capture with its channel names, colours, order, markers and the zoom in a
 `.lasession` file. **File → Save** (Ctrl+S) writes to the current file, **Save as…**
 (Ctrl+Shift+S) asks for a name, **Open…** (Ctrl+O) opens a file, and **Recent files** in the File
-menu lists the last ten. A progress dialog with **Cancel** shows while a big file is written or
+menu opens a submenu with the last fifteen, newest first, each with its folder below its name. A file
+that is gone is shown dimmed with a marker and cannot be opened; **Remove unavailable entries** and
+**Clear the list** tidy the list (the files themselves are never touched). A progress dialog with **Cancel** shows while a big file is written or
 read.
 
 Saving never damages an existing file: it writes a new file and replaces the old one only when the

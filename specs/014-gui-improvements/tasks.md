@@ -418,15 +418,15 @@ well-formed declarations.
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T050 [P] Compatibility test `crates/host/tests/sessions_compat.rs`: the two fixtures of T002 open with nothing lost (names,
+- [X] T050 [P] Compatibility test `crates/host/tests/sessions_compat.rs`: the two fixtures of T002 open with nothing lost (names,
   colours, order, markers, window, decoder setup and results), automatic heights, no warning; saving one and
   opening the result keeps all of it and writes no `LAYT`; a file saved with heights, with its `LAYT` removed by a
   helper (what a build without the feature would drop?) no: with the `LAYT` kept as an unknown extra, opens
   in the extras-only reader of feature 003 and is written back byte for byte.
-- [ ] T051 [P] The random walk (`crates/host/tests/random_walk.rs`) draws every new command (`SetSidePanel`,
+- [X] T051 [P] The random walk (`crates/host/tests/random_walk.rs`) draws every new command (`SetSidePanel`,
   `ScrollToEdge` with random channels and directions, `RemoveRecentFile`, `ClearRecentFiles`) and its invariants hold
   (a window never longer than the capture, `follow` off after a scroll); run it with several seeds.
-- [ ] T052 [P] Documents (English): `docs/host-api.md` (state, the five commands, the two plan fields, the pure functions,
+- [X] T052 [P] Documents (English): `docs/host-api.md` (state, the five commands, the two plan fields, the pure functions,
   the settings field, the `LAYT` section and the two storage queries, with the rules of `ScrollToEdge` exactly);
   `docs/user-guide.md` (the new layout: the side panel and its icons, editing channels in the legend, the Capture
   view with seconds and the channel buttons, the edge buttons, Open recent, Add decoder, the icons; remove the
