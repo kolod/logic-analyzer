@@ -8,7 +8,7 @@
 use la_core::Error;
 use la_decoders::persist::dann::{self, Block};
 use la_decoders::persist::deco::{self, Record};
-use la_decoders::persist::{Rejection, block_of, results_of};
+use la_decoders::persist::{Rejection, block_of};
 use la_decoders::setup::{Setup, Source};
 use la_decoders::stack::stack_order;
 use la_session::{Section, SectionTag};
@@ -232,89 +232,47 @@ impl Shell {
             .copied()
             .max()
             .map_or(1, |m| m.saturating_add(1));
-        // The results, when the file has them and they are good.
-        let mut loaded: Vec<u32> = Vec::new();
+        // The saved results are checked and rebuilt on a worker, not here: a file with millions of
+        // annotations would hold the interface for a second or more. Until they are there the
+        // instances wait; the instances the results do not cover decode the capture again then.
+        let mut loading = false;
         if let Some(dann_section) = dann_section {
-            let context = dann::Context {
-                capture_length: bounds.length,
-                channels: bounds.channels,
-                instances: &all_ids,
-            };
-            match dann::decode(&dann_section.payload, &context) {
-                Ok(blocks) => {
-                    for block in blocks {
-                        if !created.contains(&block.instance) {
-                            continue;
-                        }
-                        match results_of(&block, &self.decoders.budget) {
-                            Ok((results, stream)) => {
-                                let annotations = u64::try_from(
-                                    results
-                                        .overlays
-                                        .values()
-                                        .fold(results.lane.len(), |n, s| n.saturating_add(s.len())),
-                                )
-                                .unwrap_or(u64::MAX);
-                                self.decoders
-                                    .install_loaded(block.instance, results, stream);
-                                if let Some(view) = state.decoders.instance_mut(block.instance) {
-                                    view.state = InstanceState::Finished;
-                                    view.ready = true;
-                                    view.loaded = true;
-                                    view.covered = block.covered;
-                                    view.incomplete = block.incomplete;
-                                    view.annotations = annotations;
-                                }
-                                loaded.push(block.instance);
-                            }
-                            Err(_) => {
-                                notices = true;
-                                warn(
-                                    state,
-                                    &la_decoders::error::memory_limit(
-                                        "the saved results do not fit the memory limit",
-                                    ),
-                                );
-                            }
-                        }
+            if dann_section
+                .payload
+                .first()
+                .is_some_and(|v| *v > dann::VERSION)
+            {
+                keep.push(dann_section.clone());
+                state.notices.add(
+                    Severity::Info,
+                    NoticeContent::Info {
+                        key: "notice-decoders-newer",
+                        text: None,
+                    },
+                    now_seconds(),
+                );
+                notices = true;
+            } else {
+                self.start_loading_results(
+                    created.clone(),
+                    all_ids.clone(),
+                    dann_section.payload.clone(),
+                    bounds,
+                );
+                for id in &created {
+                    let ready = state
+                        .decoders
+                        .instance(*id)
+                        .is_some_and(|i| self.setup_is_ready(state, &i.setup));
+                    if let Some(view) = state.decoders.instance_mut(*id) {
+                        view.ready = ready;
                     }
                 }
-                Err(Rejection::Newer) => {
-                    keep.push(dann_section.clone());
-                    state.notices.add(
-                        Severity::Info,
-                        NoticeContent::Info {
-                            key: "notice-decoders-newer",
-                            text: None,
-                        },
-                        now_seconds(),
-                    );
-                    notices = true;
-                }
-                Err(Rejection::Invalid(why)) => {
-                    notices = true;
-                    warn(
-                        state,
-                        &la_decoders::error::section_invalid(format!("DANN: {}", why.0)),
-                    );
-                }
+                loading = true;
             }
         }
-        // The instances without saved results decode the capture again.
-        let setups: Vec<Setup> = state
-            .decoders
-            .instances
-            .iter()
-            .map(|i| i.setup.clone())
-            .collect();
-        for id in stack_order(&setups) {
-            let idle = state
-                .decoders
-                .instance(id)
-                .is_some_and(|i| !loaded.contains(&id) && i.state == InstanceState::Waiting);
-            if idle {
-                self.start_pass(state, id);
-            }
+        if !loading {
+            self.start_idle_instances(state, &[]);
         }
         (keep, notices)
     }

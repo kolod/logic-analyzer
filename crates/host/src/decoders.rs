@@ -270,6 +270,8 @@ pub(crate) struct DecoderRuntime {
     pub(crate) results: BTreeMap<u32, Results>,
     /// The items of the latest pass of each instance, read by the instances stacked on it.
     pub(crate) streams: BTreeMap<u32, ItemStream>,
+    /// Saved results that are being checked and rebuilt on a worker.
+    pub(crate) loading: Option<std::sync::mpsc::Receiver<LoadOutcome>>,
     /// A new memory limit that waits for the running passes to end.
     pub(crate) pending_limit: Option<u64>,
     /// The deadlines the supervisor enforces.
@@ -317,6 +319,7 @@ impl DecoderRuntime {
             jobs: BTreeMap::new(),
             results: BTreeMap::new(),
             pending_limit: None,
+            loading: None,
             streams: BTreeMap::new(),
             deadlines: la_decoders::run::Deadlines::default(),
             chunk_limits: ChunkLimits {
@@ -444,7 +447,7 @@ impl Shell {
             .collect()
     }
 
-    fn setup_is_ready(&self, state: &State, setup: &Setup) -> bool {
+    pub(crate) fn setup_is_ready(&self, state: &State, setup: &Setup) -> bool {
         let others = Self::other_setups(state, setup.instance);
         setup
             .validate(
@@ -621,6 +624,7 @@ impl Shell {
 
     /// Forgets every pass and result (a capture is replaced).
     pub(crate) fn clear_decoder_runtime(&mut self) {
+        self.decoders.loading = None;
         self.decoders.retain(&|_| false);
     }
 
@@ -987,6 +991,7 @@ impl Shell {
     pub(crate) fn poll_decoders(&mut self, state: &mut State) -> Changes {
         let mut changes = Changes::NONE;
         self.apply_pending_decoder_limit();
+        changes.insert(self.poll_loading(state));
         changes.insert(self.start_queued(state));
         let ids: Vec<u32> = self.decoders.jobs.keys().copied().collect();
         for id in ids {
@@ -1131,7 +1136,9 @@ impl Shell {
 
     /// Whether any pass is running.
     pub(crate) fn decoders_running(&self) -> bool {
-        !self.decoders.jobs.is_empty() || !self.decoders.queue.is_empty()
+        !self.decoders.jobs.is_empty()
+            || !self.decoders.queue.is_empty()
+            || self.decoders.loading.is_some()
     }
 
     /// The lane plans and the overlay plans of the visible instances for a window.
@@ -1263,5 +1270,161 @@ impl Shell {
     pub fn decoder_descriptor(&self, instance: u32) -> Option<&'static Descriptor> {
         let view = self.state.decoders.instance(instance)?;
         self.decoders.registry.get(&view.setup.decoder)
+    }
+}
+
+/// One instance's results as they come back from the worker that rebuilt them.
+pub(crate) struct LoadedBlock {
+    instance: u32,
+    results: Results,
+    stream: ItemStream,
+    covered: u64,
+    incomplete: bool,
+    annotations: u64,
+}
+
+/// What the worker that checks and rebuilds saved results found.
+pub(crate) enum LoadOutcome {
+    /// The results of these instances.
+    Loaded(Vec<LoadedBlock>),
+    /// The section is not valid (the reason is for the log).
+    Invalid(&'static str),
+    /// The results do not fit the memory limit.
+    TooBig,
+}
+
+impl Shell {
+    /// Checks and rebuilds saved results on a worker; `poll` takes the outcome.
+    pub(crate) fn start_loading_results(
+        &mut self,
+        created: Vec<u32>,
+        all_ids: Vec<u32>,
+        payload: Vec<u8>,
+        bounds: crate::view_section::Bounds,
+    ) {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let budget = Arc::clone(&self.decoders.budget);
+        // The worker is detached: a panic in it is contained and logged, and the closed channel
+        // tells `poll` that nothing will come.
+        let _ = la_diagnostics::spawn_worker("decoder-results-load", move || {
+            let context = la_decoders::persist::dann::Context {
+                capture_length: bounds.length,
+                channels: bounds.channels,
+                instances: &all_ids,
+            };
+            let outcome = match la_decoders::persist::dann::decode(&payload, &context) {
+                Err(la_decoders::persist::Rejection::Invalid(why)) => LoadOutcome::Invalid(why.0),
+                Err(la_decoders::persist::Rejection::Newer) => {
+                    LoadOutcome::Invalid("newer version")
+                }
+                Ok(blocks) => {
+                    let mut loaded = Vec::new();
+                    let mut too_big = false;
+                    for block in blocks.iter().filter(|b| created.contains(&b.instance)) {
+                        match la_decoders::persist::results_of(block, &budget) {
+                            Ok((results, stream)) => {
+                                let annotations = results
+                                    .overlays
+                                    .values()
+                                    .fold(results.lane.len(), |n, s| n.saturating_add(s.len()));
+                                loaded.push(LoadedBlock {
+                                    instance: block.instance,
+                                    results,
+                                    stream,
+                                    covered: block.covered,
+                                    incomplete: block.incomplete,
+                                    annotations: u64::try_from(annotations).unwrap_or(u64::MAX),
+                                });
+                            }
+                            Err(_) => too_big = true,
+                        }
+                    }
+                    if too_big {
+                        LoadOutcome::TooBig
+                    } else {
+                        LoadOutcome::Loaded(loaded)
+                    }
+                }
+            };
+            let _ = sender.send(outcome);
+        });
+        self.decoders.loading = Some(receiver);
+    }
+
+    /// Takes the result of the worker that rebuilds saved results, when it is there.
+    pub(crate) fn poll_loading(&mut self, state: &mut State) -> Changes {
+        use std::sync::mpsc::TryRecvError;
+        let Some(receiver) = &self.decoders.loading else {
+            return Changes::NONE;
+        };
+        let outcome = match receiver.try_recv() {
+            Ok(outcome) => outcome,
+            Err(TryRecvError::Empty) => return Changes::NONE,
+            Err(TryRecvError::Disconnected) => {
+                LoadOutcome::Invalid("the worker ended without a result")
+            }
+        };
+        self.decoders.loading = None;
+        let mut changes = Changes::DECODERS;
+        let mut loaded_ids = Vec::new();
+        match outcome {
+            LoadOutcome::Loaded(blocks) => {
+                for block in blocks {
+                    // Something the user did meanwhile (a new pass) wins over saved results.
+                    let waiting = state
+                        .decoders
+                        .instance(block.instance)
+                        .is_some_and(|v| v.state == InstanceState::Waiting);
+                    if !waiting {
+                        continue;
+                    }
+                    self.decoders
+                        .install_loaded(block.instance, block.results, block.stream);
+                    if let Some(view) = state.decoders.instance_mut(block.instance) {
+                        view.state = InstanceState::Finished;
+                        view.ready = true;
+                        view.loaded = true;
+                        view.covered = block.covered;
+                        view.incomplete = block.incomplete;
+                        view.annotations = block.annotations;
+                    }
+                    loaded_ids.push(block.instance);
+                }
+            }
+            LoadOutcome::Invalid(why) => {
+                tracing::warn!(target: "la_host", why, "the saved decoder results are not valid");
+                let error = la_decoders::error::section_invalid(format!("DANN: {why}"));
+                report_into(state, Severity::Warning, &error);
+                changes.insert(Changes::NOTICES);
+            }
+            LoadOutcome::TooBig => {
+                let error = la_decoders::error::memory_limit(
+                    "the saved results do not fit the memory limit",
+                );
+                report_into(state, Severity::Warning, &error);
+                changes.insert(Changes::NOTICES);
+            }
+        }
+        self.start_idle_instances(state, &loaded_ids);
+        changes
+    }
+
+    /// Starts the instances that have no results (they decode the capture again), lowest first.
+    pub(crate) fn start_idle_instances(&mut self, state: &mut State, loaded: &[u32]) {
+        let setups: Vec<Setup> = state
+            .decoders
+            .instances
+            .iter()
+            .map(|i| i.setup.clone())
+            .collect();
+        for id in stack_order(&setups) {
+            let idle = state
+                .decoders
+                .instance(id)
+                .is_some_and(|i| !loaded.contains(&id) && i.state == InstanceState::Waiting);
+            if idle {
+                self.start_pass(state, id);
+            }
+        }
     }
 }

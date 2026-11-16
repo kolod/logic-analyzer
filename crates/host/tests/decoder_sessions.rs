@@ -138,6 +138,8 @@ fn open(dir: &TempDir, path: &Path) -> Shell {
     prepare(&mut shell);
     done(&mut shell, Command::OpenSession(path.to_path_buf()));
     wait_operation(&mut shell);
+    // The saved results are rebuilt on a worker: wait until they are there.
+    settle(&mut shell);
     shell
 }
 
@@ -605,4 +607,49 @@ fn a_save_with_decoders_that_fails_at_any_step_keeps_the_previous_file() {
             }
         }
     }
+}
+
+#[test]
+fn opening_a_file_with_many_saved_results_does_not_hold_the_interface() {
+    // Found by hand: a file with a decoder and its results froze the window while the results
+    // were checked and rebuilt. That now happens on a worker, and `poll` only takes the outcome.
+    let dir = TempDir::new("sess-big");
+    let mut shell = finished_shell(&dir, 0xffff, 8_000_000, 6);
+    shell.set_decoder_thread_cap(4);
+    done(&mut shell, Command::AddDecoder { decoder: ID.into() });
+    let id = shell.state().decoders.instances[0].id;
+    for (role, channel) in [("clock", 0), ("data", 1)] {
+        done(
+            &mut shell,
+            Command::SetDecoderChannel {
+                id,
+                role: role.into(),
+                channel: Some(channel),
+            },
+        );
+    }
+    done(&mut shell, Command::SetSaveDecoderResults(true));
+    settle(&mut shell);
+    let saved = shell.state().decoders.instances[0].annotations;
+    assert!(saved > 100_000, "{saved}");
+    let path = dir.path().join("big.lasession");
+    save(&mut shell, &path);
+
+    let mut reopened = Shell::new(ShellConfig::for_tests(dir.path()));
+    done(&mut reopened, Command::OpenSession(path));
+    let mut worst = Duration::ZERO;
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let t = Instant::now();
+        reopened.poll(Instant::now());
+        worst = worst.max(t.elapsed());
+        let view = reopened.state().decoders.instances.first();
+        if reopened.state().operation.is_none() && view.is_some_and(|i| i.loaded) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the results never arrived");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(worst < Duration::from_millis(100), "a poll took {worst:?}");
+    assert_eq!(reopened.state().decoders.instances[0].annotations, saved);
 }
