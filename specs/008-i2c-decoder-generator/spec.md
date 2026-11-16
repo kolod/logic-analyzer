@@ -42,8 +42,16 @@ promised (`docs/decoder-api.md`, "Adding a decoder"). This feature is also the t
 Out of scope: exporting the decoded log (feature 009), a higher-level decoder on top of I2C
 (feature 010), SMBus and PMBus extensions (packet error checking, alert, timeouts), the Hs-mode
 protocol and other I2C variants with a different bus signalling, checking bus timing against a speed
-class (the decoder reads edges and does not judge speed), glitch filtering of noisy captures, and
+class (the decoder measures the bus period only to synchronise, and does not judge speed), glitch filtering of noisy captures, and
 decoders written by users.
+
+## Clarifications
+
+### Session 2026-11-16
+
+- Q: What is shown before the first valid start condition (a capture that begins mid-transaction, or before the MCU has set up its I2C interface)? → A: Nothing is drawn and nothing is reported for it; decoding begins at the first start condition.
+- Q: How does the decoder decide that a start condition is real when the capture begins before the MCU has set up I2C (lines stuck, floating or noisy)? → A: It synchronises: the first start is accepted only after the bus has been seen idle, meaning both SDA and SCL high for at least one bus period (the bus clock period is determined automatically from the signal, which may take two passes). Everything before that, including falling edges of SDA while SCL is high, is ignored silently.
+- Q: What happens while the bus period is not yet known (a growing capture, or too few clock pulses)? → A: The decoder waits: nothing is decoded or shown until enough SCL clock pulses have been seen to determine the period; then it decodes from the start of the capture, giving the same result as for the whole capture. If the capture ends without the period ever being determined, the result is empty and no error is reported.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -204,10 +212,17 @@ I2C decoder and check that it receives exactly the transactions the I2C lane sho
 ### Edge Cases
 
 - What happens when SDA or SCL is held low for the whole capture, or never changes? The decoder shows
-  nothing and reports nothing: a bus without a start condition has no transactions.
+  nothing and reports nothing: a bus without a start condition has no transactions, and a bus
+  without enough clock pulses has no determinable period (FR-024).
+- What happens in a growing capture before the bus period is known? The decoder waits and shows
+  nothing; when the period is known it decodes from the start and the result equals that of the
+  whole capture.
 - What happens when a capture begins in the middle of a transaction (no start condition seen)? The
-  bits before the first start are not decoded and are not reported as errors; decoding begins at the
-  first start condition.
+  bits before the first start are not decoded, not drawn and not reported (no lane entry, no overlay,
+  no error, no notice); decoding begins at the first start condition. This holds equally when the
+  capture begins before the MCU has set up its I2C interface and the lines are idle, stuck or noisy:
+  the first start counts only after the bus has been idle (both lines high) for at least one bus
+  period (FR-023).
 - What happens at a start condition in the middle of a byte? It is a protocol violation: the
   incomplete byte is reported and the decoder treats the condition as a new start.
 - What happens when SDA changes while SCL is high but not as a clean start or stop (a glitch)? An edge
@@ -259,6 +274,19 @@ I2C decoder and check that it receives exactly the transactions the I2C lane sho
   place they occur, with a message that says what was wrong, and MUST continue decoding after them.
   A capture that ends inside a transaction MUST show the transaction as incomplete, not as an error of
   the decoder.
+- **FR-023**: The decoder MUST synchronise before it decodes: a start condition is accepted as the
+  first one only after the bus has been seen idle, with both SDA and SCL high continuously for at
+  least one bus clock period. Until then every edge (including a falling edge of SDA while SCL is
+  high) is ignored without any annotation, mark or notice. After synchronisation, violations are
+  reported as errors under FR-008.
+- **FR-024**: The bus clock period used by FR-023 MUST be determined automatically from the signal;
+  the user does not enter it. The determination MAY take more than one pass over the data. It MUST
+  give the same result however the capture is divided into chunks or grows (FR-009). Until enough
+  SCL clock pulses have been seen to determine the period, the decoder MUST wait and show nothing;
+  once it is known the decoder MUST decode from the start of the capture, so that the result equals
+  the result for the whole capture. If the capture ends without the period being determined, the
+  result MUST be empty and no error MUST be reported. The number of pulses that suffices is defined
+  in the plan.
 - **FR-009**: The decoder MUST NOT depend on how the capture is divided into chunks or on how fast the
   capture grows: the result for a given signal MUST be the same whether it was decoded in one pass,
   in pieces, or while the capture was still growing (the resumable behaviour of feature 007).
@@ -357,9 +385,11 @@ I2C decoder and check that it receives exactly the transactions the I2C lane sho
 - Feature 007 is merged and its decoder contract (`docs/decoder-api.md`) is the one this decoder is
   written against; the sample decoder `sample.clocked_bits` stays as the framework's own test
   decoder.
-- The decoder reads edges, not durations: it does not check the bus against a speed class (standard,
-  fast, fast-plus) and does not need to know the bus speed. The generator chooses a bit rate that is
-  readable at the capture's sample rate; the user does not set it.
+- Bits are read at edges, but the decoder does measure one duration: the bus clock period, determined
+  automatically from the signal (the user does not enter it), used only to decide that the bus has
+  been idle long enough to synchronise on (FR-023). It does not check the bus against a speed class
+  (standard, fast, fast-plus). The generator chooses a bit rate that is readable at the capture's
+  sample rate; the user does not set it.
 - Both bus lines are open-drain with pull-ups, so idle is high on both; the decoder assumes the
   captured levels are the bus levels (a logic analyzer's inputs), with no inversion option.
 - 7-bit addressing and the two-byte 10-bit form are in scope; the reserved addresses (general call,

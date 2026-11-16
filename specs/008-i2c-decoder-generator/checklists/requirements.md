@@ -34,5 +34,8 @@
 - The spec names the framework contract (`docs/decoder-api.md`, feature 007) and the item model,
   because the roadmap and the constitution make them part of the requirement; no language, crate or
   API is named.
+- Clarified 2026-11-16 (three answers, see the spec): silent start-up handling, synchronisation on an
+  idle bus of at least one automatically measured bus period, waiting while the period is unknown.
+  All items still pass.
 - No clarification markers: address notation, 10-bit addressing, no timing checks and no filtering
   are decided as assumptions or scope limits and can be revisited in `/speckit-clarify`.
