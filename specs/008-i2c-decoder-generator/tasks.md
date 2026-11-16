@@ -374,7 +374,7 @@ decoder carries on; truncated and start-up captures round trip.
 
 ### Tests for User Story 5 (write first; they must fail)
 
-- [ ] T033 [P] [US5] `crates/decoders/tests/i2c_stacking.rs`: with the test-only decoder of T034 stacked on
+- [X] T033 [P] [US5] `crates/decoders/tests/i2c_stacking.rs`: with the test-only decoder of T034 stacked on
   an I2C instance (`Input::Items("i2c")`), over generated traffic (200 seeds, errors on and off), the
   items it receives equal `generators::i2c::expected` exactly (layout per the items contract: byte 0 type,
   1 direction, 2 acknowledgement, 3 flags, 4–5 value; spans; the `error` flag); items arrive in order and
@@ -383,13 +383,13 @@ decoder carries on; truncated and start-up captures round trip.
   everything in order (the watermark never passes an item not yet delivered); removing or changing the
   I2C instance stops or re-runs the upper one as feature 007 specifies and notifies the user (test
   through the host: `Guarded::RemoveDecoder`).
-- [ ] T034 [P] [US5] In `crates/decoders/src/testing.rs` (feature `test-support`): a test-only decoder
+- [X] T034 [P] [US5] In `crates/decoders/src/testing.rs` (feature `test-support`): a test-only decoder
   `test.i2c_reader` (`Input::Items("i2c")`) that stores each item it receives as an annotation (so the
   test reads them back) and registers with `testing::fixtures()` like the others.
 
 ### Implementation for User Story 5
 
-- [ ] T035 [US5] Emit the items in `bus.rs` per the items contract: at each start, repeated start and stop,
+- [X] T035 [US5] Emit the items in `bus.rs` per the items contract: at each start, repeated start and stop,
   and at the acknowledge edge of an address and of a data byte (with direction, acknowledgement, 10-bit
   flag, value; `end` never decreases; the `error` flag where an acknowledge was required and missing; no
   item for a cut byte). T033 passes; the helper in T015 that rebuilt transactions from lane annotations

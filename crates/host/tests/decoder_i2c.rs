@@ -532,3 +532,54 @@ fn changing_the_address_notation_runs_the_decoder_again_and_is_saved_with_the_se
     );
     assert_eq!(address_texts(&reopened, restored.id), ["0xA0", "0xA2"]);
 }
+
+// ---------------------------------------------------------------------------------------------
+// A decoder stacked on I2C receives its items; the rules of stacking are those of feature 007 (T033).
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_decoder_stacked_on_i2c_reads_its_items_and_removing_i2c_asks_first() {
+    let dir = TempDir::new("i2c-stack");
+    let (mut shell, id) = shell_with_decoder(&dir);
+    for (descriptor, create) in la_decoders::testing::fixtures() {
+        if descriptor.id == la_decoders::testing::I2C_READER.id {
+            shell.register_decoder(descriptor, create).unwrap();
+        }
+    }
+    done(
+        &mut shell,
+        Command::AddDecoder {
+            decoder: la_decoders::testing::I2C_READER.id.to_owned(),
+        },
+    );
+    let upper = shell.state().decoders.instances[1].id;
+    done(
+        &mut shell,
+        Command::StackDecoder {
+            id: upper,
+            source: la_decoders::setup::Source::Instance(id),
+        },
+    );
+    let length = 984 * 30;
+    capture_again(&mut shell, SEED, length);
+    wait_all(&mut shell);
+    let setup = shell.state().decoders.instance(id).unwrap().setup.clone();
+    let wanted = la_decoders::generators::i2c::expected(&setup, SEED, length);
+    assert!(wanted.len() > 100);
+    // One annotation for every item the I2C decoder produced.
+    let results = shell.decoder_results(upper).unwrap();
+    assert_eq!(results.lane.len(), wanted.len());
+    assert_eq!(
+        shell.state().decoders.instance(upper).unwrap().state,
+        InstanceState::Finished
+    );
+
+    // Removing the decoder below asks first, as for any stack.
+    let outcome = shell.apply(Command::RemoveDecoder(id));
+    assert_eq!(
+        outcome,
+        Outcome::NeedsDecision(la_host::Guarded::RemoveDecoder(id))
+    );
+    done(&mut shell, Command::Decide(Decision::Discard));
+    assert!(shell.state().decoders.instances.is_empty());
+}
