@@ -317,8 +317,8 @@ decoder carries on; truncated and start-up captures round trip.
   required and missing; `expected_errors` returns `PlantedError::{AddressNak, DataNak, ByteCut}` with
   positions; truncated lengths handled. T023 passes. Document the options in the module comment.
 - [ ] T027 [US3] Host: in `crates/host/tests/decoder_i2c.rs` set `Setup::generator` `errors` and
-  `error_rate` through the command the shell uses for them (find it in `crates/host/src/commands.rs`: the
-  command behind `Message::DecoderGenerator`), run a virtual capture and check that the lane holds error
+  `error_rate` through the command the shell uses for them (`Command::ConfigureDecoder { id, setup }` with the key
+  inserted into `setup.generator`, as `Message::DecoderGenerator` does in `crates/app/src/app.rs`), run a virtual capture and check that the lane holds error
   annotations at the planted positions; with the option off none. No shell code changes.
 
 **Checkpoint**: US3 works; errors are where they were planted and nowhere else.
