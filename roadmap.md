@@ -55,8 +55,9 @@ What the feature covers, as asked by the owner; the plan decides the order and w
   views of one panel on the right; only one is visible at a time and an icon strip switches between
   them.
 - **Channels edited in the left strip of the signals** (the Channels panel goes away): a click on the
-  vertical colour bar left of a name changes the channel's colour; a click on the name renames it; the
-  height of a signal changes by dragging its border; signals are reordered by dragging them.
+  vertical colour bar left of a name (the bar the strip already draws, in the colour of the channel,
+  next to the name in the same colour) changes the channel's colour; a click on the name renames it;
+  the height of a signal changes by dragging its border; signals are reordered by dragging them.
 - **Capture settings in a new right-hand panel**: device, sample rate, length (in seconds), the
   channels to capture (buttons, eight in a row; a disabled channel has the text and border in the
   channel's colour, an enabled one the border and the background in the channel's colour), and the
