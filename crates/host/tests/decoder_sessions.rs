@@ -35,6 +35,7 @@ fn prepare(shell: &mut Shell) {
     for (descriptor, create) in testing::fixtures() {
         shell.register_decoder(descriptor, create).unwrap();
     }
+    shell.set_decoder_thread_cap(4);
     shell.set_decoder_chunk_limits(ChunkLimits {
         max_edges: 300,
         max_span: 4_000,

@@ -33,12 +33,9 @@ fn settle(shell: &mut Shell) {
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         shell.poll(Instant::now());
-        let busy = shell
-            .state()
-            .decoders
-            .instances
-            .iter()
-            .any(|i| i.state == InstanceState::Running);
+        let busy = shell.state().decoders.instances.iter().any(|i| {
+            i.state == InstanceState::Running || (i.state == InstanceState::Waiting && i.ready)
+        });
         if !busy {
             return;
         }

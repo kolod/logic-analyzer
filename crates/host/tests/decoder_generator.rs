@@ -34,12 +34,9 @@ fn wait(shell: &mut Shell) {
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         shell.poll(Instant::now());
-        let decoding = shell
-            .state()
-            .decoders
-            .instances
-            .iter()
-            .any(|i| i.state == InstanceState::Running);
+        let decoding = shell.state().decoders.instances.iter().any(|i| {
+            i.state == InstanceState::Running || (i.state == InstanceState::Waiting && i.ready)
+        });
         if shell.state().activity == Activity::Idle && !decoding {
             return;
         }

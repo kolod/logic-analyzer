@@ -30,6 +30,9 @@ fn shell(dir: &TempDir) -> Shell {
     for (descriptor, create) in testing::fixtures() {
         shell.register_decoder(descriptor, create).unwrap();
     }
+    // The runners of CI may have two cores, which would be one decode thread: the tests that
+    // need several passes at once do not depend on that.
+    shell.set_decoder_thread_cap(4);
     shell.set_decoder_chunk_limits(la_decoders::run::ChunkLimits {
         max_edges: 200,
         max_span: 3_000,
@@ -64,13 +67,9 @@ fn settle(shell: &mut Shell) {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         shell.poll(Instant::now());
-        if shell
-            .state()
-            .decoders
-            .instances
-            .iter()
-            .all(|i| i.state != InstanceState::Running)
-        {
+        if shell.state().decoders.instances.iter().all(|i| {
+            !(i.state == InstanceState::Running || (i.state == InstanceState::Waiting && i.ready))
+        }) {
             return;
         }
         assert!(Instant::now() < deadline);

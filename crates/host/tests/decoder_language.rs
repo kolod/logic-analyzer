@@ -27,13 +27,9 @@ fn done(shell: &mut Shell, command: Command) {
 
 fn settle(shell: &mut Shell) {
     let deadline = Instant::now() + Duration::from_secs(30);
-    while shell
-        .state()
-        .decoders
-        .instances
-        .iter()
-        .any(|i| i.state == InstanceState::Running)
-    {
+    while shell.state().decoders.instances.iter().any(|i| {
+        i.state == InstanceState::Running || (i.state == InstanceState::Waiting && i.ready)
+    }) {
         shell.poll(Instant::now());
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(2));
@@ -45,6 +41,7 @@ fn shell_with_sample(dir: &TempDir) -> (Shell, u32) {
     for (descriptor, create) in testing::fixtures() {
         shell.register_decoder(descriptor, create).unwrap();
     }
+    shell.set_decoder_thread_cap(4);
     done(&mut shell, Command::AddDecoder { decoder: ID.into() });
     let id = shell.state().decoders.instances[0].id;
     for (role, channel) in [("clock", 0), ("data", 1)] {
