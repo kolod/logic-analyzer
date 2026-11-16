@@ -131,6 +131,17 @@ const NOT_USER_TRIGGERED: [&str; 5] = [
     "TestError",
 ];
 
+/// Controls of feature 014 that are operated with the mouse only. Their keyboard operation is not
+/// part of that feature (its spec, assumptions: a gap of feature 006 that stays); the list is here so
+/// that the gap is explicit and every new command still has to be named.
+const MOUSE_ONLY_BY_DESIGN: [&str; 5] = [
+    "SetChannelHeight",
+    "SetSidePanel",
+    "ScrollToEdge",
+    "RemoveRecentFile",
+    "ClearRecentFiles",
+];
+
 #[test]
 fn every_command_is_reachable_and_the_lists_name_no_command_that_does_not_exist() {
     let variants = command_variants();
@@ -146,6 +157,7 @@ fn every_command_is_reachable_and_the_lists_name_no_command_that_does_not_exist(
         FOCUSABLE_CONTROLS.to_vec(),
         DIALOG_ANSWERS.to_vec(),
         NOT_USER_TRIGGERED.to_vec(),
+        MOUSE_ONLY_BY_DESIGN.to_vec(),
         POINTER_WITH_EQUIVALENT.iter().map(|(c, _)| *c).collect(),
     ] {
         for name in group {
