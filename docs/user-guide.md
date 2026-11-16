@@ -58,7 +58,7 @@ see nothing there is nothing, and if you see a band, zoom in and the edges appea
 
 ## The panel at the right edge
 
-A strip of three icons is always at the right edge: **Capture**, **Decoders** and **Markers**. Click
+A strip of icons is always at the right edge: **Capture**, **Decoders** and **Markers** at the top, and a cog at the bottom that opens the **Settings**. Click
 an icon to show that view in the panel next to it; click the icon of the view that is shown to hide the
 panel and give the signals the room. Only one view is shown at a time. Your choice is remembered for
 the next start.

@@ -44,7 +44,7 @@ fn icon_of(view: SidePanel) -> Icon {
 /// The strip: one button for each view with a bar at its left edge for the view that is shown.
 /// `tips` are the tooltips in the language in use, in the order of [`VIEWS`].
 pub fn strip<'a>(current: SidePanel, tips: [String; 3]) -> Element<'a, Message> {
-    let mut buttons = column![].spacing(GAP).padding(GAP);
+    let mut buttons = column![].spacing(GAP).padding(GAP).height(Length::Fill);
     for (view, tip) in VIEWS.into_iter().zip(tips) {
         let active = current == view;
         let bar = container(Space::new().width(3).height(BUTTON)).style(move |theme: &Theme| {
@@ -70,6 +70,16 @@ pub fn strip<'a>(current: SidePanel, tips: [String; 3]) -> Element<'a, Message> 
             )
         ]);
     }
+    // The settings are at the bottom of the strip: a cog, which is not a view of the panel.
+    let cog = button(icons::icon(Icon::Settings, false))
+        .width(BUTTON)
+        .height(BUTTON)
+        .padding(0)
+        .style(button::text)
+        .on_press(Message::OpenSettings);
+    buttons = buttons
+        .push(Space::new().height(Length::Fill))
+        .push(row![Space::new().width(3), cog]);
     container(buttons)
         .width(STRIP_WIDTH + 3.0)
         .height(Length::Fill)

@@ -20,6 +20,8 @@ pub enum Icon {
     Markers,
     /// A waste bin: remove.
     Trash,
+    /// A cog: the settings.
+    Settings,
     /// An arrow that points right: a collapsed block.
     ChevronRight,
     /// An arrow that points down: an expanded block.
@@ -96,6 +98,25 @@ fn paths(icon: Icon) -> Vec<(Path, bool)> {
                 line(11.6, 8.0, 11.6, 15.0),
             ]
         }
+        Icon::Settings => {
+            let mut parts = vec![
+                (Path::circle(Point::new(10.0, 10.0), 6.0), false),
+                (Path::circle(Point::new(10.0, 10.0), 2.4), false),
+            ];
+            // Eight teeth: short strokes outward from the ring.
+            for tooth in 0..8_u8 {
+                let angle = f32::from(tooth) * std::f32::consts::FRAC_PI_4;
+                let (sin, cos) = angle.sin_cos();
+                parts.push((
+                    Path::line(
+                        Point::new(10.0 + 6.0 * cos, 10.0 + 6.0 * sin),
+                        Point::new(10.0 + 8.6 * cos, 10.0 + 8.6 * sin),
+                    ),
+                    false,
+                ));
+            }
+            parts
+        }
         Icon::ChevronRight => vec![(chevron([(7.0, 4.0), (13.0, 10.0), (7.0, 16.0)]), false)],
         Icon::ChevronDown => vec![(chevron([(4.0, 7.0), (10.0, 13.0), (16.0, 7.0)]), false)],
     }
@@ -155,6 +176,7 @@ mod tests {
             Icon::Decoders,
             Icon::Markers,
             Icon::Trash,
+            Icon::Settings,
             Icon::ChevronRight,
             Icon::ChevronDown,
         ] {
