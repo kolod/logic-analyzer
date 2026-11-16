@@ -34,6 +34,15 @@ struct Pulse {
     bit: bool,
 }
 
+/// The first byte of a 10-bit address, acknowledged; the low byte is still to come.
+#[derive(Debug, Clone, Copy)]
+struct Pending {
+    /// Bits 9 and 8 of the address.
+    high: u16,
+    /// The rising edge of SCL of the first bit of the header byte.
+    first: u64,
+}
+
 /// The transaction in progress.
 #[derive(Debug, Clone, Copy)]
 struct Transaction {
@@ -44,8 +53,29 @@ struct Transaction {
     address: Option<u16>,
     /// The direction of the first part.
     first_read: bool,
+    /// The first part has a 10-bit address.
+    first_ten_bit: bool,
     /// The direction of the part in progress.
     read: bool,
+    /// The header of a 10-bit address was received and its low byte is expected.
+    pending: Option<Pending>,
+    /// The 10-bit address the transaction wrote, which a read part after a repeated start repeats.
+    ten_bit_address: Option<u16>,
+}
+
+/// What a byte is, in the light of what came before it.
+enum Kind10 {
+    /// The header of a 10-bit write address, acknowledged: the low byte follows.
+    Header { high: u16 },
+    /// An address (7-bit, or 10-bit when complete).
+    Address {
+        address: u16,
+        read: bool,
+        ten_bit: bool,
+        start: u64,
+    },
+    /// A data byte.
+    Data,
 }
 
 /// The byte in progress.
@@ -396,7 +426,10 @@ impl Bus {
                 expect_address: true,
                 address: None,
                 first_read: false,
+                first_ten_bit: false,
                 read: false,
+                pending: None,
+                ten_bit_address: None,
             });
             text::start()
         };
@@ -450,7 +483,14 @@ impl Bus {
                     end: at.saturating_add(1),
                 },
                 Target::Lane,
-                text::transaction(transaction.first_read, self.display.value(address)),
+                text::transaction(
+                    transaction.first_read,
+                    self.display.address(
+                        address,
+                        transaction.first_read,
+                        transaction.first_ten_bit,
+                    ),
+                ),
                 false,
             )?;
         } else if !cut {
@@ -504,79 +544,149 @@ impl Bus {
         let Some(transaction) = &mut self.transaction else {
             return Ok(());
         };
-        let range = Kind::Range {
-            start: byte.first,
-            end: pulse.at.saturating_add(1),
-        };
-        let is_address = transaction.expect_address;
-        // The value an error message names: the address (without the direction bit) or the byte.
-        let shown = if is_address {
-            byte.value >> 1
-        } else {
-            byte.value
-        };
-        // A NAK is an error after an address and after a byte written to a target; the controller's
-        // own NAK of a byte it reads is how a read ends.
-        let error = !ack && (is_address || !transaction.read);
-        let acknowledgement = if ack { items::ACK } else { items::NAK };
         let item_end = pulse.at.saturating_add(1);
-        if is_address {
-            let read = byte.value & 1 != 0;
-            let address = byte.value >> 1;
-            transaction.expect_address = false;
-            transaction.read = read;
-            if transaction.address.is_none() {
-                transaction.address = Some(address);
-                transaction.first_read = read;
+        let acknowledgement = if ack { items::ACK } else { items::NAK };
+        let what = if let Some(pending) = transaction.pending.take() {
+            // The low byte of a 10-bit address.
+            Kind10::Address {
+                address: pending.high << 8 | byte.value,
+                read: false,
+                ten_bit: true,
+                start: pending.first,
             }
-            put(
-                sink,
-                range,
-                Target::Lane,
-                text::address(read, self.display.value(address)),
-                false,
-            )?;
-            sink.emit(
-                Event {
-                    kind: items::ADDRESS,
-                    direction: if read { items::READ } else { items::WRITE },
-                    ack: acknowledgement,
-                    ten_bit: false,
-                    value: address,
-                    error,
+        } else if transaction.expect_address {
+            let header = byte.value >> 3 == 0b1_1110;
+            let read = byte.value & 1 != 0;
+            let high = (byte.value >> 1) & 3;
+            if header && !read && ack {
+                Kind10::Header { high }
+            } else if header && !read {
+                // The header was not acknowledged: the address ends here.
+                Kind10::Address {
+                    address: high << 8,
+                    read: false,
+                    ten_bit: true,
+                    start: byte.first,
                 }
-                .item(byte.first, item_end),
-            )?;
+            } else if let (true, true, Some(known)) = (header, read, transaction.ten_bit_address) {
+                if known >> 8 == high {
+                    // The read part of a 10-bit address: the address is the one already known.
+                    Kind10::Address {
+                        address: known,
+                        read: true,
+                        ten_bit: true,
+                        start: byte.first,
+                    }
+                } else {
+                    Kind10::Address {
+                        address: byte.value >> 1,
+                        read,
+                        ten_bit: false,
+                        start: byte.first,
+                    }
+                }
+            } else {
+                Kind10::Address {
+                    address: byte.value >> 1,
+                    read,
+                    ten_bit: false,
+                    start: byte.first,
+                }
+            }
         } else {
-            put(
-                sink,
-                range,
-                Target::Lane,
-                text::data(self.display.value(byte.value)),
-                false,
-            )?;
-            sink.emit(
-                Event {
-                    kind: items::DATA,
-                    direction: if transaction.read {
-                        items::READ
-                    } else {
-                        items::WRITE
+            Kind10::Data
+        };
+        let (error, point) = match what {
+            Kind10::Header { high } => {
+                transaction.pending = Some(Pending {
+                    high,
+                    first: byte.first,
+                });
+                transaction.expect_address = false;
+                (false, text::acknowledge(true))
+            }
+            Kind10::Address {
+                address,
+                read,
+                ten_bit,
+                start,
+            } => {
+                transaction.expect_address = false;
+                transaction.read = read;
+                if transaction.address.is_none() {
+                    transaction.address = Some(address);
+                    transaction.first_read = read;
+                    transaction.first_ten_bit = ten_bit;
+                }
+                if ten_bit && !read {
+                    transaction.ten_bit_address = Some(address);
+                }
+                let shown = self.display.address(address, read, ten_bit);
+                put(
+                    sink,
+                    Kind::Range {
+                        start,
+                        end: item_end,
                     },
-                    ack: acknowledgement,
-                    ten_bit: false,
-                    value: byte.value,
-                    error,
-                }
-                .item(byte.first, item_end),
-            )?;
-        }
-        let point = if !error {
-            text::acknowledge(ack)
-        } else if is_address {
-            text::address_nak(self.display.value(shown))
-        } else {
-            text::data_nak(self.display.value(shown))
+                    Target::Lane,
+                    text::address(read, shown.clone()),
+                    false,
+                )?;
+                sink.emit(
+                    Event {
+                        kind: items::ADDRESS,
+                        direction: if read { items::READ } else { items::WRITE },
+                        ack: acknowledgement,
+                        ten_bit,
+                        value: address,
+                        error: !ack,
+                    }
+                    .item(start, item_end),
+                )?;
+                let point = if ack {
+                    text::acknowledge(true)
+                } else {
+                    text::address_nak(shown)
+                };
+                (!ack, point)
+            }
+            Kind10::Data => {
+                // A NAK is an error after a byte written to a target; the controller's own NAK of
+                // a byte it reads is how a read ends.
+                let error = !ack && !transaction.read;
+                let shown = self.display.byte(byte.value);
+                put(
+                    sink,
+                    Kind::Range {
+                        start: byte.first,
+                        end: item_end,
+                    },
+                    Target::Lane,
+                    text::data(shown.clone()),
+                    false,
+                )?;
+                sink.emit(
+                    Event {
+                        kind: items::DATA,
+                        direction: if transaction.read {
+                            items::READ
+                        } else {
+                            items::WRITE
+                        },
+                        ack: acknowledgement,
+                        ten_bit: false,
+                        value: byte.value,
+                        error,
+                    }
+                    .item(byte.first, item_end),
+                )?;
+                let point = if !error {
+                    text::acknowledge(ack)
+                } else {
+                    text::data_nak(shown)
+                };
+                (error, point)
+            }
         };
         put(
             sink,

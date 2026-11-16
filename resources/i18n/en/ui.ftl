@@ -285,6 +285,13 @@ decoder-i2c-name = I2C
 decoder-i2c-description = Reads the I2C bus (two wires, clock and data): the address, the bytes and the acknowledgements of every transaction.
 decoder-i2c-signal-scl = Clock (SCL)
 decoder-i2c-signal-sda = Data (SDA)
+decoder-i2c-option-address = Address notation
+decoder-i2c-choice-address-addr7 = 7-bit address (without the direction bit)
+decoder-i2c-choice-address-addr8 = 8-bit value (with the direction bit)
+decoder-i2c-option-radix = Number base
+decoder-i2c-choice-radix-hex = Hexadecimal
+decoder-i2c-choice-radix-dec = Decimal
+decoder-i2c-choice-radix-bin = Binary
 # Annotation: a start condition (the data line falls while the clock is high).
 ann-i2c-start = Start
 # Annotation: a repeated start condition (a start without a stop before it).

@@ -333,7 +333,7 @@ decoder carries on; truncated and start-up captures round trip.
 
 ### Tests for User Story 4 (write first; they must fail)
 
-- [ ] T028 [P] [US4] In `crates/decoders/tests/i2c.rs`: option `address` = `addr8` shows `0xA0` for a write
+- [X] T028 [P] [US4] In `crates/decoders/tests/i2c.rs`: option `address` = `addr8` shows `0xA0` for a write
   and `0xA1` for a read of the device at 0x50 and decodes everything else identically (compare all
   annotations except the text arguments); option `radix` = `dec` and `bin` format address and data (`80`,
   `0b01010000`); a 10-bit write (header `11110 01 0`, low byte `0x23`) is shown as one range
@@ -341,24 +341,24 @@ decoder carries on; truncated and start-up captures round trip.
   after a repeated start with header `11110 01 1` shows the same address; a header `11110xx1` with no
   preceding write header is an ordinary address; invalid option values are refused by the framework's
   validation (test through `Setup::validate`).
-- [ ] T029 [P] [US4] Host in `crates/host/tests/decoder_i2c.rs`: `SetDecoderOption` for `address` re-runs
+- [X] T029 [P] [US4] Host in `crates/host/tests/decoder_i2c.rs`: `SetDecoderOption` for `address` re-runs
   the decoder, the old results stay flagged outdated until the new ones replace them (the rule of
   feature 007, test model: `a_setup_change_keeps_the_old_results_flagged_outdated...`); after saving and
   reopening the session the options and channels are restored (`DECO`), and results too when saved
   (`DANN`); a session saved with an `i2c` instance opens with the instance kept raw (`Kept`) by a
   registry that lacks the decoder.
-- [ ] T030 [P] [US4] In `crates/decoders/tests/i2c_round_trip.rs`: `ten_bit = 1` for 300 seeds round trips
+- [X] T030 [P] [US4] In `crates/decoders/tests/i2c_round_trip.rs`: `ten_bit = 1` for 300 seeds round trips
   (generator draws 10-bit addresses with the write header and low byte, and a split transaction with the
   read header); items carry the 10-bit flag and value.
 
 ### Implementation for User Story 4
 
-- [ ] T031 [US4] Options in the descriptor and `text.rs`: `address` (`addr7` default, `addr8`), `radix`
+- [X] T031 [US4] Options in the descriptor and `text.rs`: `address` (`addr7` default, `addr8`), `radix`
   (`hex` default, `dec`, `bin`) as `OptionSpec`s with labels; `create` reads them; the formatting
   functions of T011 take them; keys `decoder-i2c-option-address`, `-choice-address-addr7`,
   `-choice-address-addr8`, `-option-radix`, `-choice-radix-hex`, `-choice-radix-dec`,
   `-choice-radix-bin` in six languages. T028 (options) and T029 pass.
-- [ ] T032 [US4] 10-bit addresses in `bus.rs` per research R4 (header test `0b11110xxD`, the second byte,
+- [X] T032 [US4] 10-bit addresses in `bus.rs` per research R4 (header test `0b11110xxD`, the second byte,
   the read part after a repeated start, the state held in the transaction) and in `generators/i2c.rs`
   (`ten_bit`, frame sizing for the longer address). T028 (10-bit) and T030 pass.
 

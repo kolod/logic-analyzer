@@ -459,3 +459,76 @@ fn errors_are_planted_when_the_generator_option_is_on_and_not_otherwise() {
     wait_all(&mut shell);
     assert!(error_positions(&shell, id).is_empty());
 }
+
+// ---------------------------------------------------------------------------------------------
+// The options: a change runs the decoder again, the choice is saved with the session (T029).
+// ---------------------------------------------------------------------------------------------
+
+fn address_texts(shell: &Shell, id: u32) -> Vec<String> {
+    let results = shell.decoder_results(id).unwrap();
+    let mut texts: Vec<String> = results
+        .lane
+        .window(0, u64::MAX)
+        .iter()
+        .filter_map(|e| match &e.annotation.text {
+            Text::Message { key, args } if key.starts_with("ann-i2c-address") => {
+                Some(args[0].clone())
+            }
+            _ => None,
+        })
+        .collect();
+    texts.sort();
+    texts
+}
+
+#[test]
+fn changing_the_address_notation_runs_the_decoder_again_and_is_saved_with_the_session() {
+    let dir = TempDir::new("i2c-options");
+    let mut bus = Bus::default();
+    bus.write(0x50, &[0x12, 0x34]);
+    bus.write(0x51, &[0x56]);
+    let mut shell = opened(&dir, &bus.words());
+    done(
+        &mut shell,
+        Command::AddDecoder {
+            decoder: ID.to_owned(),
+        },
+    );
+    let id = shell.state().decoders.instances[0].id;
+    channels(&mut shell, id, Some(SCL), Some(SDA));
+    poll_until(&mut shell, "the pass", idle);
+    assert_eq!(address_texts(&shell, id), ["0x50", "0x51"]);
+
+    done(
+        &mut shell,
+        Command::SetDecoderOption {
+            id,
+            option: "address".to_owned(),
+            value: la_decoders::setup::Value::Choice("addr8".to_owned()),
+        },
+    );
+    // Right away the old results are still there, flagged outdated, and a pass runs.
+    let view = shell.state().decoders.instance(id).unwrap().clone();
+    assert!(view.outdated);
+    assert_eq!(address_texts(&shell, id), ["0x50", "0x51"]);
+    poll_until(&mut shell, "the second pass", idle);
+    assert!(!shell.state().decoders.instance(id).unwrap().outdated);
+    assert_eq!(address_texts(&shell, id), ["0xA0", "0xA2"]);
+
+    // The choice comes back when the session is saved and opened.
+    let path = dir.path().join("saved.las");
+    done(&mut shell, Command::SaveSessionAs(path.clone()));
+    poll_until(&mut shell, "the save", |s| s.state().operation.is_none());
+    let mut reopened = Shell::new(ShellConfig::for_tests(dir.path()));
+    done(&mut reopened, Command::OpenSession(path));
+    poll_until(&mut reopened, "the load", |s| {
+        s.state().operation.is_none() && s.state().capture.is_some() && idle(s)
+    });
+    let restored = reopened.state().decoders.instances[0].clone();
+    assert_eq!(restored.setup.decoder, ID);
+    assert_eq!(
+        restored.setup.options.get("address"),
+        Some(&la_decoders::setup::Value::Choice("addr8".to_owned()))
+    );
+    assert_eq!(address_texts(&reopened, restored.id), ["0xA0", "0xA2"]);
+}

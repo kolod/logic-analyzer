@@ -51,15 +51,64 @@ fn signal(shape: Shape) -> Style {
     }
 }
 
+/// The number base of the values shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Radix {
+    /// Hexadecimal, `0x5A`.
+    Hex,
+    /// Decimal, `90`.
+    Dec,
+    /// Binary, `0b01011010`.
+    Bin,
+}
+
 /// How values are written: addresses and bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Display;
+pub struct Display {
+    /// Addresses are shown as the 8-bit value with the direction bit (7-bit addresses only).
+    pub address8: bool,
+    /// The number base.
+    pub radix: Radix,
+}
+
+impl Default for Display {
+    fn default() -> Self {
+        Self {
+            address8: false,
+            radix: Radix::Hex,
+        }
+    }
+}
 
 impl Display {
-    /// A byte or an address: hexadecimal, at least two digits.
+    fn number(self, value: u16, bits: u32) -> String {
+        match self.radix {
+            Radix::Hex => format!("0x{value:02X}"),
+            Radix::Dec => value.to_string(),
+            Radix::Bin => format!(
+                "0b{value:0width$b}",
+                width = usize::try_from(bits).unwrap_or(8)
+            ),
+        }
+    }
+
+    /// A data byte.
     #[must_use]
-    pub fn value(self, value: u16) -> String {
-        format!("0x{value:02X}")
+    pub fn byte(self, value: u16) -> String {
+        self.number(value, 8)
+    }
+
+    /// An address: 7 or 10 bits, or, with the 8-bit notation, a 7-bit address with the direction
+    /// bit. A 10-bit address is always shown as it is.
+    #[must_use]
+    pub fn address(self, address: u16, read: bool, ten_bit: bool) -> String {
+        if ten_bit {
+            self.number(address, 10)
+        } else if self.address8 {
+            self.number(address << 1 | u16::from(read), 8)
+        } else {
+            self.number(address, 7)
+        }
     }
 }
 

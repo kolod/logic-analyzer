@@ -20,11 +20,11 @@ use la_core::Error;
 
 use self::bus::{Bus, WORK_EDGES};
 use self::period::Period;
-use self::text::Display;
-use crate::descriptor::{Descriptor, Input, Signal};
+use self::text::{Display, Radix};
+use crate::descriptor::{Descriptor, Input, OptionKind, OptionSpec, Signal};
 use crate::input::{Chunk, SignalReader};
 use crate::run::{DecodeError, End, Run, Sink};
-use crate::setup::Setup;
+use crate::setup::{Setup, Value};
 
 /// The decoder id.
 pub const ID: &str = "i2c";
@@ -46,6 +46,32 @@ static SIGNALS: [Signal; 2] = [
     },
 ];
 
+static OPTIONS: [OptionSpec; 2] = [
+    OptionSpec {
+        id: "address",
+        label: "decoder-i2c-option-address",
+        kind: OptionKind::Choice {
+            choices: &[
+                ("addr7", "decoder-i2c-choice-address-addr7"),
+                ("addr8", "decoder-i2c-choice-address-addr8"),
+            ],
+            default: "addr7",
+        },
+    },
+    OptionSpec {
+        id: "radix",
+        label: "decoder-i2c-option-radix",
+        kind: OptionKind::Choice {
+            choices: &[
+                ("hex", "decoder-i2c-choice-radix-hex"),
+                ("dec", "decoder-i2c-choice-radix-dec"),
+                ("bin", "decoder-i2c-choice-radix-bin"),
+            ],
+            default: "hex",
+        },
+    },
+];
+
 /// The descriptor of the decoder.
 pub static DESCRIPTOR: Descriptor = Descriptor {
     id: ID,
@@ -53,7 +79,7 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
     name: "decoder-i2c-name",
     description: "decoder-i2c-description",
     signals: &SIGNALS,
-    options: &[],
+    options: &OPTIONS,
     input: Input::Signals,
     outputs: &[ITEM],
     generator: true,
@@ -142,10 +168,24 @@ pub fn create(setup: &Setup) -> Result<Box<dyn Run>, Error> {
             .copied()
             .ok_or_else(|| crate::error::invalid_setup(format!("channels.{role}: missing")))
     };
+    let choice = |id: &str| match setup.option_value(&DESCRIPTOR, id) {
+        Some(Value::Choice(value)) => Ok(value),
+        _ => Err(crate::error::invalid_setup(format!(
+            "options.{id}: invalid"
+        ))),
+    };
+    let display = Display {
+        address8: choice("address")? == "addr8",
+        radix: match choice("radix")?.as_str() {
+            "dec" => Radix::Dec,
+            "bin" => Radix::Bin,
+            _ => Radix::Hex,
+        },
+    };
     Ok(Box::new(I2c {
         scl_channel: channel("scl")?,
         sda_channel: channel("sda")?,
-        display: Display,
+        display,
         state: State::Calibrating(Box::new(Calibration {
             period: Period::new(),
             scan: 0,

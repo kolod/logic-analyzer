@@ -321,3 +321,31 @@ fn a_start_up_before_the_interface_is_set_up_leaves_no_trace_and_shifts_everythi
         let _: &Payload = &items[0].payload;
     }
 }
+
+#[test]
+fn ten_bit_addresses_round_trip_with_and_without_errors() {
+    let mut ten_bit_items = 0;
+    for seed in 0..300_u64 {
+        let setup = setup_with(&[
+            ("ten_bit", 1),
+            ("max_bytes", 1 + (seed % 6) as i64),
+            ("errors", (seed % 2) as i64),
+            ("error_rate", 3),
+        ]);
+        let length = frames(&setup, 8);
+        let words = generate(&setup, seed, length, 4_096);
+        let decoded = decode_with(&words, &[], &ChunkLimits::default());
+        let items = expected(&setup, seed, length as u64);
+        assert_eq!(decoded.items, items, "seed {seed}");
+        assert_eq!(
+            reported(&decoded),
+            planted(&setup, seed, length as u64),
+            "seed {seed}"
+        );
+        ten_bit_items += items
+            .iter()
+            .filter(|i| matches!(&i.payload, Payload::Bytes(b) if b[0] == 3 && b[3] == 1))
+            .count();
+    }
+    assert!(ten_bit_items > 400, "{ten_bit_items}");
+}

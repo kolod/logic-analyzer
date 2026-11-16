@@ -49,6 +49,8 @@ pub const OPTION_ERRORS: &str = "errors";
 /// The generator option: about one transaction in this many has an error (the key the application
 /// edits).
 pub const OPTION_ERROR_RATE: &str = "error_rate";
+/// The generator option: 1 uses 10-bit addresses.
+pub const OPTION_TEN_BIT: &str = "ten_bit";
 /// The generator option: 1 puts a start-up before the first frame.
 pub const OPTION_STARTUP: &str = "startup";
 /// The rate of errors when none is given.
@@ -102,7 +104,24 @@ pub struct Params {
     errors: bool,
     error_rate: u64,
     startup: bool,
+    ten_bit: bool,
     seed: u64,
+}
+
+/// What a byte of a transaction is.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Role {
+    /// A data byte.
+    #[default]
+    Data,
+    /// A 7-bit address with the direction bit.
+    Address,
+    /// The first byte of a 10-bit address, written.
+    Header,
+    /// The second byte of a 10-bit address.
+    Low,
+    /// The first byte of a 10-bit address again, in the read part after a repeated start.
+    ReadHeader,
 }
 
 /// One byte of a transaction as it is put on the bus.
@@ -112,10 +131,17 @@ struct Byte {
     value: u8,
     /// The ninth bit is high (not acknowledged).
     nak: bool,
-    /// An address byte.
-    address: bool,
+    /// What the byte is.
+    role: Role,
     /// The direction of the part the byte belongs to.
     read: bool,
+}
+
+impl Byte {
+    /// A byte that belongs to an address.
+    fn is_address(&self) -> bool {
+        self.role != Role::Data
+    }
 }
 
 /// Which error a frame carries.
@@ -156,6 +182,7 @@ impl Params {
             errors: option(OPTION_ERRORS, 0) != 0,
             error_rate: option(OPTION_ERROR_RATE, DEFAULT_ERROR_RATE).clamp(2, i64::MAX) as u64,
             startup: option(OPTION_STARTUP, 0) != 0,
+            ten_bit: option(OPTION_TEN_BIT, 0) != 0,
             seed: instance_seed(seed, setup.instance),
         })
     }
@@ -163,7 +190,7 @@ impl Params {
     /// The length of a frame in samples (it does not depend on the content).
     #[must_use]
     pub fn frame_length(&self) -> u64 {
-        let bytes = self.max_bytes + 2;
+        let bytes = self.max_bytes + if self.ten_bit { 3 } else { 2 };
         LEAD_IN + START + bytes * BYTE + RESTART + STOP + TAIL
     }
 
@@ -183,7 +210,7 @@ impl Params {
         let draw = |n: u64| mix(h ^ n.wrapping_mul(0x9E37_79B9_7F4A_7C15));
         let address = 0x08 + (draw(1) % 0x68) as u8;
         let read = draw(2) & 1 != 0;
-        let split = self.max_bytes >= 2 && draw(3) % 4 == 0;
+        let mut split = self.max_bytes >= 2 && draw(3) % 4 == 0;
         let mut frame = Frame {
             bytes: [Byte::default(); 12],
             count: 0,
@@ -197,40 +224,82 @@ impl Params {
             frame.count += 1;
         };
         let data = |index: u64| (draw(0x100 + index) & 0xFF) as u8;
-        let byte = |value: u8, nak: bool, address: bool, read: bool| Byte {
+        let byte = |value: u8, nak: bool, role: Role, read: bool| Byte {
             value,
             nak,
-            address,
+            role,
             read,
         };
-        if split {
+        if self.ten_bit {
+            // A 10-bit read is a write of the address, a repeated start and a read.
+            let ten = (draw(6) % 1024) as u16;
+            let (high, low) = ((ten >> 8) as u8, (ten & 0xFF) as u8);
+            let (header, read_header) = (0xF0 | high << 1, 0xF0 | high << 1 | 1);
+            split = (split || read) && self.max_bytes >= 2 || (read && self.max_bytes == 1);
+            push(&mut frame, byte(header, false, Role::Header, false));
+            push(&mut frame, byte(low, false, Role::Low, false));
+            if split {
+                let total = if self.max_bytes >= 2 {
+                    2 + draw(4) % (self.max_bytes - 1)
+                } else {
+                    1
+                };
+                let first = if total >= 2 {
+                    1 + draw(5) % (total - 1)
+                } else {
+                    0
+                };
+                for i in 0..first {
+                    push(&mut frame, byte(data(i), false, Role::Data, false));
+                }
+                frame.restart = true;
+                frame.restart_before = frame.count;
+                push(&mut frame, byte(read_header, false, Role::ReadHeader, true));
+                let second = total - first;
+                for i in 0..second {
+                    push(
+                        &mut frame,
+                        byte(data(first + i), i + 1 == second, Role::Data, true),
+                    );
+                }
+            } else {
+                let total = 1 + draw(4) % self.max_bytes;
+                for i in 0..total {
+                    push(&mut frame, byte(data(i), false, Role::Data, false));
+                }
+                frame.restart_before = frame.count;
+            }
+        } else if split {
             // A write of `first` bytes, a repeated start and a read of the rest.
             let total = 2 + draw(4) % (self.max_bytes - 1);
             let first = 1 + draw(5) % (total - 1);
-            push(&mut frame, byte(address << 1, false, true, false));
+            push(&mut frame, byte(address << 1, false, Role::Address, false));
             for i in 0..first {
-                push(&mut frame, byte(data(i), false, false, false));
+                push(&mut frame, byte(data(i), false, Role::Data, false));
             }
             frame.restart = true;
             frame.restart_before = frame.count;
-            push(&mut frame, byte(address << 1 | 1, false, true, true));
+            push(
+                &mut frame,
+                byte(address << 1 | 1, false, Role::Address, true),
+            );
             let second = total - first;
             for i in 0..second {
                 push(
                     &mut frame,
-                    byte(data(first + i), i + 1 == second, false, true),
+                    byte(data(first + i), i + 1 == second, Role::Data, true),
                 );
             }
         } else {
             let total = 1 + draw(4) % self.max_bytes;
             push(
                 &mut frame,
-                byte(address << 1 | u8::from(read), false, true, read),
+                byte(address << 1 | u8::from(read), false, Role::Address, read),
             );
             for i in 0..total {
                 push(
                     &mut frame,
-                    byte(data(i), read && i + 1 == total, false, read),
+                    byte(data(i), read && i + 1 == total, Role::Data, read),
                 );
             }
             frame.restart_before = frame.count;
@@ -245,7 +314,7 @@ impl Params {
     fn plant(&self, frame: &mut Frame, draw: &dyn Fn(u64) -> u64) {
         // A data byte written to the target, in the first part, that can go unacknowledged.
         let writable: Vec<usize> = (1..frame.restart_before.min(frame.count))
-            .filter(|i| !frame.bytes[*i].read && !frame.bytes[*i].address)
+            .filter(|i| !frame.bytes[*i].read && !frame.bytes[*i].is_address())
             .collect();
         let mut kind = draw(8) % 3;
         if kind == 1 && (writable.is_empty() || frame.bytes[0].read) {
@@ -253,10 +322,12 @@ impl Params {
         }
         match kind {
             0 => {
-                frame.count = 1;
+                // The address ends with its first byte, or with its second if it has two.
+                let last = usize::from(frame.bytes[0].role == Role::Header);
+                frame.count = last + 1;
                 frame.restart = false;
-                frame.restart_before = 1;
-                frame.bytes[0].nak = true;
+                frame.restart_before = frame.count;
+                frame.bytes[last].nak = true;
                 frame.planted = Planted::AddressNak;
             }
             1 => {
@@ -507,29 +578,46 @@ fn analyse(params: &Params, length: u64) -> Analysis {
             let ack = first + 8 * SLOT;
             // The byte counts once the clock pulse of its acknowledge bit has ended.
             if ack + 8 < length {
-                direction = if byte.read { items::READ } else { items::WRITE };
-                let error = byte.nak && (byte.address || !byte.read);
-                analysis.items.push(
-                    Event {
-                        kind: if byte.address {
-                            items::ADDRESS
-                        } else {
-                            items::DATA
-                        },
-                        direction,
-                        ack: if byte.nak { items::NAK } else { items::ACK },
-                        ten_bit: false,
-                        value: if byte.address {
-                            u16::from(byte.value >> 1)
-                        } else {
-                            u16::from(byte.value)
-                        },
-                        error,
-                    }
-                    .item(first, ack + 1),
-                );
+                let error = byte.nak && (byte.is_address() || !byte.read);
+                // Where its item begins, and the address it names.
+                let (begin, ten) = match byte.role {
+                    Role::Low => (
+                        base + Params::slot_start(&frame, index - 1) + 4,
+                        Some(
+                            u16::from(frame.bytes[index - 1].value >> 1 & 3) << 8
+                                | u16::from(byte.value),
+                        ),
+                    ),
+                    Role::ReadHeader => (
+                        first,
+                        Some(u16::from(byte.value >> 1 & 3) << 8 | u16::from(frame.bytes[1].value)),
+                    ),
+                    _ => (first, None),
+                };
+                if byte.role != Role::Header {
+                    direction = if byte.read { items::READ } else { items::WRITE };
+                    analysis.items.push(
+                        Event {
+                            kind: if byte.is_address() {
+                                items::ADDRESS
+                            } else {
+                                items::DATA
+                            },
+                            direction,
+                            ack: if byte.nak { items::NAK } else { items::ACK },
+                            ten_bit: ten.is_some(),
+                            value: match (byte.role, ten) {
+                                (_, Some(address)) => address,
+                                (Role::Address, None) => u16::from(byte.value >> 1),
+                                _ => u16::from(byte.value),
+                            },
+                            error,
+                        }
+                        .item(begin, ack + 1),
+                    );
+                }
                 if error {
-                    analysis.errors.push(if byte.address {
+                    analysis.errors.push(if byte.is_address() {
                         PlantedError::AddressNak { at: ack }
                     } else {
                         PlantedError::DataNak { at: ack }
