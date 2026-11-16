@@ -16,7 +16,7 @@ built and verified without capture hardware, using the virtual device.
 | 004 | `004-device-abstraction-virtual-device` (merged) | Common device abstraction (discovery, capabilities, configuration, sample stream), seeded virtual device, configuration validation, disconnect and buffer-overrun handling. | 002 |
 | 005 | `005-i18n-foundation` (merged) | Choice of the shared resource format and library (Fluent is the leading candidate), six languages, CLDR plurals, locale formatting, runtime language switch, key-parity check in CI. | 001 |
 | 006 | `006-ui-shell-signal-view` (merged) | UI toolkit choice, window shell, signal view (zoom, pan, markers), capture control, CJK and long German layout, user-facing error handling. | 002, 004, 005 |
-| 007 | `007-decoder-framework-annotations` (implemented) | Annotation model (lane and signal overlay: points, edge arrows, ranges), decoder stacking, fault isolation, background cancellable execution, indexed lookup. One sample decoder with its generator. | 002, 004, 006 |
+| 007 | `007-decoder-framework-annotations` (merged) | Annotation model (lane and signal overlay: points, edge arrows, ranges), decoder stacking, fault isolation, background cancellable execution, indexed lookup. One sample decoder with its generator. | 002, 004, 006 |
 | 008 | `008-i2c-decoder-generator` | I2C decoder with overlays (start/stop on SDA, sampling edge on SCL), generator for the virtual device, round-trip tests, deliberate errors (NAK). | 007 |
 | 009 | `009-decoded-log-export` | Decoded log export (CSV/text), versioned locale-independent format, streaming write, range selection, errors included in output. | 008 |
 | 010 | `010-high-level-decoder-stack` | First higher-level decoder on top of I2C (for example an EEPROM-like one) with its generator; validates end-to-end stacking. | 008 |
@@ -37,6 +37,10 @@ built and verified without capture hardware, using the virtual device.
   renderer, with the toolkit used for everything else).
 - The host API contract (`TODO(HOST_API_CONTRACT)`) appeared in 006: it lives in
   [docs/host-api.md](docs/host-api.md), versioned and checked against the code by a test.
+- The decoder contract appeared in 007: it lives in [docs/decoder-api.md](docs/decoder-api.md),
+  versioned and checked against the code by a test. 008 and 010 add decoders by registering a
+  descriptor (see "Adding a decoder" in [CONTRIBUTING.md](CONTRIBUTING.md)); they need no change to
+  the application shell.
 
 ## Risks and open questions
 
@@ -44,5 +48,7 @@ built and verified without capture hardware, using the virtual device.
   easier to make robust (Principle I); `.sr` is convenient for exchange with PulseView.
 - 013: the WeAct device protocol must be studied from its repository before the
   specification is written.
-- 007 is the riskiest item: the annotation model determines overlays, export and
-  generators.
+- 007 was the riskiest item: the annotation model determines overlays, export and
+  generators. It is merged; the open points it leaves are in its pull request (the wording of
+  Principle IX's overlay bound against Principle VIII, process isolation for future user-written
+  decoders, and the manual checks on Debian).
