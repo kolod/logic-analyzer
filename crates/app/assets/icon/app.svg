@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Logic analyzer</title>
+  <rect x="16" y="16" width="224" height="224" rx="44" ry="44" fill="#1f3a5f"/>
+  <g fill="none" stroke-width="14" stroke-linejoin="miter" stroke-linecap="square">
+    <polyline stroke="#4fd1c5" points="44,104 84,104 84,64 128,64 128,104 172,104 172,64 212,64"/>
+    <polyline stroke="#f6ad55" points="44,192 68,192 68,152 112,152 112,192 156,192 156,152 188,152 188,192 212,192"/>
+  </g>
+</svg>

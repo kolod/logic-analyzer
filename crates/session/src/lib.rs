@@ -33,6 +33,9 @@ pub use read::load_blocking;
 pub use session::{Section, Session, SessionData};
 pub use write::{SaveReport, save_blocking};
 
+/// The extension of a session file, without the dot.
+pub const FILE_EXTENSION: &str = "lasession";
+
 /// Test support (feature `test-support`; not part of the stable API): the file-system seam, a
 /// fault-injecting implementation and the entry points that take a file system.
 #[cfg(feature = "test-support")]

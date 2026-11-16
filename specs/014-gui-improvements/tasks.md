@@ -383,7 +383,7 @@ well-formed declarations.
 
 ### Tests for User Story 6 (write first; they must fail)
 
-- [ ] T045 [P] [US6] `crates/app/tests/icons.rs`: the files exist and have the right size: `assets/icon/app.svg` and
+- [X] T045 [P] [US6] `crates/app/tests/icons.rs`: the files exist and have the right size: `assets/icon/app.svg` and
   `session.svg` are well-formed XML with a `viewBox`; `app-16.png` to `app-256.png` (16, 32, 48, 64, 128, 256)
   start with the PNG signature and their IHDR width and height equal their names; `app.ico` starts with the ICO
   header and holds 16, 32, 48 and 256; `app-64.rgba` is exactly 64 x 64 x 4 bytes and not all one value;
@@ -395,21 +395,21 @@ well-formed declarations.
 
 ### Implementation for User Story 6
 
-- [ ] T046 [US6] The artwork and the script: hand-drawn `crates/app/assets/icon/app.svg` (a rounded square with a stylised
+- [X] T046 [US6] The artwork and the script: hand-drawn `crates/app/assets/icon/app.svg` (a rounded square with a stylised
   two-colour digital waveform) and `session.svg` (a page with a folded corner carrying the same waveform), original
   and with no raster or font; `tools/make_icons.py` (Python with Pillow, documented at its top: how to run, that it
   is not part of the build) that draws the same shapes and writes the PNGs, the `.ico` and the raw RGBA; run it and
   commit the outputs. Record in `docs/third-party-notices.md` that the icons are original works of the project under
   GPL-3.0.
-- [ ] T047 [US6] `crates/app/src/main.rs`: the window icon from `include_bytes!("../assets/icon/app-64.rgba")` through
+- [X] T047 [US6] `crates/app/src/main.rs`: the window icon from `include_bytes!("../assets/icon/app-64.rgba")` through
   `iced::window::icon::from_rgba` in the window settings (a failure to build it logs a warning and runs without,
   never stops the application).
-- [ ] T048 [US6] `crates/app/build.rs` and `crates/app/Cargo.toml`: on Windows, put `assets/icon/app.ico` into the executable
+- [X] T048 [US6] `crates/app/build.rs` and `crates/app/Cargo.toml`: on Windows, put `assets/icon/app.ico` into the executable
   with `winresource` (a `[target.'cfg(windows)'.build-dependencies]` entry, pinned by `Cargo.lock`); the script does
   nothing on other systems and does not fail the build when the resource compiler is missing (a warning). Run
   `cargo deny check` (CI) and the MSRV job: if either refuses the dependency, delete this task's code, say so in
   `plan.md`'s Complexity Tracking and `verification.md`, and keep T047 only.
-- [ ] T049 [US6] `packaging/linux/logic-analyzer.desktop`, `packaging/linux/logic-analyzer-session.xml`,
+- [X] T049 [US6] `packaging/linux/logic-analyzer.desktop`, `packaging/linux/logic-analyzer-session.xml`,
   `packaging/windows/README.md` per the test of T045 (what the installer of 015+ must register). T045 passes.
 
 **Checkpoint**: US6 works.
