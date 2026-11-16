@@ -21,7 +21,7 @@ const BOUNDS: Bounds = Bounds {
 
 fn style() -> Style {
     Style {
-        colour: 2,
+        colour: Some(2),
         shape: Shape::Dot,
     }
 }
@@ -157,13 +157,17 @@ fn an_overlay_must_target_an_existing_channel() {
 fn the_style_must_come_from_the_fixed_sets() {
     for colour in 0..COLOURS {
         let mut a = plain(Kind::Point { at: 1 });
-        a.style.colour = colour;
+        a.style.colour = Some(colour);
         assert_eq!(a.validate(&BOUNDS), Ok(()), "colour {colour}");
     }
     let mut a = plain(Kind::Point { at: 1 });
-    a.style.colour = COLOURS;
+    a.style.colour = Some(COLOURS);
     assert_eq!(a.validate(&BOUNDS), Err(Refusal::Style));
-    a.style.colour = 255;
+    a.style.colour = Some(255);
+    // No colour is valid: the signal's colour is used.
+    a.style.colour = None;
+    assert_eq!(a.validate(&BOUNDS), Ok(()));
+    a.style.colour = Some(255);
     assert_eq!(a.validate(&BOUNDS), Err(Refusal::Style));
 }
 

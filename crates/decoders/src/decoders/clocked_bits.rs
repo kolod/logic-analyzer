@@ -30,11 +30,10 @@ const MSG_BIT: &str = "ann-sample-clocked-bits-bit";
 const MSG_INCOMPLETE: &str = "ann-sample-clocked-bits-incomplete";
 const MSG_GAP: &str = "ann-sample-clocked-bits-gap";
 
-/// The colour of bytes and bits, of the edge arrows, of the data dots (indexes of the palette).
+/// The colour of bytes, bits and errors in the lane (indexes of the palette). The marks on the
+/// signals (the edge arrows and the data dots) name no colour: they take the one of their signal.
 const COLOUR_BYTE: u8 = 0;
 const COLOUR_BIT: u8 = 1;
-const COLOUR_CLOCK: u8 = 2;
-const COLOUR_DATA: u8 = 3;
 const COLOUR_ERROR: u8 = 4;
 
 static SIGNALS: [Signal; 2] = [
@@ -172,7 +171,18 @@ pub fn create(setup: &Setup) -> Result<Box<dyn Run>, Error> {
 }
 
 fn style(colour: u8, shape: Shape) -> Style {
-    Style { colour, shape }
+    Style {
+        colour: Some(colour),
+        shape,
+    }
+}
+
+/// A style that leaves the colour to the signal the mark is on.
+fn signal_style(shape: Shape) -> Style {
+    Style {
+        colour: None,
+        shape,
+    }
 }
 
 fn message(key: &'static str, args: Vec<String>) -> Text {
@@ -251,7 +261,7 @@ impl ClockedBits {
             sink.annotate(Annotation {
                 kind: Kind::Point { at: position },
                 target: Target::Channel(self.data_channel),
-                style: style(COLOUR_DATA, Shape::Dot),
+                style: signal_style(Shape::Dot),
                 text: message(MSG_BIT, vec![u8::from(bit).to_string()]),
                 error: false,
             })?;
@@ -271,7 +281,7 @@ impl ClockedBits {
                 rising: self.rising,
             },
             target: Target::Channel(self.clock_channel),
-            style: style(COLOUR_CLOCK, Shape::Arrow),
+            style: signal_style(Shape::Arrow),
             text: message(MSG_BIT, vec![u8::from(bit).to_string()]),
             error: false,
         })?;

@@ -131,7 +131,10 @@ fn annotation(
     Annotation {
         kind,
         target,
-        style: Style { colour, shape },
+        style: Style {
+            colour: Some(colour),
+            shape,
+        },
         text,
         error,
     }
@@ -424,4 +427,29 @@ fn a_randomized_fuzzer_finds_nothing() {
             assert_eq!(encode(&blocks), bytes);
         }
     }
+}
+
+#[test]
+fn an_annotation_without_a_colour_round_trips_and_is_written_with_bit_seven() {
+    let mut a = annotation(
+        Kind::Point { at: 5 },
+        Target::Channel(1),
+        0,
+        Shape::Dot,
+        Text::Literal("x".into()),
+        false,
+    );
+    a.style.colour = None;
+    let block = Block {
+        instance: 1,
+        setup_version: 1,
+        covered: 10,
+        incomplete: false,
+        annotations: vec![a.clone()],
+        items: vec![],
+    };
+    let bytes = encode(std::slice::from_ref(&block));
+    assert_eq!(decode(&bytes, &CONTEXT).unwrap(), vec![block]);
+    // Bit 7 of the style byte means "the colour of the signal"; the colour bits are then zero.
+    assert!(bytes.contains(&0x80), "{bytes:?}");
 }

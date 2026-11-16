@@ -113,7 +113,7 @@ struct Fixture {
 
 fn style() -> Style {
     Style {
-        colour: 0,
+        colour: Some(0),
         shape: Shape::Bar,
     }
 }

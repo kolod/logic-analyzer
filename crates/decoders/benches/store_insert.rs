@@ -28,7 +28,7 @@ fn annotation(at: u64) -> Annotation {
         },
         target: Target::Lane,
         style: Style {
-            colour: 0,
+            colour: Some(0),
             shape: Shape::Bar,
         },
         text: Text::Literal(String::new()),

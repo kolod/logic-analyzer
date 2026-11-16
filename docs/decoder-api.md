@@ -97,9 +97,11 @@ emit(Item)           -> Result<(), Limit>     // what a decoder above it in a st
 ```
 
 An **annotation** has a kind (`Range { start, end }` with `start <= end`, `Point { at }` or
-`Edge { at, rising }`), a target (`Lane` or an overlay on `Channel(c)`), a style (colour 0 to 7 and a
-shape), a text (`Message { key, args }` with at most 4 arguments of at most 64 bytes, or `Literal` of at
-most 256 bytes) and an error flag. An **item** has a kind the decoder declared, a span, a payload (an
+`Edge { at, rising }`), a target (`Lane` or an overlay on `Channel(c)`), a style (an optional colour 0 to 7
+and a shape), a text (`Message { key, args }` with at most 4 arguments of at most 64 bytes, or `Literal` of at
+most 256 bytes) and an error flag. A mark on a signal (an overlay) is drawn centred in the lane of its
+channel; the arrow of an edge is always in the colour of that signal, and any other mark is too unless
+the decoder names a colour, so a decoder need not know about the colours the user chose. An **item** has a kind the decoder declared, a span, a payload (an
 integer, at most 64 bytes of bytes or text) and an error flag; the `end` of items never decreases.
 
 Everything written is sanitized (control, bidirectional and invisible characters removed) and validated

@@ -38,11 +38,16 @@ pub struct Look<'a> {
     pub theme: &'a Theme,
 }
 
-fn colour_of(style: Style, error: bool, look: &Look<'_>) -> Color {
+/// The colour of an annotation: the danger colour for an error; the decoder's colour when it names
+/// one; else the colour of the signal the mark is on (a mark in the lane has no signal and takes
+/// the text colour).
+fn colour_of(style: Style, error: bool, signal: Option<Color>, look: &Look<'_>) -> Color {
     if error {
         look.theme.palette().danger
+    } else if let Some(index) = style.colour {
+        look.variant.annotation(index)
     } else {
-        look.variant.annotation(style.colour)
+        signal.unwrap_or(look.theme.palette().text)
     }
 }
 
@@ -100,6 +105,28 @@ fn draw_shape(frame: &mut Frame, shape: Shape, edge: Option<bool>, x: f32, y: f3
     }
 }
 
+/// The least room, in logical pixels, each mark needs on average to be told from its neighbours.
+pub const MIN_MARK_SPACING: f32 = 8.0;
+
+/// Whether the marks of a plan can be told apart at this zoom: no two of them share a column (no
+/// dense cell) and they are not closer together, on average, than [`MIN_MARK_SPACING`]. When they
+/// cannot, none of them is drawn (nor the dense cells that stand for them): a field of marks that
+/// merge says nothing. Ranges wide enough to be spans are not marks and are always drawn; the plan
+/// itself still holds every annotation, so zooming in shows them again.
+#[must_use]
+pub fn marks_legible(plan: &Plan, width: f32) -> bool {
+    if !plan.dense.is_empty() {
+        return false;
+    }
+    let marks = plan
+        .rows
+        .iter()
+        .flatten()
+        .filter(|cell| matches!(cell, Cell::Mark(_)))
+        .count();
+    marks as f32 * MIN_MARK_SPACING <= width
+}
+
 /// The fewest characters of a text worth drawing in a span: under this, the span is a plain bar.
 pub const MIN_LABEL_CHARS: usize = 3;
 /// The width of a character of the label, in logical pixels, and the room kept at the left.
@@ -143,6 +170,8 @@ fn is_selected(look: &Look<'_>, instance: u32, target: Target, id: u64, start: u
 /// How a span is placed among its neighbours.
 #[derive(Clone, Copy)]
 struct Placement {
+    /// The colour of the signal it is on, for a span that names no colour.
+    signal: Option<Color>,
     /// Whether it is the selected annotation.
     selected: bool,
     /// The left edge of the cell after it, which it must not reach into.
@@ -159,6 +188,7 @@ fn draw_span(
     look: &Look<'_>,
 ) {
     let Placement {
+        signal,
         selected,
         right_limit,
     } = placement;
@@ -168,7 +198,7 @@ fn draw_span(
     let x1 = GUTTER + cell.x1 as f32 * scale;
     let x1 = right_limit.map_or(x1, |limit| x1.min(limit.max(x0)));
     let width = (x1 - x0).max(1.0);
-    let colour = colour_of(cell.style, cell.error, look);
+    let colour = colour_of(cell.style, cell.error, signal, look);
     frame.fill_rectangle(
         Point::new(x0, top),
         Size::new(width, height),
@@ -207,10 +237,16 @@ fn draw_mark(
     y: f32,
     scale: f32,
     selected: bool,
+    signal: Option<Color>,
     look: &Look<'_>,
 ) {
     let x = GUTTER + cell.x as f32 * scale;
-    let colour = colour_of(cell.style, cell.error, look);
+    // The arrow of an edge is always in the colour of its signal (unless it reports an error).
+    let colour = if cell.edge.is_some() && !cell.error {
+        signal.unwrap_or_else(|| colour_of(cell.style, false, None, look))
+    } else {
+        colour_of(cell.style, cell.error, signal, look)
+    };
     if selected {
         frame.stroke(
             &Path::circle(Point::new(x, y), 7.0),
@@ -254,12 +290,16 @@ pub fn draw_lanes(
             align_y: Vertical::Center,
             ..Text::default()
         });
+        let legible = marks_legible(&decoder.plan, plan.pixels as f32 * scale);
         let rows = decoder.plan.rows.len().max(1);
         let usable = lane - STRIP - 6.0;
         let row_height = (usable / rows as f32).min(24.0);
         for (r, row) in decoder.plan.rows.iter().enumerate() {
             let row_top = top + 3.0 + r as f32 * row_height;
             for (at, cell) in row.iter().enumerate() {
+                if !legible && matches!(cell, Cell::Mark(_)) {
+                    continue;
+                }
                 let right_limit = row
                     .get(at.saturating_add(1))
                     .map(|next| left_of(next, scale));
@@ -271,6 +311,7 @@ pub fn draw_lanes(
                         row_height - 2.0,
                         scale,
                         Placement {
+                            signal: None,
                             selected: is_selected(
                                 look,
                                 decoder.instance,
@@ -288,13 +329,16 @@ pub fn draw_lanes(
                         row_top + row_height / 2.0,
                         scale,
                         is_selected(look, decoder.instance, Target::Lane, mark.id, mark.start),
+                        None,
                         look,
                     ),
                 }
             }
         }
-        for cell in &decoder.plan.dense {
-            draw_dense(frame, cell, top + lane - STRIP - 2.0, scale, look);
+        if legible {
+            for cell in &decoder.plan.dense {
+                draw_dense(frame, cell, top + lane - STRIP - 2.0, scale, look);
+            }
         }
         if decoder.incomplete {
             // Results that are not whole are marked along the bottom of the lane.
@@ -323,6 +367,7 @@ pub fn draw_overlays(
     frame: &mut Frame,
     plan: &FramePlan,
     lane_top: &dyn Fn(usize) -> f32,
+    lane: f32,
     scale: f32,
     look: &Look<'_>,
 ) {
@@ -334,25 +379,37 @@ pub fn draw_overlays(
         else {
             continue;
         };
-        let top = lane_top(index);
+        // Everything an overlay draws is centred in the lane of its channel, on the signal's
+        // line of travel, and takes the colour of that signal unless it names its own.
+        let centre = lane_top(index) + lane / 2.0;
+        let signal = plan
+            .channels
+            .get(index)
+            .map(|c| look.variant.channel(c.colour));
+        let legible = marks_legible(&overlay.plan, plan.pixels as f32 * scale);
         for cell in overlay.plan.rows.iter().flatten() {
+            if !legible && matches!(cell, Cell::Mark(_)) {
+                continue;
+            }
             let target = Target::Channel(overlay.channel);
             match cell {
                 Cell::Mark(mark) => draw_mark(
                     frame,
                     mark,
-                    top + OVERLAY_BAND / 2.0 + 1.0,
+                    centre,
                     scale,
                     is_selected(look, overlay.instance, target, mark.id, mark.start),
+                    signal,
                     look,
                 ),
                 Cell::Span(span) => draw_span(
                     frame,
                     span,
-                    top + 1.0,
+                    centre - OVERLAY_BAND / 2.0 + 1.0,
                     OVERLAY_BAND - 2.0,
                     scale,
                     Placement {
+                        signal,
                         selected: is_selected(look, overlay.instance, target, span.id, span.start),
                         right_limit: None,
                     },
@@ -360,8 +417,10 @@ pub fn draw_overlays(
                 ),
             }
         }
-        for cell in &overlay.plan.dense {
-            draw_dense(frame, cell, top + 1.0, scale, look);
+        if legible {
+            for cell in &overlay.plan.dense {
+                draw_dense(frame, cell, centre - STRIP / 2.0, scale, look);
+            }
         }
     }
 }
@@ -389,6 +448,7 @@ fn pick_in(
     x: f32,
     scale: f32,
     rows: Option<(f32, f32)>,
+    marks: bool,
 ) -> Option<(u64, u64, u64, la_decoders::model::Text, bool)> {
     let column = (x - GUTTER) / scale;
     for (r, row) in plan.rows.iter().enumerate() {
@@ -400,7 +460,7 @@ fn pick_in(
         }
         for cell in row {
             match cell {
-                Cell::Mark(m) if (m.x as f32 - column).abs() * scale <= PICK => {
+                Cell::Mark(m) if marks && (m.x as f32 - column).abs() * scale <= PICK => {
                     return Some((m.id, m.start, m.end, m.text.clone(), m.error));
                 }
                 Cell::Span(s) if column >= s.x0 as f32 && column <= s.x1 as f32 => {
@@ -432,9 +492,13 @@ pub fn hit_test(
             let rows = decoder.plan.rows.len().max(1);
             let row_height = ((lane - STRIP - 6.0) / rows as f32).min(24.0);
             let y = position.y - top - 3.0;
-            if let Some((id, start, end, text, error)) =
-                pick_in(&decoder.plan, position.x, scale, Some((y, row_height)))
-            {
+            if let Some((id, start, end, text, error)) = pick_in(
+                &decoder.plan,
+                position.x,
+                scale,
+                Some((y, row_height)),
+                marks_legible(&decoder.plan, plan.pixels as f32 * scale),
+            ) {
                 return Some(Hit {
                     instance: decoder.instance,
                     annotation: AnnotationRef {
@@ -459,11 +523,17 @@ pub fn hit_test(
             continue;
         };
         let top = lane_top(index);
-        if position.y < top || position.y >= top + OVERLAY_BAND + 4.0 {
+        // The overlays are centred in the lane of their channel.
+        if (position.y - (top + lane / 2.0)).abs() > OVERLAY_BAND / 2.0 + 3.0 {
             continue;
         }
-        if let Some((id, start, end, text, error)) = pick_in(&overlay.plan, position.x, scale, None)
-        {
+        if let Some((id, start, end, text, error)) = pick_in(
+            &overlay.plan,
+            position.x,
+            scale,
+            None,
+            marks_legible(&overlay.plan, plan.pixels as f32 * scale),
+        ) {
             return Some(Hit {
                 instance: overlay.instance,
                 annotation: AnnotationRef {
@@ -527,5 +597,56 @@ mod tests {
         .unwrap();
         assert!(label.chars().count() <= 5);
         assert!(label.ends_with('\u{2026}'));
+    }
+
+    fn mark(x: f64) -> Cell {
+        Cell::Mark(la_decoders::lanes::MarkCell {
+            id: 0,
+            start: 0,
+            end: 0,
+            text: la_decoders::model::Text::Literal(String::new()),
+            x,
+            style: Style {
+                colour: None,
+                shape: Shape::Dot,
+            },
+            edge: None,
+            error: false,
+        })
+    }
+
+    #[test]
+    fn a_few_marks_with_room_between_them_are_legible() {
+        let plan = Plan {
+            rows: vec![(0..10).map(|i| mark(f64::from(i) * 50.0)).collect()],
+            ..Plan::default()
+        };
+        assert!(marks_legible(&plan, 1_000.0));
+    }
+
+    #[test]
+    fn too_many_marks_for_the_width_are_not_drawn_at_all() {
+        let plan = Plan {
+            rows: vec![(0..200).map(|i| mark(f64::from(i) * 5.0)).collect()],
+            ..Plan::default()
+        };
+        // 200 marks need 1,600 pixels at 8 pixels each.
+        assert!(!marks_legible(&plan, 1_000.0));
+        assert!(marks_legible(&plan, 1_600.0));
+    }
+
+    #[test]
+    fn a_dense_cell_means_the_marks_cannot_be_told_apart() {
+        let plan = Plan {
+            rows: vec![vec![mark(10.0)]],
+            dense: vec![la_decoders::lanes::DenseCell {
+                column: 30,
+                count: 3,
+                errors: 0,
+            }],
+            ..Plan::default()
+        };
+        assert!(!marks_legible(&plan, 1_000.0));
+        assert!(marks_legible(&Plan::default(), 1_000.0));
     }
 }

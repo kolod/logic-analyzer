@@ -101,8 +101,8 @@ the bits into bytes.
    hexadecimal), a dot is a bit, and an arrow on the clock channel marks every sampled edge; a dot on
    the data channel marks the first bit of a byte. Annotations drawn in red report a problem in the
    signal, such as a byte that was cut short or samples that were lost. When there are too many
-   annotations for the width of the view, a small block shows how many are there (red if one of them
-   is an error); zoom in to see them one by one.
+   marks for the width of the view to tell them apart, none of them is drawn (the ranges that are wide
+   enough still are); zoom in and they appear.
 4. Click an annotation to select it: the panel shows its text, position, length in time and whether it
    is an error. Click it twice to bring it into view. **F8** and **Shift+F8** select the next and the
    previous annotation, and **Ctrl+F8** goes to the selected one.

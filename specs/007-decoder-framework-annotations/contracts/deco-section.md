@@ -76,7 +76,7 @@ repeat block_count times, a record whose content is:
         start      varint      delta from the previous start
         length     varint      for a range; 0 otherwise
         target     varint      0 = lane, otherwise channel + 1 (1..=32)
-        style      u8          low 3 bits colour 0..7, next 3 bits shape 0..4, bit 6 error, bit 7 reserved 0
+        style      u8          low 3 bits colour 0..7, next 3 bits shape 0..4, bit 6 error, bit 7 "no colour" (the colour of the signal; the colour bits are then 0)
         text       u8          0 literal, 1 message
         text_data  literal: string 0..=256 bytes; message: varint table index, varint arg_count 0..=4, args as strings 0..=64
     items          items_count entries, ordered by end, each:

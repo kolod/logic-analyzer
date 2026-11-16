@@ -35,11 +35,14 @@ pub enum Shape {
     Cross,
 }
 
-/// How an annotation is drawn: an index into the fixed colour palette and a shape.
+/// How an annotation is drawn: an optional index into the fixed colour palette and a shape.
+///
+/// A decoder that names no colour (`None`) leaves it to the interface, which draws the mark in the
+/// colour of the signal it is on, so that a decoder need not know about the colours of the user.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Style {
-    /// Index into the palette, below [`COLOURS`].
-    pub colour: u8,
+    /// Index into the palette, below [`COLOURS`], or `None` for the colour of the signal.
+    pub colour: Option<u8>,
     /// The shape.
     pub shape: Shape,
 }
@@ -218,7 +221,7 @@ impl Annotation {
                 return Err(Refusal::Target);
             }
         }
-        if self.style.colour >= COLOURS {
+        if self.style.colour.is_some_and(|c| c >= COLOURS) {
             return Err(Refusal::Style);
         }
         match &self.text {

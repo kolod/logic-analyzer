@@ -236,7 +236,7 @@ impl SignalView<'_> {
             scale,
             &look,
         );
-        decoder_view::draw_overlays(frame, plan, &lane_top, scale, &look);
+        decoder_view::draw_overlays(frame, plan, &lane_top, lane, scale, &look);
         for marker in &plan.markers {
             let x = GUTTER + marker.x as f32 * scale;
             let accent = palette.primary;

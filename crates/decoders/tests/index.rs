@@ -19,7 +19,7 @@ fn annotation(kind: Kind, error: bool) -> Annotation {
         kind,
         target: Target::Lane,
         style: Style {
-            colour: 1,
+            colour: Some(1),
             shape: Shape::Dot,
         },
         text: Text::Literal("t".into()),

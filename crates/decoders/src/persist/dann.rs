@@ -117,7 +117,10 @@ pub fn encode(blocks: &[Block]) -> Vec<u8> {
                 Target::Lane => 0,
                 Target::Channel(c) => u64::from(c).saturating_add(1),
             });
-            b.u8(annotation.style.colour
+            // Bits 0 to 2 the colour, 3 to 5 the shape, 6 the error flag, 7 "no colour" (the colour
+            // of the signal), in which case the colour bits are zero.
+            let colour = annotation.style.colour.map_or(0x80, |c| c & 7);
+            b.u8(colour
                 | (shape_code(annotation.style.shape) << 3)
                 | (u8::from(annotation.error) << 6));
             match &annotation.text {
@@ -243,7 +246,7 @@ fn read_blocks(reader: &mut Reader<'_>, context: &Context<'_>) -> Result<Vec<Blo
             let length = r.varint()?;
             let target = r.bounded(32)?;
             let style = r.u8()?;
-            if style & 0x80 != 0 {
+            if style & 0x80 != 0 && style & 7 != 0 {
                 return Err(Invalid("a reserved bit is set"));
             }
             let text_kind = r.u8()?;
@@ -307,7 +310,7 @@ fn read_blocks(reader: &mut Reader<'_>, context: &Context<'_>) -> Result<Vec<Blo
                     ),
                 },
                 style: Style {
-                    colour: style & 7,
+                    colour: (style & 0x80 == 0).then_some(style & 7),
                     shape: shape_of((style >> 3) & 7)?,
                 },
                 text,

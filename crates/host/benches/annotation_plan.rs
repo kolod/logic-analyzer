@@ -78,7 +78,7 @@ fn store(count: u64, length: u64) -> Store {
                 kind,
                 target: Target::Lane,
                 style: Style {
-                    colour: 1,
+                    colour: Some(1),
                     shape: Shape::Dot,
                 },
                 text: Text::Literal(String::new()),

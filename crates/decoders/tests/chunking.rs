@@ -83,7 +83,7 @@ struct Recorder {
 
 fn style() -> Style {
     Style {
-        colour: 0,
+        colour: Some(0),
         shape: Shape::Dot,
     }
 }
