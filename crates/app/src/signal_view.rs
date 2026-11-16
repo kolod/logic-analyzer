@@ -34,6 +34,10 @@ const TEXT_SIZE: f32 = 13.0;
 const DRAG_THRESHOLD: f32 = 4.0;
 /// Two presses on a border this close in time are a double click.
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
+/// The distance of the high and low levels of a waveform from the top and the bottom of its lane.
+/// A dense band has the same extent, so that a lone dense column is a vertical stroke of the signal
+/// and never a mark above or below its levels.
+const WAVE_MARGIN: f32 = 7.0;
 /// How far one notch of the wheel scrolls the legend.
 const SCROLL_STEP: f32 = 30.0;
 /// The side of a button that scrolls to the next edge.
@@ -294,7 +298,12 @@ impl SignalView<'_> {
             );
             self.draw_bands(frame, &channel.segments, top, lane, scale, colour);
             frame.stroke(
-                &waveform(&channel.segments, scale, top + 7.0, top + lane - 7.0),
+                &waveform(
+                    &channel.segments,
+                    scale,
+                    top + WAVE_MARGIN,
+                    top + lane - WAVE_MARGIN,
+                ),
                 Stroke::default().with_color(colour).with_width(1.6),
             );
         }
@@ -432,7 +441,7 @@ impl SignalView<'_> {
             };
             let x = GUTTER + from as f32 * scale;
             let width = (to.saturating_sub(from) as f32 * scale).max(1.0);
-            let (y, height) = (top + 3.0, lane - 6.0);
+            let (y, height) = band_extent(kind, top, lane);
             match kind {
                 // Dense activity: a band with a solid border in the channel colour.
                 0 => {
@@ -499,6 +508,13 @@ impl SignalView<'_> {
         }
         flush(frame, &mut run);
     }
+}
+
+/// The top and the height of a band of kind `kind` (0 dense, 1 gap, 2 past the end) in a lane. A
+/// dense band spans exactly the levels of the waveform.
+fn band_extent(kind: u8, top: f32, lane: f32) -> (f32, f32) {
+    let margin = if kind == 0 { WAVE_MARGIN } else { 3.0 };
+    (top + margin, lane - 2.0 * margin)
 }
 
 /// The path of a waveform: levels as horizontal lines, single transitions as vertical lines at
@@ -1144,6 +1160,21 @@ mod tests {
             let (message, redraw, _) = action.into_inner();
             (message, redraw)
         })
+    }
+
+    #[test]
+    fn a_dense_band_spans_the_levels_of_the_waveform_and_never_more() {
+        for lane in [24.0_f32, 30.0, 72.0, 240.0] {
+            let (y, height) = band_extent(0, 100.0, lane);
+            assert!((y - (100.0 + WAVE_MARGIN)).abs() < f32::EPSILON, "{lane}");
+            assert!(
+                (y + height - (100.0 + lane - WAVE_MARGIN)).abs() < f32::EPSILON,
+                "{lane}"
+            );
+            // Gaps and the part past the end keep their wider band.
+            let (gap_y, _) = band_extent(1, 100.0, lane);
+            assert!(gap_y < y);
+        }
     }
 
     #[test]
