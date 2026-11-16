@@ -38,6 +38,8 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// A dense band has the same extent, so that a lone dense column is a vertical stroke of the signal
 /// and never a mark above or below its levels.
 const WAVE_MARGIN: f32 = 7.0;
+/// Far enough above the view that a lane moved there is not drawn.
+const OFF_SCREEN: f32 = 100_000.0;
 /// How far one notch of the wheel scrolls the legend.
 const SCROLL_STEP: f32 = 30.0;
 /// The side of a button that scrolls to the next edge.
@@ -105,6 +107,11 @@ pub struct ViewState {
     drag: Option<Drag>,
     /// The last press on a border, for the double click.
     last_border: Option<(Instant, usize)>,
+    /// How far each channel lane is moved aside, right now, while a lane is carried: the lanes
+    /// between the old slot and the new one make room (see [`Layout::shifts`]).
+    shifts: Vec<f32>,
+    /// When the shifts were last advanced.
+    anim_at: Option<Instant>,
 }
 
 fn message(localizer: &Localizer, key: &'static str) -> String {
@@ -230,7 +237,7 @@ impl SignalView<'_> {
         Some((sample, channel))
     }
 
-    fn draw_plan(&self, frame: &mut Frame, size: Size, theme: &Theme, scroll: f32) {
+    fn draw_plan(&self, frame: &mut Frame, size: Size, theme: &Theme, scroll: f32, shifts: &[f32]) {
         let palette = theme.palette();
         let text_colour = palette.text;
         let plan = self.plan;
@@ -258,7 +265,10 @@ impl SignalView<'_> {
         let area_width = (size.width - GUTTER).max(1.0);
         let scale = area_width / plan.pixels.max(1) as f32;
         let layout = self.layout(size.height, scroll);
-        let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
+        let lane_top = |index: usize| {
+            layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top)
+                + shifts.get(index).copied().unwrap_or(0.0)
+        };
         let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
         let hairline = self.variant.hairline();
 
@@ -580,6 +590,31 @@ impl canvas::Program<Message> for SignalView<'_> {
             return Some(canvas::Action::publish(Message::AreaResized(width)));
         }
         match event {
+            // A carried lane: the lanes between its old slot and its new one slide aside.
+            canvas::Event::Window(iced::window::Event::RedrawRequested(now)) => {
+                let Some(Drag::Lane { from, y }) = state.drag else {
+                    return None;
+                };
+                let layout = self.layout(bounds.height, state.scroll);
+                let count = self.plan.channels.len();
+                let targets = layout.shifts(from, layout.move_target(from, y), count);
+                let dt = state
+                    .anim_at
+                    .map_or(0.0, |t| now.saturating_duration_since(t).as_secs_f32())
+                    .min(0.1);
+                state.shifts.resize(count, 0.0);
+                let mut moving = false;
+                for (current, target) in state.shifts.iter_mut().zip(&targets) {
+                    *current = lane_layout::ease(*current, *target, dt);
+                    if (*current - *target).abs() > 0.3 {
+                        moving = true;
+                    } else {
+                        *current = *target;
+                    }
+                }
+                state.anim_at = moving.then_some(*now);
+                moving.then(canvas::Action::request_redraw)
+            }
             canvas::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
                 state.modifiers = *modifiers;
                 None
@@ -772,6 +807,8 @@ impl canvas::Program<Message> for SignalView<'_> {
                         let far = (position.x - press.at.x).hypot(position.y - press.at.y)
                             > DRAG_THRESHOLD;
                         if press.zone == Zone::Name && far {
+                            state.shifts = vec![0.0; self.plan.channels.len()];
+                            state.anim_at = None;
                             state.drag = Some(Drag::Lane {
                                 from: press.lane,
                                 y: position.y,
@@ -822,6 +859,8 @@ impl canvas::Program<Message> for SignalView<'_> {
                 state.drag_marker = None;
                 let press = state.press.take();
                 let drag = state.drag.take();
+                state.shifts.clear();
+                state.anim_at = None;
                 let position = cursor.position_in(bounds);
                 let layout = self.layout(bounds.height, state.scroll);
                 match (drag, press) {
@@ -877,11 +916,25 @@ impl canvas::Program<Message> for SignalView<'_> {
         cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
         let size = bounds.size();
-        let waveforms = self.cache.draw(renderer, size, |frame| {
-            let started = Instant::now();
-            self.draw_plan(frame, size, theme, state.scroll);
-            crate::frame_log::record(crate::frame_log::Stage::Draw, started.elapsed());
-        });
+        // While a lane is carried the others make room, so the layer is drawn afresh at their
+        // moved places (the cache keeps the lanes at rest); the carried lane is left out of it and
+        // drawn under the pointer in the overlay.
+        let waveforms = if let Some(Drag::Lane { from, .. }) = state.drag {
+            let mut shifts = state.shifts.clone();
+            shifts.resize(self.plan.channels.len().max(from.saturating_add(1)), 0.0);
+            if let Some(carried) = shifts.get_mut(from) {
+                *carried = -OFF_SCREEN;
+            }
+            let mut frame = Frame::new(renderer, size);
+            self.draw_plan(&mut frame, size, theme, state.scroll, &shifts);
+            frame.into_geometry()
+        } else {
+            self.cache.draw(renderer, size, |frame| {
+                let started = Instant::now();
+                self.draw_plan(frame, size, theme, state.scroll, &[]);
+                crate::frame_log::record(crate::frame_log::Stage::Draw, started.elapsed());
+            })
+        };
         let mut overlay = Frame::new(renderer, size);
         if let Some(position) = cursor.position_in(bounds) {
             self.draw_hover(&mut overlay, size, position, theme, state.scroll);
@@ -981,8 +1034,8 @@ impl SignalView<'_> {
     }
 
     /// The lane that is being moved, lifted under the pointer as a whole (its background, its
-    /// bands and its signal, the full width of the view), the gap it leaves, and the line where it
-    /// will land.
+    /// bands and its signal, the full width of the view), and the line where it will land (the
+    /// other lanes make room there, see `shifts`).
     fn draw_lane_drag(&self, frame: &mut Frame, size: Size, theme: &Theme, state: &ViewState) {
         let Some(Drag::Lane { from, y }) = state.drag else {
             return;
@@ -1000,15 +1053,6 @@ impl SignalView<'_> {
             return;
         };
         let colour = self.variant.channel(channel.colour);
-        // Where the lane was: dimmed, as a gap.
-        frame.fill_rectangle(
-            Point::new(0.0, lane.top.max(AXIS_HEIGHT)),
-            Size::new(size.width, lane.height),
-            Color {
-                a: 0.7,
-                ..palette.background
-            },
-        );
         // The lifted lane follows the pointer, kept inside the lanes' area.
         let top = (y - lane.height / 2.0)
             .clamp(AXIS_HEIGHT, (size.height - lane.height).max(AXIS_HEIGHT));
@@ -1265,7 +1309,10 @@ mod tests {
     /// A plan with four channels of a finished capture, for a view of 900 x 500.
     fn plan_with_channels() -> (FramePlan, Shell) {
         use la_host::{Activity, ConfigEdit};
-        let dir = std::env::temp_dir().join(format!("la-legend-{}", std::process::id()));
+        // A scratch directory of its own: the tests run in parallel.
+        static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let unique = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("la-legend-{}-{unique}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut shell = Shell::new(ShellConfig::for_tests(&dir));
         for edit in [
@@ -1503,6 +1550,78 @@ mod tests {
             ),
             mouse::Interaction::Crosshair
         ));
+    }
+
+    #[test]
+    fn the_lanes_slide_aside_while_a_lane_is_carried_and_settle_on_their_places() {
+        let (plan, _shell) = plan_with_channels();
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
+        // Lane 0 (28..100) is carried down past the middle of lane 2 (172..244): lanes 1 and 2 make
+        // room by moving up the height of lane 0.
+        let mut state = ViewState {
+            reported_width: bounds.width - GUTTER,
+            drag: Some(Drag::Lane { from: 0, y: 230.0 }),
+            shifts: vec![0.0; plan.channels.len()],
+            ..ViewState::default()
+        };
+        let start = Instant::now();
+        let mut frame_at = start;
+        let mut asked_again = false;
+        for _ in 0..60 {
+            frame_at += Duration::from_millis(16);
+            let event = canvas::Event::Window(iced::window::Event::RedrawRequested(frame_at));
+            let action = view.update(&mut state, &event, bounds, mouse::Cursor::Unavailable);
+            asked_again |= action.is_some();
+            // Never past the target on the way.
+            assert!(
+                state.shifts[1] <= 0.0 && state.shifts[1] >= -72.0,
+                "{:?}",
+                state.shifts
+            );
+        }
+        assert!(
+            asked_again,
+            "an unfinished movement asks for the next frame"
+        );
+        assert_eq!(state.shifts[0], 0.0, "the carried lane is not shifted");
+        assert!(
+            (state.shifts[1] + 72.0).abs() < f32::EPSILON,
+            "{:?}",
+            state.shifts
+        );
+        assert!(
+            (state.shifts[2] + 72.0).abs() < f32::EPSILON,
+            "{:?}",
+            state.shifts
+        );
+        assert_eq!(state.shifts[3], 0.0);
+        // Settled: no further frame is asked for.
+        frame_at += Duration::from_millis(16);
+        let event = canvas::Event::Window(iced::window::Event::RedrawRequested(frame_at));
+        assert!(
+            view.update(&mut state, &event, bounds, mouse::Cursor::Unavailable)
+                .is_none()
+        );
+        // Without a carried lane the redraw event changes nothing.
+        let mut idle = ViewState {
+            reported_width: bounds.width - GUTTER,
+            ..ViewState::default()
+        };
+        assert!(
+            view.update(&mut idle, &event, bounds, mouse::Cursor::Unavailable)
+                .is_none()
+        );
+        // Releasing the button clears the shifts.
+        let release = canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+        let _ = view.update(
+            &mut state,
+            &release,
+            bounds,
+            mouse::Cursor::Available(Point::new(60.0, 200.0)),
+        );
+        assert!(state.shifts.is_empty());
     }
 
     // Four channels in an area of 500: the automatic height is clamp(472 / 4, 30, 72) = 72, so the

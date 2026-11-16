@@ -213,6 +213,28 @@ impl Layout {
         }
     }
 
+    /// The vertical shift of every one of the first `count` lanes while lane `from` is carried
+    /// over the slot of `to` (the `to` of [`Layout::move_target`]): the lanes between the two slots
+    /// move by the height of the carried lane, so that the hole closes where it was and opens where
+    /// the lane will land. The carried lane itself has no shift.
+    #[must_use]
+    pub fn shifts(&self, from: usize, to: usize, count: usize) -> Vec<f32> {
+        let carried = self.lane(from).map_or(0.0, |l| l.height);
+        (0..count)
+            .map(|i| {
+                if i == from {
+                    0.0
+                } else if from < to && i > from && i <= to {
+                    -carried
+                } else if to < from && i >= to && i < from {
+                    carried
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    }
+
     /// The y of the line that shows where a lane landing at `landing` will be: the top of the lane it
     /// goes before, or the bottom of the last channel lane.
     #[must_use]
@@ -250,6 +272,17 @@ pub fn clamp_height(height: f32) -> u16 {
 #[must_use]
 pub fn resized_height(start_height: f32, start_y: f32, y: f32) -> u16 {
     clamp_height(start_height + (y - start_y))
+}
+
+/// How long a lane takes to cover about two thirds of the way to its place (seconds).
+const EASE_SECONDS: f32 = 0.07;
+
+/// One step of the movement of a lane that makes room: `current` moves toward `target` by the
+/// share of the way that `dt` seconds make, never past it.
+#[must_use]
+pub fn ease(current: f32, target: f32, dt: f32) -> f32 {
+    let share = 1.0 - (-dt.max(0.0) / EASE_SECONDS).exp();
+    current + (target - current) * share.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
@@ -404,6 +437,35 @@ mod tests {
         assert!((layout.landing_line(0) - 28.0).abs() < f32::EPSILON);
         assert!((layout.landing_line(2) - 160.0).abs() < f32::EPSILON);
         assert!((layout.landing_line(3) - 200.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn the_lanes_between_the_two_slots_make_room_by_the_height_of_the_carried_lane() {
+        let layout = three(); // heights 72, 60, 40
+        // Carrying lane 0 down to the slot of lane 2: lanes 1 and 2 move up by 72.
+        assert_eq!(layout.shifts(0, 2, 3), vec![0.0, -72.0, -72.0]);
+        assert_eq!(layout.shifts(0, 1, 3), vec![0.0, -72.0, 0.0]);
+        // Carrying lane 2 up to the top: lanes 0 and 1 move down by 40.
+        assert_eq!(layout.shifts(2, 0, 3), vec![40.0, 40.0, 0.0]);
+        // Released where it was: nothing moves.
+        assert_eq!(layout.shifts(1, 1, 3), vec![0.0, 0.0, 0.0]);
+        // A count beyond the lanes is harmless.
+        assert_eq!(layout.shifts(0, 2, 5).len(), 5);
+    }
+
+    #[test]
+    fn easing_moves_toward_the_target_without_overshooting_and_arrives() {
+        let mut value = 0.0_f32;
+        let mut last = 0.0_f32;
+        for _ in 0..200 {
+            value = ease(value, 50.0, 0.016);
+            assert!(value >= last && value <= 50.0, "{value}");
+            last = value;
+        }
+        assert!((value - 50.0).abs() < 0.01, "{value}");
+        // A long pause jumps to the target; a negative target works the same way.
+        assert!((ease(0.0, -30.0, 10.0) + 30.0).abs() < 0.01);
+        assert!((ease(5.0, 5.0, 0.016) - 5.0).abs() < f32::EPSILON);
     }
 
     #[test]
