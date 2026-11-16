@@ -140,3 +140,64 @@ fn the_words_of_the_settings_read_back() {
     assert_eq!(Decision::from_setting(""), None);
     assert_eq!(Decision::from_setting("Save"), None);
 }
+
+/// Polls until the save is over and says whether the shell then reports that it may quit.
+fn quits_after(shell: &mut Shell) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while std::time::Instant::now() < deadline {
+        let changes = shell.poll(std::time::Instant::now());
+        if changes.contains(la_host::Changes::QUIT) {
+            return true;
+        }
+        if shell.state().operation.is_none() && shell.state().pending_decision.is_none() {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    false
+}
+
+#[test]
+fn quit_and_close_work_with_a_remembered_discard_or_save() {
+    for (name, command) in [("quit", Command::Quit), ("close", Command::RequestClose)] {
+        // Discard: the shell may quit at once.
+        let dir = TempDir::new(&format!("choice-{name}-discard"));
+        let mut shell = finished_shell(&dir, 0b1, 3_000, 8);
+        remember(&mut shell, Some(Decision::Discard));
+        let outcome = shell.apply(command.clone());
+        assert!(
+            matches!(&outcome, Outcome::Done(c) if c.contains(la_host::Changes::QUIT)),
+            "{name}: {outcome:?}"
+        );
+        // Save to the file of the session: it quits when the save is over.
+        let dir = TempDir::new(&format!("choice-{name}-save"));
+        let mut shell = finished_shell(&dir, 0b1, 3_000, 9);
+        let path = dir.path().join("kept.lasession");
+        shell.apply(Command::SaveSessionAs(path));
+        wait_operation(&mut shell);
+        shell.apply(Command::RenameChannel {
+            channel: 0,
+            name: "Clock".to_owned(),
+        });
+        remember(&mut shell, Some(Decision::Save));
+        let outcome = shell.apply(command.clone());
+        let quit_now = matches!(&outcome, Outcome::Done(c) if c.contains(la_host::Changes::QUIT));
+        assert!(quit_now || quits_after(&mut shell), "{name}: {outcome:?}");
+    }
+}
+
+#[test]
+fn a_remembered_cancel_never_blocks_quit_or_close() {
+    for (name, command) in [("quit", Command::Quit), ("close", Command::RequestClose)] {
+        let dir = TempDir::new(&format!("choice-{name}-cancel"));
+        let mut shell = finished_shell(&dir, 0b1, 3_000, 10);
+        remember(&mut shell, Some(Decision::Cancel));
+        // The window cannot be made impossible to close: the question is asked instead.
+        let outcome = shell.apply(command);
+        assert!(
+            matches!(outcome, Outcome::NeedsDecision(_)),
+            "{name}: {outcome:?}"
+        );
+        assert!(shell.state().pending_decision.is_some());
+    }
+}

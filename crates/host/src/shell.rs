@@ -550,7 +550,13 @@ impl Shell {
                     .unsaved_choice
                     .as_deref()
                     .and_then(Decision::from_setting)
-                    .filter(|_| !matches!(guarded, Guarded::RemoveDecoder(_)));
+                    .filter(|_| !matches!(guarded, Guarded::RemoveDecoder(_)))
+                    // A remembered Cancel must never make the application impossible to leave:
+                    // quitting and closing the window always ask.
+                    .filter(|decision| {
+                        *decision != Decision::Cancel
+                            || !matches!(guarded, Guarded::Quit | Guarded::Close)
+                    });
                 working.pending_decision = Some(guarded.clone());
                 working.version = working.version.saturating_add(1);
                 working.versions.bump(Changes::DECISION);
