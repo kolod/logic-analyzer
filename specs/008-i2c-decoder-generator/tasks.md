@@ -60,12 +60,12 @@ them to a file, not a shell heredoc.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the empty module skeletons with their doc comments and declarations:
+- [X] T001 Create the empty module skeletons with their doc comments and declarations:
   `crates/decoders/src/decoders/i2c/{mod,period,bus,text}.rs` (`mod.rs` declares the other three),
   `crates/decoders/src/generators/i2c.rs`; add `pub mod i2c;` to `crates/decoders/src/decoders/mod.rs`
   and `crates/decoders/src/generators/mod.rs`. Nothing is registered yet; the crate builds and clippy is
   clean (`#![deny(missing_docs)]` applies: every public item has a doc comment).
-- [ ] T002 [P] Test helpers in `crates/decoders/tests/common/i2c.rs` (declare in
+- [X] T002 [P] Test helpers in `crates/decoders/tests/common/i2c.rs` (declare in
   `crates/decoders/tests/common/mod.rs`): a **bus builder** that turns a list of bus events into
   `(sda, scl)` samples with a fixed 16 samples per SCL period, exactly as `contracts/i2c-generator.md`
   describes the bus (SCL high on samples 4..12 of a slot, SDA changing on sample 0): events `Idle(n)`,
@@ -85,20 +85,20 @@ them to a file, not a shell heredoc.
 
 **⚠️ CRITICAL**: the I2C decoder must hold work back honestly; no story can be finished without this.
 
-- [ ] T003 [P] Write `crates/decoders/tests/final_through.rs` first (it does not compile yet): with a
+- [X] T003 [P] Write `crates/decoders/tests/final_through.rs` first (it does not compile yet): with a
   test-only decoder (in the test file; it implements `Run` and holds back a configurable amount) check
   that the coverage of the results follows `min(chunk end, final_through)`; never exceeds the chunk end;
   never decreases even if `final_through` goes backwards; with the default (`None`) equals the chunk end
   exactly as before; after `finish(End::Complete)` equals the end of the pass; after `finish(End::Cut)`
   the results are marked incomplete; and a stacked decoder (`stack.rs` stream) is handed no item whose
   end is above the watermark, with items emitted late still delivered in order.
-- [ ] T004 Implement the API change: add `fn final_through(&self) -> Option<u64> { None }` with its
+- [X] T004 Implement the API change: add `fn final_through(&self) -> Option<u64> { None }` with its
   doc comment to the `Run` trait in `crates/decoders/src/run/mod.rs`; in `Pass::advance`
   (`crates/decoders/src/run/job.rs`) report the coverage after each chunk as
   `min(end, run.final_through().unwrap_or(end))` clamped to be non-decreasing (`set_coverage` already
   keeps the maximum for the stream); `finish` keeps its present behaviour. The sample decoder and all
   existing tests are untouched and pass; T003 passes.
-- [ ] T005 Version and documents: `DECODER_API_VERSION = "1.1"` in `crates/decoders/src/lib.rs`;
+- [X] T005 Version and documents: `DECODER_API_VERSION = "1.1"` in `crates/decoders/src/lib.rs`;
   `docs/decoder-api.md`: version line `Version: 1.1`, the method under "What a decoder provides", a
   sentence under "What the framework guarantees", the generator options `errors` and `error_rate` as
   options every generator may use (they are what the shell edits), and the versioning example. The test

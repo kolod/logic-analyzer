@@ -75,6 +75,18 @@ pub trait Run: Send {
         Ok(())
     }
 
+    /// The position up to which this decoder's output is final: nothing it will still produce
+    /// begins or ends before it. `None` (the default) means the end of the last chunk, which is what
+    /// every decoder of version 1.0 means. A decoder that holds work back (it is waiting for
+    /// information that arrives later in the capture, or is catching up on a part of the capture it
+    /// has already been given) returns the position it has actually processed.
+    ///
+    /// The framework reports `min(end of the chunk, this)` as the coverage of the results and never
+    /// lets the coverage go back. (Decoder API 1.1.)
+    fn final_through(&self) -> Option<u64> {
+        None
+    }
+
     /// Called once when the pass ends; flushes a pending construct.
     ///
     /// # Errors

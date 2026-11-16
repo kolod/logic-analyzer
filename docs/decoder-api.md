@@ -1,6 +1,6 @@
 # Decoder API
 
-Version: 1.0
+Version: 1.1
 
 This is the authoritative description of the contract between the decoder framework (`la-decoders`)
 and a decoder (constitution Principle IX). Its constant `la_decoders::DECODER_API_VERSION` and the
@@ -49,6 +49,18 @@ finish(&mut self, end: End, reader: &SignalReader, sink: &mut Sink) -> Result<()
   was processed, `End::Cut` when the pass was cancelled or stopped by a limit. A decoder uses it to
   flush a pending construct (a sample decoder ends an incomplete byte).
 - A growing capture is just more chunks later: `finish` is called only at the real end.
+- `final_through` (optional, version 1.1) tells the framework how far the decoder's output is final:
+
+  ```text
+  final_through(&self) -> Option<u64>      // default None: the end of the last chunk
+  ```
+
+  A decoder that holds work back (it waits for something that arrives later in the capture, or is
+  catching up on a part it has already been given) returns the position it has actually processed. The
+  framework reports `min(end of the chunk, final_through)` as the coverage of the results, never lets
+  the coverage go back, and uses it as the watermark of a stack, so a decoder above never receives an
+  item behind a watermark that passed it. A decoder drains what it holds in `finish`, which has the same
+  deadline as a chunk, so holding work back is bounded by the time one call may take.
 
 ### Descriptor
 
@@ -126,6 +138,8 @@ only a decoder that cannot continue returns an error.
 - The `level` and `edges` answers are consistent with the snapshot of the chunk.
 - A stack gives an upper decoder only items that passed validation and that the lower decoder declared.
 - What is stored before a failure, a cancel or a limit is kept and marked incomplete.
+- The coverage of the results is the end of the last chunk, or less if the decoder says so with
+  `final_through`; it never exceeds a chunk and never decreases.
 
 ## What a decoder must not do
 
@@ -164,7 +178,10 @@ Implemented as `generators::clocked_bits` (`source(setup, seed)`, `expected(setu
 `expected_errors(setup, seed, length)` and `claim(setup)`) and combined with the random signals of the
 device by `generators::composite::CompositeFactory`; the host builds the factory from the instances when
 a capture starts on a simulated device. The generator options of an instance are kept in
-`Setup::generator` (`errors`: 0 or 1, `error_rate`: about one byte in this many is cut short).
+`Setup::generator` (`errors`: 0 or 1, `error_rate`: about one byte in this many is cut short). The keys
+`errors` and `error_rate` are the ones the application edits for every decoder that has a generator:
+a generator reads them with the meaning "plant errors" and "about one unit of its own content in this
+many", and ignores any other key it does not know.
 
 ## Registering a decoder
 
@@ -191,7 +208,7 @@ depend on how many annotations the store holds.
 
 ## Versioning
 
-`DECODER_API_VERSION` is `1.0`. Adding an optional capability that existing decoders can ignore is a
+`DECODER_API_VERSION` is `1.1` (1.1 added the optional `final_through`). Adding an optional capability that existing decoders can ignore is a
 minor version; changing the meaning of a call, a chunk guarantee or a limit is a major version and
 requires every built-in decoder to be updated in the same merge. Each decoder has its own `version`
 (the descriptor field) for its saved options.

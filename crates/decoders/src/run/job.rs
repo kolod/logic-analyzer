@@ -68,6 +68,8 @@ pub struct Pass {
     sink: Sink,
     position: u64,
     chunks: u64,
+    /// The coverage reported so far; it never goes back.
+    reported: u64,
 }
 
 impl Pass {
@@ -86,6 +88,7 @@ impl Pass {
             sink,
             position: 0,
             chunks: 0,
+            reported: 0,
         }
     }
 
@@ -164,11 +167,11 @@ impl Pass {
             };
             let result = self.run.process(&chunk, &reader, &mut self.sink);
             if let Some(full) = self.sink.full() {
-                self.sink.set_coverage(self.position, true);
+                self.sink.set_coverage(self.reported, true);
                 return Ok(Advance::Limit(full));
             }
             if let Err(e) = result {
-                self.sink.set_coverage(self.position, true);
+                self.sink.set_coverage(self.reported, true);
                 tracing::warn!(decoder = self.descriptor.id, "a decoder returned an error");
                 return Err(error::failed(format!(
                     "decoder `{}` failed at position {}: {}",
@@ -177,7 +180,15 @@ impl Pass {
             }
             self.position = end;
             self.chunks = self.chunks.saturating_add(1);
-            self.sink.set_coverage(self.position, false);
+            // A decoder that holds work back says how far its output is final; coverage never
+            // exceeds the chunk and never goes back (decoder API 1.1).
+            let covered = self
+                .run
+                .final_through()
+                .map_or(end, |through| through.min(end))
+                .max(self.reported);
+            self.reported = covered;
+            self.sink.set_coverage(covered, false);
             on_chunk(self.position, &mut self.sink);
         }
     }
@@ -194,8 +205,13 @@ impl Pass {
             channels: snapshot.channels(),
         });
         let result = self.run.finish(end, &reader, &mut self.sink);
-        self.sink
-            .set_coverage(self.position, end == End::Cut || self.sink.full().is_some());
+        // A pass that ended whole has drained everything it held back; a cut one covers what it
+        // had reported.
+        let cut = end == End::Cut || self.sink.full().is_some();
+        if !cut {
+            self.reported = self.reported.max(self.position);
+        }
+        self.sink.set_coverage(self.reported, cut);
         if self.sink.full().is_some() {
             // The limit was already reached: a flush that cannot be stored is not a failure.
             return Ok(());
