@@ -3,7 +3,7 @@
 //! lanes and overlays (`docs/host-api.md`, "Decoders").
 //!
 //! The state a user interface reads is plain data ([`DecoderState`]); the threads and the results
-//! live in the shell ([`DecoderRuntime`]) because they cannot be cloned with the state.
+//! live in the shell (`DecoderRuntime`) because they cannot be cloned with the state.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -291,6 +291,22 @@ pub fn default_thread_cap() -> usize {
         .checked_div(2)
         .unwrap_or(1)
         .max(1)
+}
+
+impl Drop for DecoderRuntime {
+    /// The passes are asked to stop and given a moment to do so, so that no worker is still using
+    /// shared state while the process (or a test) is torn down.
+    fn drop(&mut self) {
+        for job in self.jobs.values() {
+            job.cancel();
+        }
+        let deadline = std::time::Instant::now().checked_add(std::time::Duration::from_secs(2));
+        while self.jobs.values().any(|job| !job.is_finished())
+            && deadline.is_some_and(|d| std::time::Instant::now() < d)
+        {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
 }
 
 impl DecoderRuntime {
@@ -784,12 +800,8 @@ impl Shell {
         let channels = Self::decoder_channels(state);
         // A setup that is not complete yet (a required channel missing) is kept as the user
         // builds it; what is wrong with the parts that are there is refused.
-        if let Err(error) = setup.validate(&self.decoders.registry, &others, channels) {
-            let missing_only = error.code() == la_decoders::error::INVALID_SETUP
-                && error.detail().contains("a channel is required");
-            if !missing_only {
-                return Ok(Self::refuse(state, &error));
-            }
+        if let Err(error) = setup.validate_partial(&self.decoders.registry, &others, channels) {
+            return Ok(Self::refuse(state, &error));
         }
         state.decoders.refusal = None;
         let changes_results = {
@@ -1231,6 +1243,12 @@ impl Shell {
     #[cfg(feature = "test-support")]
     pub fn set_decoder_deadlines(&mut self, deadlines: la_decoders::run::Deadlines) {
         self.decoders.deadlines = deadlines;
+    }
+
+    /// The bytes the results of all decoders are counted as (for the tests of the limit).
+    #[must_use]
+    pub fn decoder_memory_used(&self) -> u64 {
+        self.decoders.budget.used()
     }
 
     /// The results of an instance so far (a pass in progress has some), for the interface and

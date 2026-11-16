@@ -83,3 +83,73 @@ added in phase 3. The contrast test checks the colours against the background (a
 each other and against the danger colour of errors; "against the waveform colours" is checked only as
 "not the same colour", because an annotation is drawn as a filled band with an outline, not as a line on
 top of a waveform. A hover readout with the full text and the length in time was added to the canvas.
+
+## Phase 10: long runs, measurements and traceability
+
+Machine: the maintainer's Windows 11 PC, release builds, 2026-11-16.
+
+| Run | Result |
+|-----|--------|
+| `deco_section` and `dann_section` randomized fuzzers, 1,000,000 iterations each | pass (0.3 s and 0.5 s) |
+| `round_trip` `ten_thousand_seeds` (with deliberate errors in a third of them) | pass (0.9 s) |
+| `random_walk` of 100,000 actions with decoder actions (adding, configuring, stacking, cancelling, re-running, removing, saving results, opening good and damaged decoder files, language changes), seeds 1, 2, 3, 4 and 2026 | pass (about 40 s each in a debug build). The first run found a real bug: a source that does not exist was accepted while the instance was still missing its required channels; fixed (`Setup::validate_partial`) with a regression test |
+| `random_walk` of 2,000,000 actions in release | see the line at the end of this section |
+| `measure_decoder_responsiveness` and the benchmarks | recorded under Phase 3 and Phase 6 above |
+
+**Not measured, asked of the user:** SC-011 (idle CPU under 1 % of one core with finished decoders, one minute in the real window) and every Debian measurement and manual step. They need the running application on the user's machines; they are `pending` here and not claimed.
+
+### Traceability
+
+Tests are under `crates/<crate>/tests/` unless a path says otherwise.
+
+| Requirement | Proof |
+|-------------|-------|
+| FR-001, FR-029 | `descriptors` (descriptor, registry), `a_registered_test_decoder_appears_without_changing_the_shell` (`la-app`) |
+| FR-002, FR-003 | `decoder_commands` (add, configure, limit of 8 instances, names sanitized) |
+| FR-004, FR-039 | `docs/decoder-api.md` and `decoder_api_doc`; `docs/host-api.md` and `host_api_doc` |
+| FR-005 | `la-decoders` and `la-host` have no toolkit dependency; everything is tested without a window |
+| FR-006, FR-007, FR-008, FR-009 | `model`, `chunking` (validation, counting of refused records), `text` and the sanitizer cross-check in `sanitize` |
+| FR-010 | `index` (window, rank and neighbour queries against brute force, probe counts) |
+| FR-011 | `index` (limits), `fault_injection`, `decoder_settings` |
+| FR-012, FR-013, FR-014 | `execution`, `worker`, `chunking` (progress, cancel under one second, snapshots only) |
+| FR-015, FR-016 | `execution` (growing capture, gaps), `clocked_bits` (gaps), `decoder_growth` |
+| FR-017 | `decoder_commands`, `decoder_growth` (a setup change starts a new pass, old results flagged outdated until the swap) |
+| FR-018, FR-019 | `stacking`, `decoder_stack`, `descriptors` (cycle, kind, depth) |
+| FR-020, FR-021, FR-022, FR-023 | `fault_injection`, `decoder_faults`, `decoder_log` |
+| FR-024, FR-025, FR-026, FR-027 | `lanes`, `decoder_plan`, the renders of `la-app`; manual check pending |
+| FR-028 | `decoder_plan` (select, next, previous, go to), hover readout in the canvas; click and double click manual, pending |
+| FR-030 | `la-i18n` parity, `string_budget`, `decoder_language`, `error_sweep` |
+| FR-031, FR-032, FR-033, FR-034 | `deco_section`, `dann_section`, `deco_sections_carried`, `decoder_sessions` |
+| FR-035, FR-036, FR-037, FR-038 | `clocked_bits`, `round_trip`, `composite`, `decoder_generator` |
+| FR-040 | no network, no telemetry and no loading of code were added (dependency list unchanged apart from `serde_json` as a dev-dependency) |
+| FR-041 | nothing was taken from another project; the decoders and generators are fresh implementations |
+| FR-042 | `every_screen_renders_in_every_language_at_the_minimum_window_size`, `string_budget`; idle processor use: pending (see SC-011) |
+| SC-001 | the renders of the sample decoder in `la-app`; the 60-second manual check is pending |
+| SC-002 | `annotation_plan` benchmark (0.4 to 1.7 ms for stores of 1 and 5 million annotations over 100 and 1,000 million samples; x0.95 to x1.01 between sizes), `measure_decoder_responsiveness`. The benchmark builds the stores directly; the 16-channel 100-million-sample frame times with a one-million-annotation decode were not measured together |
+| SC-003 | `a_planted_one_sample_annotation_is_represented_at_every_zoom_among_a_million` (`lanes`) |
+| SC-004 | `measure_decoder_responsiveness` (longest call of the interface thread 2.7 ms, cancel 13 ms) on Windows; Debian pending |
+| SC-005 | `fault_injection`, `decoder_faults`, `decoder_log` (each fault: capture unchanged, neighbour unchanged, one notice with a code, a log entry). The capture is checked by its transitions and length, not byte for byte on disk |
+| SC-006 | `round_trip` (1,000 seeds in the normal run, 10,000 in the ignored one, with and without planted errors) |
+| SC-007 | `random_walk` (100,000 actions in the normal run, 2,000,000 in the nightly one) |
+| SC-008 | `decoder_sessions` (156 interruption points of a save; a file from before, a damaged one and a newer one) |
+| SC-009 | `annotations_appear_while_the_capture_runs_and_the_capture_is_not_harmed` (`decoder_growth`) |
+| SC-010 | the render test in all six languages at 800 x 560 with a decoder, `string_budget`; no clipped or overlapping element was found by the tests, glyphs checked by the rendering of the existing fonts; the check by eye is pending |
+| SC-011 | **not measured** (needs the real window for a minute); pending |
+| SC-012 | `a_registered_test_decoder_appears_without_changing_the_shell`, `CONTRIBUTING.md` "Adding a decoder"; the review by a person who did not write the contract is pending |
+
+**Requirements not met or not proven here:** SC-011 (not measured), the Debian and manual items above,
+and the reviewer of SC-012. No functional requirement is knowingly unmet.
+
+`random_walk` of 2,000,000 actions in release (seed 4711): pass, 719 s.
+
+One run of `cargo test --workspace` on 2026-11-16 ended `decoder_sessions` with `STATUS_ACCESS_VIOLATION`
+(exit code 0xc0000005); six runs of that test alone and two further full runs passed. The likely cause
+is a decode worker still running while the process was torn down (a test ended with passes running).
+`Drop for DecoderRuntime` now cancels the passes and gives them up to two seconds to stop. The cause was
+not proven; if it comes back in CI it should be looked at again.
+
+Final local gate on 2026-11-16: `cargo fmt --check`, `cargo clippy --workspace --all-targets
+--all-features -- -D warnings`, `cargo test --workspace` (twice), `cargo +1.85 check --workspace
+--exclude la-app --all-targets`, `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`: all clean.
+The push, the draft pull request and the CI results on both systems are not done yet (they wait for the
+user's word).

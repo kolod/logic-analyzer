@@ -12,10 +12,12 @@ test harness), the session file format (`la-session`: atomic, checksummed save a
 a capture with its description), the localization foundation (`la-i18n`: six languages, error
 messages, plurals, locale formatting, a translation parity check) and the application itself
 (`la-host`: the host API, frame plan, markers, settings and unsaved-data protection; `la-app`: the
-window, signal view, markers, channels, saving and opening, settings and six languages) exist
-so far. You can run the application and try it with the simulated device; there are no real
+window, signal view, markers, channels, saving and opening, settings and six languages) and the
+decoder framework (`la-decoders`: decoders as resumable state machines run in the background, an
+indexed annotation store, lanes and overlays on the signals, stacking, fault isolation, a generator
+for the virtual device and the sample decoder "Clocked bits") exist so far. You can run the application and try it with the simulated device; there are no real
 hardware drivers yet. See the [user guide](docs/user-guide.md), the
-[host API](docs/host-api.md) and [roadmap.md](roadmap.md).
+[host API](docs/host-api.md), the [decoder API](docs/decoder-api.md) and [roadmap.md](roadmap.md).
 
 Supported operating systems: Windows 10/11 and Debian 13.
 

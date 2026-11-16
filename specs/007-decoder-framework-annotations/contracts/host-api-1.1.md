@@ -1,5 +1,7 @@
 # Contract: Host API additions (version 1.0 → 1.1)
 
+**Superseded by `docs/host-api.md`** (version 1.1), which is now the authoritative text; this file is the design it grew from.
+
 **Status**: the design of the additions to [`docs/host-api.md`](../../../docs/host-api.md). When this
 feature is implemented the additions are merged into that document (its version line becomes `1.1`,
 `la_host::HOST_API_VERSION` follows, and the existing `host_api_doc` test keeps the table and the code in

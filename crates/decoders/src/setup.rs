@@ -107,6 +107,31 @@ impl Setup {
         others: &[Setup],
         channels: u8,
     ) -> Result<(), Error> {
+        self.check(registry, others, channels, true)
+    }
+
+    /// Like [`Setup::validate`] but a required channel that is not chosen yet is not an error:
+    /// the setup of an instance is built step by step, and everything that is there must be right.
+    ///
+    /// # Errors
+    ///
+    /// As [`Setup::validate`], except for a missing required channel.
+    pub fn validate_partial(
+        &self,
+        registry: &Registry,
+        others: &[Setup],
+        channels: u8,
+    ) -> Result<(), Error> {
+        self.check(registry, others, channels, false)
+    }
+
+    fn check(
+        &self,
+        registry: &Registry,
+        others: &[Setup],
+        channels: u8,
+        complete: bool,
+    ) -> Result<(), Error> {
         let others: Vec<&Setup> = others
             .iter()
             .filter(|o| o.instance != self.instance)
@@ -122,12 +147,17 @@ impl Setup {
         if sanitize(&self.name).chars().count() > MAX_NAME_CHARS {
             return Err(refused("name", "longer than the limit"));
         }
-        self.validate_channels(descriptor, channels)?;
+        self.validate_channels(descriptor, channels, complete)?;
         self.validate_options(descriptor)?;
         self.validate_source(registry, descriptor, &others)
     }
 
-    fn validate_channels(&self, descriptor: &Descriptor, channels: u8) -> Result<(), Error> {
+    fn validate_channels(
+        &self,
+        descriptor: &Descriptor,
+        channels: u8,
+        complete: bool,
+    ) -> Result<(), Error> {
         for (role, channel) in &self.channels {
             let setting = format!("channels.{role}");
             if descriptor.signal(role).is_none() {
@@ -140,7 +170,9 @@ impl Setup {
         for signal in descriptor.signals {
             let setting = format!("channels.{}", signal.role);
             match self.channels.get(signal.role) {
-                None if signal.required => return Err(refused(&setting, "a channel is required")),
+                None if signal.required && complete => {
+                    return Err(refused(&setting, "a channel is required"));
+                }
                 None => {}
                 Some(channel) => {
                     let shared = self.channels.iter().any(|(other, c)| {

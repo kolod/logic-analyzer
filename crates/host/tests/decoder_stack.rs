@@ -234,3 +234,34 @@ fn a_fault_below_marks_the_upper_instance_incomplete_without_failing_it() {
         assert!(above.incomplete);
     }
 }
+
+#[test]
+fn a_source_that_does_not_exist_is_refused_even_while_the_setup_is_incomplete() {
+    // Found by the random walk: an instance still missing its required channels was given a
+    // source that is not there, because the missing channel was reported first.
+    let dir = TempDir::new("stack-missing-source");
+    let (mut shell, _lower, _upper) = shell(&dir);
+    done(
+        &mut shell,
+        Command::AddDecoder {
+            decoder: UPPER_WORDS.id.into(),
+        },
+    );
+    done(
+        &mut shell,
+        Command::AddDecoder {
+            decoder: LOWER_BYTES.id.into(),
+        },
+    );
+    let incomplete = shell.state().decoders.instances.last().unwrap().id;
+    assert!(!view(&shell, incomplete).ready);
+    done(
+        &mut shell,
+        Command::StackDecoder {
+            id: incomplete,
+            source: Source::Instance(999),
+        },
+    );
+    assert_eq!(view(&shell, incomplete).setup.source, Source::Capture);
+    assert!(shell.state().decoders.refusal.is_some());
+}

@@ -121,6 +121,13 @@ are untouched, and **Run again** starts it again. **Cancel** stops a running pas
 not answer in time is given up on after a few seconds; if several are stuck, restart the application.
 The memory the results of all decoders may use is set in the settings (16 MiB to 4 GiB).
 
+**Stacking.** A decoder that reads what another decoder produced (a higher-level protocol on top of a
+lower one) has a **Reads from** chooser in its block, listing only what it can read. A chain is at most
+four decoders deep and a decoder cannot read itself or one that reads it. When you run the lower
+decoder again, the ones above show their old results (flagged as outdated) until the new ones arrive;
+if the lower one fails, the results above are marked incomplete. Removing a decoder that others read
+from asks first, because they go with it. Lanes are in stack order, lowest first.
+
 **Saving.** The decoders you set up are saved with the session and decode again when it is opened. The
 setting **Save decoded results with the session** also saves what they found, so that it shows at once
 when the file is opened (the file is larger); press **Run again** to decode anew. A file from a newer
