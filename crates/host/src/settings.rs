@@ -96,6 +96,8 @@ pub struct Settings {
     pub last_device: Option<String>,
     /// The device configuration used last time (validated again before use).
     pub last_config: Option<serde_json::Value>,
+    /// The view of the panel at the right edge: `capture`, `decoders`, `markers` or `hidden`.
+    pub side_panel: Option<String>,
     /// Fields written by a newer version, kept as they are.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, serde_json::Value>,
@@ -117,6 +119,7 @@ impl Default for Settings {
             window: None,
             last_device: None,
             last_config: None,
+            side_panel: None,
             unknown: BTreeMap::new(),
         }
     }

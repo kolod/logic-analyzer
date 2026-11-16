@@ -171,6 +171,10 @@ menu-markers-remove-all = Remove all markers
 menu-markers-snap = Snap to transitions
 # Title of the panel that lists the markers.
 panel-markers = Markers
+panel-capture = Capture
+panel-view-capture = Capture settings
+panel-view-decoders = Decoders
+panel-view-markers = Markers and measuring
 # The default name of a marker; the argument is its number.
 marker-default = Marker { $number }
 # Tooltip of the button that moves the view to a marker.

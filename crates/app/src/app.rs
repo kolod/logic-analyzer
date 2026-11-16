@@ -35,6 +35,8 @@ pub enum Message {
     Key(keyboard::Event),
     /// The signal area has this width in logical pixels.
     AreaResized(f32),
+    /// An icon of the strip at the right edge was clicked: this is the view that results.
+    SidePanel(la_host::SidePanel),
     /// The user clicked the name of a channel (its number and the top of its lane in the view):
     /// the in-place editor opens over it.
     EditChannelName(u8, f32),
@@ -929,6 +931,7 @@ impl App {
                 Some((from, to)) => self.run(Command::MoveChannel { from, to }),
                 None => Task::none(),
             },
+            Message::SidePanel(view) => self.run(Command::SetSidePanel(view)),
             Message::ChannelNameInput(text) => {
                 if let Some(edit) = &mut self.editing {
                     edit.text = text;
@@ -1367,10 +1370,44 @@ impl App {
         )
     }
 
+    /// The toolbar: Start and Stop, and what keeps Start from working.
     fn toolbar(&self) -> Element<'_, Message> {
         let state = self.shell.state();
         let idle = state.activity == Activity::Idle;
         let localizer = self.shell.localizer();
+        let start = if idle {
+            let mut b = button(text(self.t("toolbar-start")));
+            if state.config_problems.is_empty() && state.selected_device.is_some() {
+                b = b.on_press(Message::Run(Command::StartCapture));
+            }
+            b
+        } else {
+            button(text(self.t("toolbar-stop"))).on_press(Message::Run(Command::StopCapture))
+        };
+        let mut toolbar = column![container(row![start]).padding([6, 8])];
+        // "No channel is chosen" needs no message: the flags in the channel list show it, and
+        // Start stays unavailable.
+        for problem in state
+            .config_problems
+            .iter()
+            .filter(|p| p.setting != la_host::devices::Setting::Channels)
+        {
+            toolbar = toolbar.push(
+                container(
+                    text(localizer.error_message_for_code(problem.code))
+                        .size(13)
+                        .style(text::danger),
+                )
+                .padding([0, 10]),
+            );
+        }
+        toolbar.into()
+    }
+
+    /// The Capture view: everything about the next capture.
+    fn capture_panel(&self) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let idle = state.activity == Activity::Idle;
         let devices: Vec<DeviceChoice> = state
             .devices
             .iter()
@@ -1405,9 +1442,9 @@ impl App {
 
         let mut device_picker = pick_list(devices, selected, Message::DevicePicked);
         let mut profile_picker = pick_list(profiles, profile, Message::ProfilePicked);
-        let mut rate = text_input("", &self.rate_text).width(110);
-        let mut length = text_input("", &self.length_text).width(110);
-        let mut seed = text_input(&self.t("toolbar-seed-random"), &self.seed_text).width(90);
+        let mut rate = text_input("", &self.rate_text).width(Fill);
+        let mut length = text_input("", &self.length_text).width(Fill);
+        let mut seed = text_input(&self.t("toolbar-seed-random"), &self.seed_text).width(Fill);
         let mut realtime = checkbox(state.config.realtime).label(self.t("toolbar-realtime"));
         if idle {
             device_picker = device_picker.on_open(Message::Noop);
@@ -1417,48 +1454,26 @@ impl App {
             realtime = realtime.on_toggle(Message::RealtimeToggled);
         }
         let _ = &mut profile_picker;
-
-        let start = if idle {
-            let mut b = button(text(self.t("toolbar-start")));
-            if state.config_problems.is_empty() && state.selected_device.is_some() {
-                b = b.on_press(Message::Run(Command::StartCapture));
-            }
-            b
-        } else {
-            button(text(self.t("toolbar-stop"))).on_press(Message::Run(Command::StopCapture))
-        };
-
-        let controls = row![
-            labelled(self.t("toolbar-device"), device_picker.into()),
+        let mut view = column![
+            text(self.t("panel-capture")).size(14),
+            labelled(self.t("toolbar-device"), device_picker.width(Fill).into()),
             labelled(self.t("toolbar-rate"), rate.into()),
             labelled(self.t("toolbar-length"), length.into()),
             labelled(self.t("toolbar-seed"), seed.into()),
-            labelled(self.t("toolbar-profile"), profile_picker.into()),
+            labelled(self.t("toolbar-profile"), profile_picker.width(Fill).into()),
             realtime,
-            start,
         ]
-        .spacing(12)
-        .align_y(iced::Alignment::End)
-        .wrap();
-
-        let mut toolbar = column![container(controls).padding([6, 8])];
-        // "No channel is chosen" needs no message: the flags in the channel list show it, and
-        // Start stays unavailable.
-        for problem in state
-            .config_problems
-            .iter()
-            .filter(|p| p.setting != la_host::devices::Setting::Channels)
-        {
-            toolbar = toolbar.push(
-                container(
-                    text(localizer.error_message_for_code(problem.code))
-                        .size(13)
-                        .style(text::danger),
-                )
-                .padding([0, 10]),
-            );
-        }
-        toolbar.into()
+        .spacing(8)
+        .padding(iced::Padding {
+            top: 6.0,
+            right: 18.0,
+            bottom: 6.0,
+            left: 6.0,
+        });
+        // For now the flags of the channels are the panel that was there before; the next step
+        // replaces it with the buttons of the capture view.
+        view = view.push(self.channel_panel());
+        scrollable(view).height(Fill).into()
     }
 
     /// The panel with the markers and the measurement between two of them.
@@ -2218,20 +2233,26 @@ impl App {
         if let Some(banner) = self.banner() {
             content = content.push(banner);
         }
-        let content = content
-            .push(
-                row![
-                    signal,
-                    column![
-                        self.decoders_panel(),
-                        self.markers_panel(),
-                        self.channel_panel()
-                    ]
-                    .width(280)
-                ]
-                .height(Fill),
-            )
-            .push(self.status_bar());
+        let side = self.shell.state().side_panel;
+        let mut body = row![signal].height(Fill);
+        let panel: Option<Element<'_, Message>> = match side {
+            la_host::SidePanel::Capture => Some(self.capture_panel()),
+            la_host::SidePanel::Decoders => Some(scrollable(self.decoders_panel()).into()),
+            la_host::SidePanel::Markers => Some(scrollable(self.markers_panel()).into()),
+            la_host::SidePanel::Hidden => None,
+        };
+        if let Some(panel) = panel {
+            body = body.push(crate::side_panel::frame(panel));
+        }
+        body = body.push(crate::side_panel::strip(
+            side,
+            [
+                self.t("panel-view-capture"),
+                self.t("panel-view-decoders"),
+                self.t("panel-view-markers"),
+            ],
+        ));
+        let content = content.push(body).push(self.status_bar());
 
         let mut layers: Vec<Element<'_, Message>> = vec![content.into()];
         if let Some(menu) = self.open_menu_view() {
@@ -2574,6 +2595,49 @@ mod tests {
     }
 
     #[test]
+    fn the_side_panel_shows_one_view_at_a_time_or_none_in_every_state() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("side-panel");
+        // A text that only that view has: not a menu title and not in the other views.
+        let marks = [
+            (la_host::SidePanel::Capture, app.t("toolbar-rate")),
+            (la_host::SidePanel::Decoders, app.t("decoders-empty")),
+            (la_host::SidePanel::Markers, app.t("measure-pick")),
+        ];
+        for size in [
+            iced::Size::new(1180.0, 720.0),
+            iced::Size::new(800.0, 560.0),
+        ] {
+            for shown in [
+                la_host::SidePanel::Capture,
+                la_host::SidePanel::Decoders,
+                la_host::SidePanel::Markers,
+                la_host::SidePanel::Hidden,
+            ] {
+                let _ = app.update(Message::SidePanel(shown));
+                assert_eq!(app.shell.state().side_panel, shown);
+                let mut ui =
+                    iced_test::Simulator::with_size(crate::fonts::settings(), size, app.view());
+                for (view, text) in &marks {
+                    assert_eq!(
+                        ui.find(text.as_str()).is_ok(),
+                        *view == shown,
+                        "{shown:?} at {size:?}: the text of {view:?}"
+                    );
+                }
+                let shot = ui.snapshot(&app.theme()).unwrap();
+                if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+                    shot.matches_image(
+                        std::path::Path::new(&directory)
+                            .join(format!("panel-{shown:?}-{}", size.width)),
+                    )
+                    .unwrap();
+                }
+            }
+        }
+    }
+
+    #[test]
     fn a_lane_dragged_among_the_shown_lanes_moves_the_channel_among_all_of_them() {
         let _turn = render_turn();
         let mut app = app_with_capture("lane-move");
@@ -2801,6 +2865,8 @@ mod tests {
             }));
         }
         let _ = app.update(Message::AreaResized(1000.0));
+        // The measurement is in the Markers view of the side panel.
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Markers));
         assert_eq!(app.plan.markers.len(), 2);
         let text = app.shell.measurement_text().unwrap();
         assert!(text.distance.starts_with("200"), "{}", text.distance);

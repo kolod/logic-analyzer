@@ -195,6 +195,9 @@ impl Shell {
             decoders: decoder_state,
             side_panel: crate::state::SidePanel::default(),
         };
+        if let Some(text) = state.settings.side_panel.as_deref() {
+            state.side_panel = crate::state::SidePanel::from_setting(text);
+        }
         revalidate(&mut state);
         sync_presentation(&mut state);
         if let Some(problem) = loaded.problem {
@@ -950,8 +953,13 @@ impl Shell {
             Command::SetChannelHeight { channel, height } => {
                 edit_presentation(state, |p| p.set_height(channel, height))
             }
-            Command::SetSidePanel(_)
-            | Command::ScrollToEdge { .. }
+            Command::SetSidePanel(view) => {
+                state.side_panel = view;
+                state.settings.side_panel = Some(view.as_setting().to_owned());
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | saved)
+            }
+            Command::ScrollToEdge { .. }
             | Command::RemoveRecentFile(_)
             | Command::ClearRecentFiles => Err(Reject::Ignored(error::INVALID_COMMAND)),
             Command::ResetPresentation => {

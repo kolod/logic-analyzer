@@ -173,30 +173,30 @@ panel, and that the choice returns after a restart.
 
 ### Tests for User Story 2 (write first; they must fail)
 
-- [ ] T016 [P] [US2] `crates/host/tests/side_panel.rs`: the default is `Capture`; `SetSidePanel` sets each of the
+- [X] T016 [P] [US2] `crates/host/tests/side_panel.rs`: the default is `Capture`; `SetSidePanel` sets each of the
   four values (no capture needed) and answers `Done`; the choice is saved in the settings (`side_panel` as
   `"capture"`, `"decoders"`, `"markers"`, `"hidden"`) and a new `Shell` on the same directory starts with it;
   an unknown or wrong-typed value reads as the default and does not stop the application; a settings file with
   an extra field from a newer version keeps it (the existing flatten test pattern of `settings.rs`).
-- [ ] T017 [P] [US2] A test in `crates/app/src/app.rs` for the pure part of the strip, in `side_panel.rs`'s own tests:
+- [X] T017 [P] [US2] A test in `crates/app/src/app.rs` for the pure part of the strip, in `side_panel.rs`'s own tests:
   `next_state(current, clicked) -> SidePanel` is `clicked` unless `clicked == current`, then `Hidden`; the
   rectangles of the three icons (28 px buttons in a 36 px strip, top to bottom) and which one is active.
-- [ ] T018 [P] [US2] Headless rendering tests in `crates/app/src/app.rs`: the application in each of the four panel
+- [X] T018 [P] [US2] Headless rendering tests in `crates/app/src/app.rs`: the application in each of the four panel
   states, in English, at the minimum window size and at 1180x720; no clipping of the strip; exactly one view's
   heading is present when a view is shown and none when hidden.
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] `crates/host/src/settings.rs`: `side_panel: Option<String>` with the conversion to and from `SidePanel`
+- [X] T019 [US2] `crates/host/src/settings.rs`: `side_panel: Option<String>` with the conversion to and from `SidePanel`
   (unknown gives the default); `crates/host/src/shell.rs`: the command `SetSidePanel` (sets `State.side_panel`,
   saves the settings) and the initial value from the settings. T016 passes.
-- [ ] T020 [US2] `crates/app/src/icons.rs`: vector icons drawn with the canvas: a circle with a dot (Capture), a stack of
+- [X] T020 [US2] `crates/app/src/icons.rs`: vector icons drawn with the canvas: a circle with a dot (Capture), a stack of
   three boxes (Decoders), a flag (Markers), each in the text colour of the theme, 20 px in a 28 px button; unit
   tests that every icon draws within its box (the path bounds).
-- [ ] T021 [US2] `crates/app/src/side_panel.rs`: the strip (three buttons with a 3 px bar on the left of the shown one,
+- [X] T021 [US2] `crates/app/src/side_panel.rs`: the strip (three buttons with a 3 px bar on the left of the shown one,
   tooltips from the keys `panel-view-capture`, `panel-view-decoders`, `panel-view-markers`) and the frame of the
   panel (280 px, minimum 220); `next_state`. T017 passes.
-- [ ] T022 [US2] `crates/app/src/app.rs`: `view()` becomes `row![signal, panel?, strip]`; the panel shows the content
+- [X] T022 [US2] `crates/app/src/app.rs`: `view()` becomes `row![signal, panel?, strip]`; the panel shows the content
   of the current view: the markers panel (`markers_panel()`), the decoders panel (`decoders_panel()`) or a new
   `capture_panel()` that for now **moves the controls out of `toolbar()` unchanged** (device, rate, length
   in samples, seed, density, real time; the toolbar keeps Start, Stop and the explanations) ; the right-hand
