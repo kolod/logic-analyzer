@@ -119,7 +119,8 @@ pub enum Message {
     /// A marker becomes the first (0) or second (1) of the measurement.
     MarkerMeasure(usize, u32),
     /// The menu entry that adds a decoder.
-    AddDecoderMenu,
+    /// An entry of the open menu that has a submenu (the index in the table) is pressed.
+    SubmenuToggled(usize),
     /// A source was chosen for a decoder instance (the capture, or another instance).
     DecoderSourcePicked(u32, Choice<Source>),
     /// A decoder was chosen in the list of decoders to add.
@@ -325,6 +326,8 @@ pub struct App {
     cache: canvas::Cache,
     cache_key: (u64, Variant, la_i18n::Language),
     open_menu: Option<usize>,
+    /// The entry of the open menu (its index in the table) whose submenu is open.
+    open_submenu: Option<usize>,
     rate_text: String,
     length_text: String,
     length_error: Option<la_host::config::SecondsError>,
@@ -376,6 +379,7 @@ impl App {
             cache: canvas::Cache::new(),
             cache_key: (0, variant, la_i18n::Language::En),
             open_menu: None,
+            open_submenu: None,
             rate_text: String::new(),
             length_text: String::new(),
             length_error: None,
@@ -880,7 +884,10 @@ impl App {
                     Some(Action::RemoveSelectedMarker) => {
                         self.update(Message::MarkerAction(MarkerAction::RemoveSelected))
                     }
-                    Some(Action::AddDecoder) => self.update(Message::AddDecoderMenu),
+                    Some(Action::AddDecoder) => {
+                        self.open_add_decoder_submenu();
+                        Task::none()
+                    }
                     Some(Action::ToggleSnap) => {
                         self.update(Message::MarkerAction(MarkerAction::ToggleSnap))
                     }
@@ -1078,18 +1085,16 @@ impl App {
             }
             Message::Run(command) => {
                 self.open_menu = None;
+                self.open_submenu = None;
                 self.run(command)
             }
-            Message::AddDecoderMenu => {
-                self.open_menu = None;
-                let catalogue = &self.shell.state().decoders.catalogue;
-                match catalogue.as_slice() {
-                    [only] => {
-                        let decoder = only.id.clone();
-                        self.run(Command::AddDecoder { decoder })
-                    }
-                    _ => Task::none(),
-                }
+            Message::SubmenuToggled(entry) => {
+                self.open_submenu = if self.open_submenu == Some(entry) {
+                    None
+                } else {
+                    Some(entry)
+                };
+                Task::none()
             }
             Message::DecoderSourcePicked(id, choice) => self.run(Command::StackDecoder {
                 id,
@@ -1156,6 +1161,7 @@ impl App {
                 value: Value::Boolean(on),
             }),
             Message::MenuToggled(index) => {
+                self.open_submenu = None;
                 self.open_menu = if self.open_menu == Some(index) {
                     None
                 } else {
@@ -1165,6 +1171,7 @@ impl App {
             }
             Message::MenuClosed => {
                 self.open_menu = None;
+                self.open_submenu = None;
                 Task::none()
             }
             Message::DevicePicked(choice) => {
@@ -1262,12 +1269,22 @@ impl App {
         }
         let title = titles.get(index)?;
         let mut items = column![].spacing(1).padding(4);
-        for entry in self.table.iter().filter(|e| e.menu[0] == *title) {
+        let mut submenu: Option<(usize, Element<'_, Message>)> = None;
+        for (position, (table_index, entry)) in self
+            .table
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.menu[0] == *title)
+            .enumerate()
+        {
             let enabled = entry.enabled_when.is_enabled(self.shell.state());
-            let label = match entry.accelerator {
+            let mut label = match entry.accelerator {
                 Some(a) => format!("{}    {}", self.t(entry.menu[1]), describe(a)),
                 None => self.t(entry.menu[1]),
             };
+            if matches!(entry.action, Action::AddDecoder) {
+                label.push_str("  ▸");
+            }
             let mut item = button(text(label))
                 .style(button::text)
                 .padding([4, 12])
@@ -1301,10 +1318,18 @@ impl App {
                     Action::ToggleSnap => {
                         item = item.on_press(Message::MarkerAction(MarkerAction::ToggleSnap));
                     }
-                    Action::AddDecoder => item = item.on_press(Message::AddDecoderMenu),
+                    Action::AddDecoder => {
+                        item = item.on_press(Message::SubmenuToggled(table_index));
+                        if self.open_submenu == Some(table_index) {
+                            submenu = Some((position, self.decoder_submenu()));
+                        }
+                    }
                 }
             }
             items = items.push(item);
+            if !enabled && matches!(entry.action, Action::AddDecoder) {
+                items = items.push(text(self.t("decoders-need-capture")).size(11));
+            }
         }
         if *title == "menu-file" {
             let recent = self.shell.recent_files();
@@ -1327,8 +1352,20 @@ impl App {
             }
         }
         let offset = 6.0 + index as f32 * 90.0;
+        let menu = container(items).style(container::bordered_box);
+        let shown: Element<'_, Message> = match submenu {
+            Some((position, submenu)) => row![
+                menu,
+                container(submenu).padding(iced::Padding {
+                    top: position as f32 * 29.0,
+                    ..iced::Padding::ZERO
+                })
+            ]
+            .into(),
+            None => menu.into(),
+        };
         Some(
-            container(container(items).style(container::bordered_box))
+            container(shown)
                 .padding(iced::Padding {
                     top: 30.0,
                     left: offset,
@@ -1336,6 +1373,46 @@ impl App {
                 })
                 .into(),
         )
+    }
+
+    /// The decoders of the catalogue by name, in the order of the catalogue.
+    fn decoder_submenu(&self) -> Element<'_, Message> {
+        let mut items = column![].spacing(1).padding(4);
+        for entry in &self.shell.state().decoders.catalogue {
+            items = items.push(
+                button(text(entry.name.clone()))
+                    .style(button::text)
+                    .padding([4, 12])
+                    .width(Length::Shrink)
+                    .on_press(Message::Run(Command::AddDecoder {
+                        decoder: entry.id.clone(),
+                    })),
+            );
+        }
+        container(items).style(container::bordered_box).into()
+    }
+
+    /// The key D: opens the Decoders menu with the submenu of Add decoder expanded.
+    fn open_add_decoder_submenu(&mut self) {
+        let mut titles: Vec<&'static str> = Vec::new();
+        for entry in &self.table {
+            if !titles.contains(&entry.menu[0]) {
+                titles.push(entry.menu[0]);
+            }
+        }
+        let Some((table_index, entry)) = self
+            .table
+            .iter()
+            .enumerate()
+            .find(|(_, e)| matches!(e.action, Action::AddDecoder))
+        else {
+            return;
+        };
+        self.open_menu = titles.iter().position(|t| *t == entry.menu[0]);
+        self.open_submenu = entry
+            .enabled_when
+            .is_enabled(self.shell.state())
+            .then_some(table_index);
     }
 
     /// The toolbar: Start and Stop, and what keeps Start from working.
@@ -1572,11 +1649,13 @@ impl App {
             list = list.push(text(self.t("decoders-need-capture")).size(12));
         } else {
             let catalogue = &state.decoders.catalogue;
-            if catalogue.len() == 1 {
+            if let [only] = catalogue.as_slice() {
                 list = list.push(
                     button(text(self.t("decoders-add")).size(13))
                         .padding([3, 8])
-                        .on_press(Message::AddDecoderMenu),
+                        .on_press(Message::Run(Command::AddDecoder {
+                            decoder: only.id.clone(),
+                        })),
                 );
             } else {
                 let choices: Vec<Choice<String>> = catalogue
@@ -2848,18 +2927,177 @@ mod tests {
             label: String::new(),
         }));
         assert_eq!(app.shell.state().decoders.instances.len(), 1);
-        let _ = app.update(Message::AddDecoderMenu);
-        assert_eq!(
-            app.shell.state().decoders.instances.len(),
-            1,
-            "the menu cannot choose for you"
+        // The menu lists every decoder by name and adds the one that is chosen.
+        press_d(&mut app);
+        assert!(app.open_menu.is_some() && app.open_submenu.is_some());
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
         );
+        for entry in &app.shell.state().decoders.catalogue {
+            assert!(ui.find(entry.name.as_str()).is_ok(), "{}", entry.name);
+        }
+        drop(ui);
+        let _ = app.update(Message::Run(Command::AddDecoder {
+            decoder: "test.echo".to_owned(),
+        }));
+        assert_eq!(app.shell.state().decoders.instances.len(), 2);
+        assert!(app.open_menu.is_none() && app.open_submenu.is_none());
         let mut ui = iced_test::Simulator::with_size(
             crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
         ui.snapshot(&app.theme()).unwrap();
+    }
+
+    /// The key D, as the keyboard sends it.
+    fn press_d(app: &mut App) {
+        let key = keyboard::Key::Character("d".into());
+        let _ = app.update(Message::Key(keyboard::Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::KeyD),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: Some("d".into()),
+            repeat: false,
+        }));
+    }
+
+    /// The index of the Decoders menu in the menu bar and of the entry Add decoder in the table.
+    fn decoders_menu(app: &App) -> (usize, usize) {
+        let entry = app
+            .table
+            .iter()
+            .position(|e| matches!(e.action, Action::AddDecoder))
+            .unwrap();
+        let mut titles: Vec<&'static str> = Vec::new();
+        for e in &app.table {
+            if !titles.contains(&e.menu[0]) {
+                titles.push(e.menu[0]);
+            }
+        }
+        let menu = titles
+            .iter()
+            .position(|t| *t == app.table[entry].menu[0])
+            .unwrap();
+        (menu, entry)
+    }
+
+    #[test]
+    fn add_decoder_in_the_menu_lists_the_decoders_by_name_and_adds_the_chosen_one() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("add-decoder-menu");
+        let (menu, entry) = decoders_menu(&app);
+        let names: Vec<(String, String)> = app
+            .shell
+            .state()
+            .decoders
+            .catalogue
+            .iter()
+            .map(|c| (c.id.clone(), c.name.clone()))
+            .collect();
+        assert_eq!(names.len(), 2);
+        for (id, _) in &names {
+            let _ = app.update(Message::MenuToggled(menu));
+            assert!(app.open_submenu.is_none(), "opening a menu starts closed");
+            let _ = app.update(Message::SubmenuToggled(entry));
+            assert_eq!(app.open_submenu, Some(entry));
+            let _ = app.update(Message::Run(Command::AddDecoder {
+                decoder: id.clone(),
+            }));
+            assert!(app.open_menu.is_none() && app.open_submenu.is_none());
+        }
+        let added: Vec<String> = app
+            .shell
+            .state()
+            .decoders
+            .instances
+            .iter()
+            .map(|i| i.setup.decoder.clone())
+            .collect();
+        assert_eq!(added, names.iter().map(|n| n.0.clone()).collect::<Vec<_>>());
+        // A second press on the entry closes the submenu again.
+        let _ = app.update(Message::MenuToggled(menu));
+        let _ = app.update(Message::SubmenuToggled(entry));
+        let _ = app.update(Message::SubmenuToggled(entry));
+        assert!(app.open_submenu.is_none());
+    }
+
+    #[test]
+    fn the_key_d_opens_the_decoders_menu_with_the_submenu_expanded() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("key-d");
+        let (menu, entry) = decoders_menu(&app);
+        press_d(&mut app);
+        assert_eq!(app.open_menu, Some(menu));
+        assert_eq!(app.open_submenu, Some(entry));
+        // Three and more registered decoders are all listed.
+        app.shell
+            .register_decoder(&ECHO, la_decoders::decoders::clocked_bits::create)
+            .unwrap();
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(800.0, 560.0),
+            app.view(),
+        );
+        for entry in &app.shell.state().decoders.catalogue {
+            assert!(ui.find(entry.name.as_str()).is_ok(), "{}", entry.name);
+        }
+    }
+
+    #[test]
+    fn without_a_capture_add_decoder_is_disabled_and_says_why() {
+        let _turn = render_turn();
+        let dir = std::env::temp_dir().join(format!("la-app-nocap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        let (menu, _) = decoders_menu(&app);
+        // The key of a disabled entry does nothing; the menu shows the entry and the reason.
+        press_d(&mut app);
+        assert!(app.open_menu.is_none());
+        let _ = app.update(Message::MenuToggled(menu));
+        assert!(app.open_submenu.is_none());
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(800.0, 560.0),
+            app.view(),
+        );
+        let reason = app.t("decoders-need-capture");
+        assert!(ui.find(reason.as_str()).is_ok(), "{reason}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_submenu_is_inside_the_window_at_the_minimum_size_in_english_and_german() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("submenu-min");
+        for language in [la_i18n::Language::En, la_i18n::Language::De] {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            press_d(&mut app);
+            assert!(app.open_submenu.is_some());
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 560.0),
+                app.view(),
+            );
+            for entry in &app.shell.state().decoders.catalogue {
+                let found = ui.find(entry.name.as_str()).unwrap();
+                let bounds = found.bounds();
+                assert!(
+                    bounds.x >= 0.0
+                        && bounds.y >= 0.0
+                        && bounds.x + bounds.width <= 800.0
+                        && bounds.y + bounds.height <= 560.0,
+                    "{language:?} {}: {bounds:?}",
+                    entry.name
+                );
+            }
+            drop(ui);
+            let _ = app.update(Message::MenuClosed);
+        }
     }
 
     #[test]

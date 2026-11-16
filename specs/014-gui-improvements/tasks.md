@@ -320,18 +320,18 @@ the view from the left with the zoom unchanged; the same to the left.
 
 ### Tests for User Story 7 (write first; they must fail)
 
-- [ ] T038 [P] [US7] Application tests (no display) in `crates/app/src/app.rs`: with a capture on screen and two decoders,
+- [X] T038 [P] [US7] Application tests (no display) in `crates/app/src/app.rs`: with a capture on screen and two decoders,
   `Message::MenuToggled` of Decoders and the entry Add decoder opens a submenu listing both names in catalogue
   order; choosing one adds that decoder; with one, three and eight registered decoders (test descriptors)
   the same holds; the key D opens the Decoders menu with the submenu expanded; with no capture the entry is
   disabled and its reason is shown; the old behaviour (`AddDecoderMenu` adding the only decoder) is gone and the
   tests that relied on it use the submenu.
-- [ ] T039 [P] [US7] Headless rendering tests: the Decoders menu with the submenu open, in English and German, at the
+- [X] T039 [P] [US7] Headless rendering tests: the Decoders menu with the submenu open, in English and German, at the
   minimum window size: the submenu is inside the window.
 
 ### Implementation for User Story 7
 
-- [ ] T040 [US7] `crates/app/src/app.rs`: generalise the menu overlay: an entry can have children (a submenu drawn to the
+- [X] T040 [US7] `crates/app/src/app.rs`: generalise the menu overlay: an entry can have children (a submenu drawn to the
   right of its menu, opening on press); state `open_submenu: Option<usize>`; `Action::AddDecoder` becomes an
   entry with the catalogue as children (`Message::AddDecoderPicked`); the D shortcut opens the Decoders menu and
   expands the submenu; remove the `AddDecoderMenu` one-decoder branch. T038 and T039 pass. Update the user guide

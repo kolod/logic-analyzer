@@ -93,8 +93,9 @@ A decoder reads the signals of the capture on screen and says what they mean. Th
 bits**, which samples a data channel on every edge of a clock channel and groups the bits into bytes.
 The rest of this chapter holds for both.
 
-1. Capture (or open) signals, then open the list **Add decoder** in the **Decoders** panel and choose a
-   decoder.
+1. Capture (or open) signals, then choose **Decoders → Add decoder** in the menu (or press **D**, which
+   opens that menu with the list of decoders) and pick a decoder by name. The list **Add decoder** in the
+   **Decoders** panel does the same.
 2. In the **Decoders** panel choose the channel for each signal (here **Clock** and **Data**) and, if
    you like, the options: which clock edge, the bit order, the bits per byte and the idle limit in
    samples. The decoding starts as soon as the channels are chosen, and again whenever a channel or
