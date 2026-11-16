@@ -739,6 +739,9 @@ fn walk(seed: u64, steps: u64) {
                 }
             }
             let discarding = matches!(command, Command::Decide(Decision::Discard));
+            // A save that starts in this step may also end in it (a fast disk and a poll), and the
+            // command that waited for the save then goes on: that is a save, not a loss.
+            let starts_save = matches!(command, Command::SaveSession | Command::SaveSessionAs(_));
             history.push(format!("{step}: {command:?}"));
             let outcome = shell.apply(command);
             if let Some(last) = history.last_mut() {
@@ -786,7 +789,8 @@ fn walk(seed: u64, steps: u64) {
             if at_risk {
                 at_risk_steps += 1;
                 let replaced = identity(&shell) != before;
-                let saved_now = saving_before
+                let saved_now = (saving_before
+                    || (starts_save && matches!(outcome, la_host::Outcome::Done(_))))
                     && !shell.operation_running()
                     && notice_total(&shell) <= notices_before;
                 if replaced && !(discarded_now || discard_open || saved_now) {
