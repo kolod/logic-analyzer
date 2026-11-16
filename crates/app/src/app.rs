@@ -7,8 +7,8 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use iced::widget::{
-    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, progress_bar, radio,
-    row, scrollable, stack, text, text_input, tooltip,
+    Space, button, canvas, checkbox, column, container, mouse_area, pick_list, progress_bar, row,
+    scrollable, stack, text, text_input, tooltip,
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
 use la_decoders::setup::{Source, Value};
