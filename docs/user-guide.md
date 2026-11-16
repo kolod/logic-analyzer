@@ -79,6 +79,9 @@ it.
 The legend is the strip at the left of the signals, one row for each channel:
 
 - **Click the coloured bar** at its left edge to step to the next colour of the palette.
+- The **name** is the main text of a row and, under it, small, the **number of the analyzer input**
+  (`D0`, `D1`, …), which does not change when you move the row, so you can always tell which wire a
+  signal is on. A very low row shows the number at its right edge instead.
 - **Click the name** to rename the channel in place: Enter accepts, Escape cancels. An empty name
   gives back the default one. Names are yours and are never translated.
 - **Drag the name** up or down to move the channel; a line shows where it will land. Release outside

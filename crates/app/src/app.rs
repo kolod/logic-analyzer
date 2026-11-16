@@ -2380,7 +2380,7 @@ impl App {
                 stack![
                     signal,
                     container(editor).padding(iced::Padding {
-                        top: edit.top + 4.0,
+                        top: edit.top,
                         left: 8.0,
                         ..iced::Padding::ZERO
                     })

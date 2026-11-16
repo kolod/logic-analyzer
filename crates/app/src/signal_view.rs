@@ -30,6 +30,12 @@ pub use crate::lane_layout::{AXIS_HEIGHT, GUTTER};
 use crate::theme::Variant;
 
 const TEXT_SIZE: f32 = 13.0;
+/// The size of the number of the channel under its name.
+const NUMBER_SIZE: f32 = 10.0;
+/// Half the height of the text field that edits a name.
+const EDITOR_HALF: f32 = 11.0;
+/// A lane at least this high shows its name and its number on two lines.
+const TWO_LINES_FROM: f32 = 34.0;
 /// How far the pointer must move after a press on a name before it is a drag.
 const DRAG_THRESHOLD: f32 = 4.0;
 /// Two presses on a border this close in time are a double click.
@@ -291,14 +297,7 @@ impl SignalView<'_> {
             let colour = self.variant.channel(channel.colour);
             // The colour bar, which a click steps through the palette.
             frame.fill_rectangle(Point::new(0.0, top), Size::new(BAR_WIDTH, lane), colour);
-            frame.fill_text(Text {
-                content: fit(&self.channel_label(index), 13),
-                position: Point::new(BAR_WIDTH + 6.0, top + lane / 2.0),
-                color: colour,
-                size: Pixels(TEXT_SIZE),
-                align_y: Vertical::Center,
-                ..Text::default()
-            });
+            self.draw_legend_text(frame, top, lane, index, colour);
             frame.stroke(
                 &Path::line(
                     Point::new(0.0, top + lane),
@@ -525,6 +524,22 @@ impl SignalView<'_> {
 fn band_extent(kind: u8, top: f32, lane: f32) -> (f32, f32) {
     let margin = if kind == 0 { WAVE_MARGIN } else { 3.0 };
     (top + margin, lane - 2.0 * margin)
+}
+
+/// The y of the middle of the name in a lane at `top` of `height`: the name is the upper line when
+/// the number is shown under it.
+fn name_centre(top: f32, height: f32) -> f32 {
+    if height >= TWO_LINES_FROM {
+        top + height / 2.0 - 6.0
+    } else {
+        top + height / 2.0
+    }
+}
+
+/// The label of the channel of the analyzer a lane shows: `D` and the number, as the digital
+/// inputs are marked on the devices. It is a mark, not a word, so it is not translated.
+fn physical_label(channel: u8) -> String {
+    format!("D{channel}")
 }
 
 /// The path of a waveform: levels as horizontal lines, single transitions as vertical lines at
@@ -888,7 +903,10 @@ impl canvas::Program<Message> for SignalView<'_> {
                                 .and_capture(),
                             ),
                             Zone::Name => {
-                                let top = layout.lane(press.lane).map_or(AXIS_HEIGHT, |l| l.top);
+                                // The editor opens over the name: its top, for the app to place.
+                                let top = layout.lane(press.lane).map_or(AXIS_HEIGHT, |l| {
+                                    name_centre(l.top, l.height) - EDITOR_HALF
+                                });
                                 Some(
                                     canvas::Action::publish(Message::EditChannelName(
                                         channel.channel,
@@ -1033,6 +1051,58 @@ impl SignalView<'_> {
         );
     }
 
+    /// The text of a lane in the legend: the name the user gave, as the main text, and under it the
+    /// number of the channel of the analyzer, so that the wire is never lost when the lanes are
+    /// moved. A lane too low for two lines shows the number small at the right edge instead.
+    fn draw_legend_text(
+        &self,
+        frame: &mut Frame,
+        top: f32,
+        height: f32,
+        index: usize,
+        colour: Color,
+    ) {
+        let number = self
+            .plan
+            .channels
+            .get(index)
+            .map(|c| physical_label(c.channel))
+            .unwrap_or_default();
+        let left = BAR_WIDTH + 6.0;
+        let two_lines = height >= TWO_LINES_FROM;
+        let name_y = name_centre(top, height);
+        frame.fill_text(Text {
+            content: fit(&self.channel_label(index), if two_lines { 13 } else { 9 }),
+            position: Point::new(left, name_y),
+            color: colour,
+            size: Pixels(TEXT_SIZE),
+            align_y: Vertical::Center,
+            ..Text::default()
+        });
+        let (x, y, align) = if two_lines {
+            (
+                left,
+                top + height / 2.0 + 9.0,
+                iced::alignment::Horizontal::Left,
+            )
+        } else {
+            (
+                GUTTER - 6.0,
+                top + height / 2.0,
+                iced::alignment::Horizontal::Right,
+            )
+        };
+        frame.fill_text(Text {
+            content: number,
+            position: Point::new(x, y),
+            color: Color { a: 0.75, ..colour },
+            size: Pixels(NUMBER_SIZE),
+            align_x: align.into(),
+            align_y: Vertical::Center,
+            ..Text::default()
+        });
+    }
+
     /// The lane that is being moved, lifted under the pointer as a whole (its background, its
     /// bands and its signal, the full width of the view), and the line where it will land (the
     /// other lanes make room there, see `shifts`).
@@ -1089,14 +1159,7 @@ impl SignalView<'_> {
             Size::new(BAR_WIDTH, lane.height),
             colour,
         );
-        frame.fill_text(Text {
-            content: fit(&self.channel_label(from), 13),
-            position: Point::new(BAR_WIDTH + 6.0, top + lane.height / 2.0),
-            color: colour,
-            size: Pixels(TEXT_SIZE),
-            align_y: Vertical::Center,
-            ..Text::default()
-        });
+        self.draw_legend_text(frame, top, lane.height, from, colour);
         // The outline of the lifted lane.
         let outline = Path::rectangle(Point::new(0.0, top), Size::new(size.width, lane.height));
         frame.stroke(
@@ -1239,6 +1302,20 @@ mod tests {
             let (message, redraw, _) = action.into_inner();
             (message, redraw)
         })
+    }
+
+    #[test]
+    fn a_lane_shows_the_name_above_the_number_of_its_analyzer_channel() {
+        // The number is the channel of the analyzer, not the place of the lane: moving a lane
+        // never changes it.
+        assert_eq!(physical_label(0), "D0");
+        assert_eq!(physical_label(13), "D13");
+        // Two lines from 34 px: the name is the upper one; a lower lane keeps one line.
+        assert!(name_centre(100.0, 72.0) < 100.0 + 36.0);
+        assert!((name_centre(100.0, 30.0) - 115.0).abs() < f32::EPSILON);
+        const { assert!(NUMBER_SIZE < TEXT_SIZE) };
+        // Both lines fit the smallest lane that has two: 13 + 10 pixels of text in 34.
+        const { assert!(TWO_LINES_FROM >= TEXT_SIZE + NUMBER_SIZE + 8.0) };
     }
 
     #[test]
@@ -1655,7 +1732,8 @@ mod tests {
             panic!("{published:?}");
         };
         assert_eq!(*channel, plan.channels[1].channel);
-        assert!((top - 100.0).abs() < f32::EPSILON);
+        // The editor sits over the name: the middle of the upper line of lane 1 (100..172) is 130.
+        assert!((top - (130.0 - EDITOR_HALF)).abs() < f32::EPSILON, "{top}");
     }
 
     #[test]
