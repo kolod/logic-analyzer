@@ -122,6 +122,10 @@ A decoder reads the signals of the capture on screen and says what they mean. Th
 bits**, which samples a data channel on every edge of a clock channel and groups the bits into bytes.
 The rest of this chapter holds for both.
 
+In the **Decoders** panel each decoder is shown by its name. The arrow to the left of the name folds
+its properties away (the state and the number of results stay) and unfolds them again; the bin at the
+right removes the decoder.
+
 1. Capture (or open) signals, then choose **Decoders → Add decoder** in the menu (or press **D**, which
    opens that menu with the list of decoders) and pick a decoder by name. The list **Add decoder** in the
    **Decoders** panel does the same.

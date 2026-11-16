@@ -18,6 +18,12 @@ pub enum Icon {
     Decoders,
     /// A flag: the markers.
     Markers,
+    /// A waste bin: remove.
+    Trash,
+    /// An arrow that points right: a collapsed block.
+    ChevronRight,
+    /// An arrow that points down: an expanded block.
+    ChevronDown,
 }
 
 /// What an icon draws: the strokes and fills of one icon, in the unit square `0..SIZE`.
@@ -66,7 +72,43 @@ fn paths(icon: Icon) -> Vec<(Path, bool)> {
             });
             vec![(pole, false), (flag, true)]
         }
+        Icon::Trash => {
+            let line = |x0: f32, y0: f32, x1: f32, y1: f32| {
+                (Path::line(Point::new(x0, y0), Point::new(x1, y1)), false)
+            };
+            let handle = Path::new(|b| {
+                b.move_to(Point::new(7.5, 5.0));
+                b.line_to(Point::new(7.5, 2.5));
+                b.line_to(Point::new(12.5, 2.5));
+                b.line_to(Point::new(12.5, 5.0));
+            });
+            let body = Path::new(|b| {
+                b.move_to(Point::new(4.5, 5.0));
+                b.line_to(Point::new(5.8, 17.5));
+                b.line_to(Point::new(14.2, 17.5));
+                b.line_to(Point::new(15.5, 5.0));
+            });
+            vec![
+                line(2.5, 5.0, 17.5, 5.0),
+                (handle, false),
+                (body, false),
+                line(8.4, 8.0, 8.4, 15.0),
+                line(11.6, 8.0, 11.6, 15.0),
+            ]
+        }
+        Icon::ChevronRight => vec![(chevron([(7.0, 4.0), (13.0, 10.0), (7.0, 16.0)]), false)],
+        Icon::ChevronDown => vec![(chevron([(4.0, 7.0), (10.0, 13.0), (16.0, 7.0)]), false)],
     }
+}
+
+/// Two strokes that meet in a point.
+fn chevron(points: [(f32, f32); 3]) -> Path {
+    Path::new(|b| {
+        let [(x0, y0), (x1, y1), (x2, y2)] = points;
+        b.move_to(Point::new(x0, y0));
+        b.line_to(Point::new(x1, y1));
+        b.line_to(Point::new(x2, y2));
+    })
 }
 
 impl canvas::Program<Message> for IconView {
@@ -108,7 +150,14 @@ mod tests {
 
     #[test]
     fn every_icon_draws_inside_its_square_and_draws_something() {
-        for icon in [Icon::Capture, Icon::Decoders, Icon::Markers] {
+        for icon in [
+            Icon::Capture,
+            Icon::Decoders,
+            Icon::Markers,
+            Icon::Trash,
+            Icon::ChevronRight,
+            Icon::ChevronDown,
+        ] {
             let list = paths(icon);
             assert!(!list.is_empty(), "{icon:?}");
             for (path, _) in list {

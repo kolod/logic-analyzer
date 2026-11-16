@@ -22,6 +22,7 @@ use la_host::{
 };
 use la_i18n::{Args, Key};
 
+use crate::icons::{self, Icon};
 use crate::signal_view::SignalView;
 use crate::theme::Variant;
 
@@ -130,7 +131,8 @@ pub enum Message {
     /// A decoder was chosen in the list of decoders to add.
     AddDecoderPicked(Choice<String>),
     /// A decoder instance was renamed in the panel.
-    DecoderName(u32, String),
+    /// The properties of a decoder are folded or unfolded.
+    DecoderToggled(u32),
     /// A channel was chosen for a signal of a decoder instance.
     DecoderChannelPicked(u32, String, Choice<Option<u8>>),
     /// A choice option of a decoder instance was changed.
@@ -337,7 +339,8 @@ pub struct App {
     length_error: Option<la_host::config::SecondsError>,
     seed_text: String,
     marker_names: std::collections::BTreeMap<u32, String>,
-    decoder_names: std::collections::BTreeMap<u32, String>,
+    /// The decoders whose properties are folded away.
+    folded_decoders: std::collections::BTreeSet<u32>,
     option_texts: std::collections::BTreeMap<(u32, String), String>,
     messages_open: bool,
     settings_open: bool,
@@ -401,7 +404,7 @@ impl App {
             length_error: None,
             seed_text: String::new(),
             marker_names: std::collections::BTreeMap::new(),
-            decoder_names: std::collections::BTreeMap::new(),
+            folded_decoders: std::collections::BTreeSet::new(),
             option_texts: std::collections::BTreeMap::new(),
             messages_open: false,
             settings_open: false,
@@ -1150,9 +1153,11 @@ impl App {
             Message::AddDecoderPicked(choice) => self.run(Command::AddDecoder {
                 decoder: choice.value,
             }),
-            Message::DecoderName(id, name) => {
-                self.decoder_names.insert(id, name.clone());
-                self.run(Command::RenameDecoder { id, name })
+            Message::DecoderToggled(id) => {
+                if !self.folded_decoders.remove(&id) {
+                    self.folded_decoders.insert(id);
+                }
+                Task::none()
             }
             Message::DecoderChannelPicked(id, role, choice) => {
                 self.run(Command::SetDecoderChannel {
@@ -1831,11 +1836,13 @@ impl App {
             .catalogue
             .iter()
             .find(|c| c.id == instance.setup.decoder);
-        let default_name = entry.map_or_else(String::new, |e| e.name.clone());
-        let name = self
-            .decoder_names
-            .get(&id)
-            .map_or(instance.setup.name.as_str(), String::as_str);
+        // The decoder is shown by its name; a name given through the host API is kept.
+        let name = if instance.setup.name.is_empty() {
+            entry.map_or_else(String::new, |e| e.name.clone())
+        } else {
+            instance.setup.name.clone()
+        };
+        let folded = self.folded_decoders.contains(&id);
         let state_key = match instance.state {
             InstanceState::Waiting => "decoder-state-waiting",
             InstanceState::Running => "decoder-state-running",
@@ -1843,16 +1850,33 @@ impl App {
             InstanceState::Cancelled => "decoder-state-cancelled",
             InstanceState::Failed => "decoder-state-failed",
         };
+        let fold_tip = self.t(if folded {
+            "decoder-expand"
+        } else {
+            "decoder-collapse"
+        });
         let mut block = column![
             row![
-                text_input(&default_name, name)
-                    .size(13)
-                    .width(Fill)
-                    .on_input(move |t| Message::DecoderName(id, t)),
                 tooltip(
-                    button(text("\u{d7}").size(12))
+                    button(icons::icon(
+                        if folded {
+                            Icon::ChevronRight
+                        } else {
+                            Icon::ChevronDown
+                        },
+                        false,
+                    ))
+                    .style(button::text)
+                    .padding(2)
+                    .on_press(Message::DecoderToggled(id)),
+                    text(fold_tip),
+                    tooltip::Position::Bottom,
+                ),
+                text(name).size(14).width(Fill),
+                tooltip(
+                    button(icons::icon(Icon::Trash, false))
                         .style(button::text)
-                        .padding(3)
+                        .padding(2)
                         .on_press(Message::Run(Command::RemoveDecoder(id))),
                     text(self.t("decoder-remove")),
                     tooltip::Position::Bottom,
@@ -1862,12 +1886,6 @@ impl App {
             .align_y(iced::Alignment::Center)
         ]
         .spacing(3);
-        block = block.push(
-            checkbox(instance.setup.lane_visible)
-                .label(self.t("decoder-lane-show"))
-                .size(14)
-                .on_toggle(move |visible| Message::Run(Command::ShowDecoderLane { id, visible })),
-        );
         let mut status = self.t(state_key);
         if instance.state == InstanceState::Running && instance.length > 0 {
             let percent = instance
@@ -1893,6 +1911,24 @@ impl App {
                 instance.covered as f32 / instance.length as f32,
             ));
         }
+        if let Some(code) = instance.fault {
+            block = block.push(
+                text(localizer.error_message_for_code(code))
+                    .size(12)
+                    .style(text::danger),
+            );
+        } else if instance.incomplete {
+            block = block.push(text(self.t("decoder-incomplete")).size(12));
+        }
+        if folded {
+            return block.into();
+        }
+        block = block.push(
+            checkbox(instance.setup.lane_visible)
+                .label(self.t("decoder-lane-show"))
+                .size(14)
+                .on_toggle(move |visible| Message::Run(Command::ShowDecoderLane { id, visible })),
+        );
         if !instance.ready {
             block = block.push(text(self.t("decoder-needs-channels")).size(12));
         } else {
@@ -1914,15 +1950,6 @@ impl App {
                     Command::RunDecoder(id)
                 })),
             );
-        }
-        if let Some(code) = instance.fault {
-            block = block.push(
-                text(localizer.error_message_for_code(code))
-                    .size(12)
-                    .style(text::danger),
-            );
-        } else if instance.incomplete {
-            block = block.push(text(self.t("decoder-incomplete")).size(12));
         }
         if let Some(entry) = entry {
             // Where it reads from, when there is a choice (a stacked decoder reads another one).
@@ -2876,6 +2903,62 @@ mod tests {
                     "{language:?} {text}"
                 );
                 assert!(app.length_error.is_none(), "{language:?} {text}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_decoder_is_shown_by_its_name_and_its_properties_fold_away() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("decoder-fold");
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Decoders));
+        let id = app.shell.state().decoders.catalogue[0].id.clone();
+        let name = app.shell.state().decoders.catalogue[0].name.clone();
+        let _ = app.update(Message::Run(Command::AddDecoder { decoder: id }));
+        let instance = app.shell.state().decoders.instances[0].id;
+        let properties = app.t("decoder-lane-show");
+        let find = |app: &App, label: &str| {
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(1180.0, 720.0),
+                app.view(),
+            );
+            ui.find(label).is_ok()
+        };
+        // The name is plain text (the decoder is not renamed in the panel) and the properties show.
+        assert!(find(&app, &name), "{name}");
+        assert!(find(&app, &properties));
+        // Folded: the header and the state stay, the properties go.
+        let _ = app.update(Message::DecoderToggled(instance));
+        assert!(app.folded_decoders.contains(&instance));
+        assert!(find(&app, &name));
+        assert!(!find(&app, &properties));
+        // Unfolded again.
+        let _ = app.update(Message::DecoderToggled(instance));
+        assert!(find(&app, &properties));
+        // The bin removes it (a decoder without results is removed at once).
+        let _ = app.update(Message::Run(Command::RemoveDecoder(instance)));
+        assert!(app.shell.state().decoders.instances.is_empty());
+    }
+
+    #[test]
+    fn the_decoder_header_renders_in_every_language_at_the_minimum_size() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("decoder-header");
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Decoders));
+        let id = app.shell.state().decoders.catalogue[0].id.clone();
+        let _ = app.update(Message::Run(Command::AddDecoder { decoder: id }));
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            for _ in 0..2 {
+                let ui = iced_test::Simulator::with_size(
+                    crate::fonts::settings(),
+                    iced::Size::new(800.0, 560.0),
+                    app.view(),
+                );
+                drop(ui);
+                let instance = app.shell.state().decoders.instances[0].id;
+                let _ = app.update(Message::DecoderToggled(instance));
             }
         }
     }
