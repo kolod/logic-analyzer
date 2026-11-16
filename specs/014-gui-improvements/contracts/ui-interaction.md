@@ -12,15 +12,15 @@ For a lane with its top `y` and height `h`, after the vertical offset:
 |------|-----------|-------------------|----------------|
 | colour bar | `x 0..8`, `y..y+h` | `SetChannelColour(Palette((i + 1) % 16))` (a custom colour goes to palette 0) | nothing |
 | name | `x 8..112`, `y..y+h-4` | the editor opens over the name | after 4 px: the lane is dragged |
-| border | `y+h-3 .. y+h+4` across the whole strip | double click: `SetChannelHeight(0)` | the lane above is resized live; on release `SetChannelHeight(h)` |
+| border | `y+h-3 .. y+h+4` across the whole strip | double click: `SetChannelHeight(0)` | the lane above is resized live with `SetChannelHeight(h)` |
 
 - The lane of a decoder shows no colour bar, no editor and no border (its height is automatic); it can
   be neither dragged nor resized.
 - A dragged lane is drawn lifted (a translucent copy at the pointer) and a line shows where it will land;
   release sends `MoveChannel { from, to }`; Escape or release outside the strip cancels. Dragging near the
   top or the bottom of the area scrolls it.
-- Resizing is limited to `24..=240` while dragging (the border stops at the limits); the release of the
-  mouse button sends the command once.
+- Resizing is limited to `24..=240` while dragging (the border stops at the limits); the height is sent
+  with `SetChannelHeight` as the border moves, so the lane follows the pointer.
 - The legend scrolls vertically with the wheel while the pointer is over it, and has a thin bar at its
   right edge when the lanes are taller than the area; the wheel over the waveforms keeps zooming.
 - The editor is a one-line text field with the current name selected; Enter accepts; Escape cancels; a
@@ -30,14 +30,14 @@ For a lane with its top `y` and height `h`, after the vertical offset:
 ## The side panel
 
 ```text
-| signals ........................ | panel (280 px, min 220) | icons (36 px) |
+| signals ........................ | panel (280 px) | icons (36 px) |
 ```
 
 - The strip of icons is always at the right edge: Capture, Decoders, Markers, top to bottom, each a 28 px
   button with a 3 px bar on its left when it is the shown view.
 - Click on an icon: `SetSidePanel(that view)`; on the icon of the shown view: `SetSidePanel(Hidden)`.
-- The panel width is fixed in this feature; the signals take the rest. At the minimum window width the
-  panel is 220 px.
+- The panel width is fixed (280 px) in this feature; the signals take the rest, also at the minimum
+  window width.
 - The Capture view, top to bottom: device, sample rate, length in seconds (with the samples beside it),
   seed, density, real time (the last three only for the simulated device), the channels to record, the
   explanations of problems.

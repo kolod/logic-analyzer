@@ -432,16 +432,16 @@ well-formed declarations.
   view with seconds and the channel buttons, the edge buttons, Open recent, Add decoder, the icons; remove the
   chapters of the Channels panel and the old toolbar); `docs/localization.md` if it lists keys by area;
   `roadmap.md` (014 merged when the pull request is merged, not before).
-- [ ] T053 [P] Localization review: every new key exists in six languages and `cargo test -p la-i18n` passes; the headless
+- [X] T053 [P] Localization review: every new key exists in six languages and `cargo test -p la-i18n` passes; the headless
   tests of T018, T025, T033, T039 and T042 cover English, German, Ukrainian and Japanese at the minimum window
   size; list the Japanese and long German texts a person should look at in `verification.md`.
-- [ ] T054 Data-safety and Principle I review of the new code: no `unwrap`, `expect`, indexing or unchecked arithmetic
+- [X] T054 Data-safety and Principle I review of the new code: no `unwrap`, `expect`, indexing or unchecked arithmetic
   (`cargo clippy --workspace --all-targets -- -D warnings`), `cargo +1.85 check -p la-host -p la-storage`; every
   parser has a hostile-input test (`LAYT`, the seconds text, the settings value, recent paths).
-- [ ] T055 Mutation checks for tests that passed the first time they ran (the zone borders of `lane_layout`, the
+- [X] T055 Mutation checks for tests that passed the first time they ran (the zone borders of `lane_layout`, the
   quarter of `ScrollToEdge`, the clamp of heights, the 15 of the recent files, the toggling of the panel by
   `next_state`): break the guarded line, see the test fail, restore; record in `verification.md`.
-- [ ] T056 SC check and `specs/014-gui-improvements/verification.md`: traceability of every FR and SC to the tests that
+- [X] T056 SC check and `specs/014-gui-improvements/verification.md`: traceability of every FR and SC to the tests that
   prove it; SC-002 measured (the signal width with and without the panel at 1180 px); SC-004 measured (the click on
   100 million samples); the benchmark numbers against the baseline; the manual checks left to the owner
   (quickstart section 4 on Windows and Debian, the icons in Explorer and a Debian file manager, the translations).
