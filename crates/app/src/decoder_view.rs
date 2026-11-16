@@ -275,12 +275,13 @@ pub fn draw_lanes(
     plan: &FramePlan,
     first_lane: usize,
     lane_top: &dyn Fn(usize) -> f32,
-    lane: f32,
+    lane_height: &dyn Fn(usize) -> f32,
     scale: f32,
     look: &Look<'_>,
 ) {
     for (index, decoder) in plan.lanes.iter().enumerate() {
         let top = lane_top(first_lane.saturating_add(index));
+        let lane = lane_height(first_lane.saturating_add(index));
         let label_colour = look.theme.palette().text;
         frame.fill_text(Text {
             content: fit(&decoder.name, 14),
@@ -367,7 +368,7 @@ pub fn draw_overlays(
     frame: &mut Frame,
     plan: &FramePlan,
     lane_top: &dyn Fn(usize) -> f32,
-    lane: f32,
+    lane_height: &dyn Fn(usize) -> f32,
     scale: f32,
     look: &Look<'_>,
 ) {
@@ -381,7 +382,7 @@ pub fn draw_overlays(
         };
         // Everything an overlay draws is centred in the lane of its channel, on the signal's
         // line of travel, and takes the colour of that signal unless it names its own.
-        let centre = lane_top(index) + lane / 2.0;
+        let centre = lane_top(index) + lane_height(index) / 2.0;
         let signal = plan
             .channels
             .get(index)
@@ -480,7 +481,7 @@ pub fn hit_test(
     position: Point,
     first_lane: usize,
     lane_top: &dyn Fn(usize) -> f32,
-    lane: f32,
+    lane_height: &dyn Fn(usize) -> f32,
     scale: f32,
 ) -> Option<Hit> {
     if position.x < GUTTER {
@@ -488,6 +489,7 @@ pub fn hit_test(
     }
     for (index, decoder) in plan.lanes.iter().enumerate() {
         let top = lane_top(first_lane.saturating_add(index));
+        let lane = lane_height(first_lane.saturating_add(index));
         if position.y >= top && position.y < top + lane {
             let rows = decoder.plan.rows.len().max(1);
             let row_height = ((lane - STRIP - 6.0) / rows as f32).min(24.0);
@@ -523,6 +525,7 @@ pub fn hit_test(
             continue;
         };
         let top = lane_top(index);
+        let lane = lane_height(index);
         // The overlays are centred in the lane of their channel.
         if (position.y - (top + lane / 2.0)).abs() > OVERLAY_BAND / 2.0 + 3.0 {
             continue;

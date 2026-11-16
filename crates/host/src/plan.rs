@@ -26,6 +26,8 @@ pub struct ChannelView {
     pub name: String,
     /// The colour of the waveform.
     pub colour: Colour,
+    /// The height of its signal in logical pixels (0: automatic).
+    pub height: u16,
 }
 
 /// What the view can show.
@@ -109,6 +111,8 @@ pub struct ChannelPlan {
     pub name: String,
     /// The colour of the waveform.
     pub colour: Colour,
+    /// The height of its signal in logical pixels (0: automatic).
+    pub height: u16,
     /// Contiguous, sorted segments that cover every column.
     pub segments: Vec<Segment>,
 }
@@ -269,6 +273,7 @@ fn build_inner(
                 channel: view.channel,
                 name: view.name.clone(),
                 colour: view.colour,
+                height: view.height,
                 segments: vec![Segment::Beyond {
                     from: 0,
                     to: pixels,
@@ -290,6 +295,7 @@ fn build_inner(
             channel: view.channel,
             name: view.name.clone(),
             colour: view.colour,
+            height: view.height,
             segments,
         });
     }

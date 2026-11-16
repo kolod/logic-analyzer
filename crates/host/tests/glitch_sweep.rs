@@ -20,6 +20,7 @@ fn view() -> Vec<ChannelView> {
         channel: 0,
         name: String::new(),
         colour: Colour::Palette(0),
+        height: 0,
     }]
 }
 

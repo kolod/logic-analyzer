@@ -97,14 +97,14 @@ taller and another lower, move the first to the bottom, save, open: everything i
 
 ### Tests for User Story 1 (write first; they must fail)
 
-- [ ] T005 [P] [US1] `crates/host/tests/channel_height.rs`: `SetChannelHeight` for a shown channel stores the
+- [X] T005 [P] [US1] `crates/host/tests/channel_height.rs`: `SetChannelHeight` for a shown channel stores the
   height (`ChannelStyle.height`) and answers `Done` with the presentation change; a height of 0 means
   automatic; 10 is clamped to 24 and 999 to 240; an unknown channel is `Ignored(host.invalid_command)`; it works
   with no capture (the defaults for the device's channels), while a capture runs, and after `MoveChannel` (the
   height follows its channel); `ResetPresentation` sets every height to 0; heights are kept for the next
   capture (the same rule as names and colours); the frame plan carries the height of each channel
   (`ChannelView.height`).
-- [ ] T006 [P] [US1] `crates/host/tests/layout_section.rs`: the `LAYT` payload for channels 1 with 40 and 31 with
+- [X] T006 [P] [US1] `crates/host/tests/layout_section.rs`: the `LAYT` payload for channels 1 with 40 and 31 with
   240 is exactly `01 02 01 28 1f f0 01` (version, count, channel, height varints) written by hand; the writer is
   deterministic; a session with no custom height has no `LAYT` section; every rejection of the section contract
   (version 2 is `Newer`, non-canonical varint, count 33, channel not below the channel count, repeated or
@@ -114,7 +114,7 @@ taller and another lower, move the first to the bottom, save, open: everything i
   heights and no notice; a `LAYT` section in an extras list survives a save by a reader that does not know it
   (the extras helper of `decoder_sessions.rs`); a property test with random bytes (nothing panics; an accepted
   payload re-encodes to the same bytes).
-- [ ] T007 [P] [US1] The unit tests of `crates/app/src/lane_layout.rs` (written first in its `#[cfg(test)]` module,
+- [X] T007 [P] [US1] The unit tests of `crates/app/src/lane_layout.rs` (written first in its `#[cfg(test)]` module,
   by hand): with channels of heights [automatic, 60, 40] in an area of 300 px, the rectangles of the lanes, the
   zones of each (colour bar `x 0..8`, name `x 8..112`, border `y+h-3 .. y+h+4`), the hit test at the corners of
   every zone and one pixel outside, a vertical offset that scrolls the lanes and keeps the axis, the total height
@@ -122,31 +122,31 @@ taller and another lower, move the first to the bottom, save, open: everything i
   two, and below the last lane, the resize clamp to `24..=240`, decoder lanes without colour bar, name or border
   zones and not draggable, and the automatic height rule of feature 006 for lanes with height 0 (the same values
   as `lane_height` gives today).
-- [ ] T008 [P] [US1] A headless rendering test in `crates/app/src/app.rs` tests: a capture with heights set, the legend
+- [X] T008 [P] [US1] A headless rendering test in `crates/app/src/app.rs` tests: a capture with heights set, the legend
   with the in-place editor open over a name, in English and Ukrainian, at the minimum window size: renders
   without panic and (with `LA_SNAPSHOT_DIR`) writes the pictures.
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] `crates/host/src/presentation.rs`: `ChannelStyle.height: u16` (default 0), `Presentation::set_height` (0 or
+- [X] T009 [US1] `crates/host/src/presentation.rs`: `ChannelStyle.height: u16` (default 0), `Presentation::set_height` (0 or
   clamp into `24..=240`; false for an unknown channel), `defaults` and `resize` set 0, `reset` sets 0, and
   `ChannelView.height` in `crates/host/src/plan.rs` from the style. T005 (state parts) passes.
-- [ ] T010 [US1] `crates/host/src/layout_section.rs` per the section contract: `TAG = "LAYT"`, `VERSION = 1`,
+- [X] T010 [US1] `crates/host/src/layout_section.rs` per the section contract: `TAG = "LAYT"`, `VERSION = 1`,
   `encode(&Presentation) -> Option<Vec<u8>>` (None when no height is custom), `decode(&[u8], channels) ->
   Result<Decoded>` with `Decoded::Heights(Vec<(u8, u16)>)` and `Decoded::Newer`, canonical varints (reuse the
   helpers of `view_section.rs`), `host.layout_invalid` in `crates/host/src/error.rs` with its constructor. T006 (format
   parts) passes.
-- [ ] T011 [US1] `crates/host/src/sessions.rs`: write `LAYT` when a height is custom and remove it otherwise; read it when
+- [X] T011 [US1] `crates/host/src/sessions.rs`: write `LAYT` when a height is custom and remove it otherwise; read it when
   a session opens (invalid: warning notice `host.layout_invalid`, section dropped; newer: keep and Info notice
   `notice-layout-newer`); add the message of `host.layout_invalid` to `errors.ftl` and `notice-layout-newer` to
   `ui.ftl` in six languages (the `error_sweep.rs` test finds a missing one). T006 passes.
-- [ ] T012 [US1] `crates/host/src/shell.rs`: the command `SetChannelHeight` (the presentation change flag, allowed at any time);
+- [X] T012 [US1] `crates/host/src/shell.rs`: the command `SetChannelHeight` (the presentation change flag, allowed at any time);
   `ResetPresentation` also resets heights; the random walk (`crates/host/tests/random_walk.rs`) draws
   `SetChannelHeight` with heights from 0 to 300. T005 passes.
-- [ ] T013 [US1] `crates/app/src/lane_layout.rs` per research R4 and the interaction contract: `Layout::new(plan_lanes, area_height,
+- [X] T013 [US1] `crates/app/src/lane_layout.rs` per research R4 and the interaction contract: `Layout::new(plan_lanes, area_height,
   offset)`, `rect(index)`, `zone_at(point)`, `landing(y)`, `clamp_height`, `total_height`, with the automatic rule
   moved here from `signal_view::lane_height`. T007 passes.
-- [ ] T014 [US1] `crates/app/src/signal_view.rs`: draw and hit-test through `lane_layout` (variable heights, the vertical
+- [X] T014 [US1] `crates/app/src/signal_view.rs`: draw and hit-test through `lane_layout` (variable heights, the vertical
   offset, the thin bar when the lanes are taller than the area); the legend zones: a click on the colour bar
   sends `Message::Run(Command::SetChannelColour { channel, colour: next palette entry })` (a custom colour goes to
   palette 0), a press and release on the name sends `Message::EditChannelName(channel)`, a movement over 4 px
@@ -154,7 +154,7 @@ taller and another lower, move the first to the bottom, save, open: everything i
   Escape cancels), a press on a border resizes the lane above live and sends `SetChannelHeight` on release, a
   double click on a border sends height 0, the wheel over the legend scrolls the offset while over the waveforms
   it still zooms; the cached layer is rebuilt when the layout changes.
-- [ ] T015 [US1] `crates/app/src/app.rs`: the in-place editor: `Message::EditChannelName`, `ChannelNameInput`,
+- [X] T015 [US1] `crates/app/src/app.rs`: the in-place editor: `Message::EditChannelName`, `ChannelNameInput`,
   `ChannelNameAccept`, `ChannelNameCancel`; a `text_input` placed over the name at the rectangle of
   `lane_layout` on a layer above the canvas (select all on open; Enter accepts; Escape cancels; a click
   elsewhere accepts when the text changed and cancels when it did not) that sends `RenameChannel`. The Channels

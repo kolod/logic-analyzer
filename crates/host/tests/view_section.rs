@@ -239,6 +239,7 @@ fn a_typical_payload_decodes_to_the_values_written_in_the_contract() {
             name: "SDA".into(),
             colour: Colour::Rgb(0x10, 0x20, 0x30),
             visible: true,
+            height: 0,
         }
     );
     assert_eq!(p.channels[2].colour, Colour::Palette(5));
@@ -301,6 +302,7 @@ fn the_writer_is_deterministic_whatever_order_the_state_was_built_in() {
                     name: format!("c{i}"),
                     colour: Colour::Palette(i),
                     visible: true,
+                    height: 0,
                 })
                 .collect(),
         }),

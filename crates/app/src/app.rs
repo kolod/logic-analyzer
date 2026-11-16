@@ -35,6 +35,23 @@ pub enum Message {
     Key(keyboard::Event),
     /// The signal area has this width in logical pixels.
     AreaResized(f32),
+    /// The user clicked the name of a channel (its number and the top of its lane in the view):
+    /// the in-place editor opens over it.
+    EditChannelName(u8, f32),
+    /// A lane was dragged from the lane `from` to the lane `to` of the signal view (positions in
+    /// the list of the lanes that are shown).
+    MoveLane {
+        /// Where the lane was.
+        from: usize,
+        /// Where it was dropped.
+        to: usize,
+    },
+    /// The text of the in-place editor changed.
+    ChannelNameInput(String),
+    /// The editor is accepted (Enter, or a click elsewhere with a changed text).
+    ChannelNameAccept,
+    /// The editor is cancelled (Escape).
+    ChannelNameCancel,
     /// Run a host command.
     Run(Command),
     /// A menu title was clicked.
@@ -326,7 +343,21 @@ pub struct App {
     memory_text: String,
     decoder_memory_text: String,
     window_rect: [i32; 4],
+    editing: Option<ChannelEdit>,
 }
+
+/// The in-place editor of a channel name.
+#[derive(Debug, Clone)]
+struct ChannelEdit {
+    channel: u8,
+    /// The top of the lane in the signal view, in logical pixels.
+    top: f32,
+    text: String,
+    original: String,
+}
+
+/// The identity of the in-place editor, for focusing it.
+const NAME_EDITOR: &str = "channel-name-editor";
 
 impl App {
     /// Builds the application with the host shell of the current user.
@@ -363,11 +394,32 @@ impl App {
             memory_text: String::new(),
             decoder_memory_text: String::new(),
             window_rect: [0, 0, 0, 0],
+            editing: None,
         };
         app.sync_texts();
         app.sync_names();
         app.refresh();
         app
+    }
+
+    /// The positions in the order of all channels (`MoveChannel`) for a lane dragged from the lane
+    /// `from` to the lane `to` of the lanes that are shown: the moved channel goes where the channel
+    /// of the target lane is.
+    fn presentation_move(&self, from: usize, to: usize) -> Option<(usize, usize)> {
+        let order: Vec<u8> = self
+            .shell
+            .state()
+            .presentation
+            .channels
+            .iter()
+            .map(|c| c.index)
+            .collect();
+        let position = |lane: usize| {
+            let channel = self.plan.channels.get(lane)?.channel;
+            order.iter().position(|c| *c == channel)
+        };
+        let (from, to) = (position(from)?, position(to)?);
+        (from != to).then_some((from, to))
     }
 
     fn t(&self, key: &'static str) -> String {
@@ -809,6 +861,10 @@ impl App {
             Message::Key(keyboard::Event::KeyPressed {
                 key: keyboard::Key::Named(keyboard::key::Named::Escape),
                 ..
+            }) if self.editing.is_some() => self.update(Message::ChannelNameCancel),
+            Message::Key(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
             }) if self.settings_open || self.about_open => {
                 self.settings_open = false;
                 self.about_open = false;
@@ -847,6 +903,52 @@ impl App {
                     }
                     _ => Task::none(),
                 }
+            }
+            Message::EditChannelName(channel, top) => {
+                let original = self
+                    .shell
+                    .state()
+                    .presentation
+                    .channels
+                    .iter()
+                    .find(|c| c.index == channel)
+                    .map(|c| c.name.clone())
+                    .unwrap_or_default();
+                self.editing = Some(ChannelEdit {
+                    channel,
+                    top,
+                    text: original.clone(),
+                    original,
+                });
+                Task::batch([
+                    iced::widget::operation::focus(NAME_EDITOR),
+                    iced::widget::operation::select_all(NAME_EDITOR),
+                ])
+            }
+            Message::MoveLane { from, to } => match self.presentation_move(from, to) {
+                Some((from, to)) => self.run(Command::MoveChannel { from, to }),
+                None => Task::none(),
+            },
+            Message::ChannelNameInput(text) => {
+                if let Some(edit) = &mut self.editing {
+                    edit.text = text;
+                }
+                Task::none()
+            }
+            Message::ChannelNameAccept => match self.editing.take() {
+                Some(edit) if edit.text != edit.original => {
+                    let task = self.run(Command::RenameChannel {
+                        channel: edit.channel,
+                        name: edit.text,
+                    });
+                    self.sync_names();
+                    task
+                }
+                _ => Task::none(),
+            },
+            Message::ChannelNameCancel => {
+                self.editing = None;
+                Task::none()
             }
             Message::Key(_) | Message::Noop => Task::none(),
             Message::ShowLog => {
@@ -2081,9 +2183,36 @@ impl App {
                 .selection
                 .as_ref()
                 .map(|s| (s.instance, s.annotation)),
+            editing: self.editing.is_some(),
         })
         .width(Fill)
         .height(Fill);
+        // The editor of a channel name sits over the canvas, over the name it edits.
+        let signal: Element<'_, Message> = match &self.editing {
+            Some(edit) => {
+                let placeholder = self.shell.text(
+                    &Key::from_static("channel-default"),
+                    &Args::new().uint("number", u64::from(edit.channel)),
+                );
+                let editor = text_input(&placeholder, &edit.text)
+                    .id(NAME_EDITOR)
+                    .size(13)
+                    .padding(2)
+                    .width(crate::lane_layout::GUTTER - 14.0)
+                    .on_input(Message::ChannelNameInput)
+                    .on_submit(Message::ChannelNameAccept);
+                stack![
+                    signal,
+                    container(editor).padding(iced::Padding {
+                        top: edit.top + 4.0,
+                        left: 8.0,
+                        ..iced::Padding::ZERO
+                    })
+                ]
+                .into()
+            }
+            None => signal.into(),
+        };
 
         let mut content = column![self.menu_bar(), self.toolbar()];
         if let Some(banner) = self.banner() {
@@ -2408,6 +2537,97 @@ mod tests {
                 .matches_image(std::path::Path::new(&directory).join("capture"))
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn the_legend_with_custom_heights_and_the_editor_open_renders_in_two_languages() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("legend-editor");
+        let _ = app.update(Message::Run(Command::SetChannelHeight {
+            channel: 0,
+            height: 90,
+        }));
+        let _ = app.update(Message::Run(Command::SetChannelHeight {
+            channel: 1,
+            height: 30,
+        }));
+        for language in [la_i18n::Language::En, la_i18n::Language::Uk] {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let _ = app.update(Message::EditChannelName(0, 40.0));
+            assert_eq!(app.editing.as_ref().map(|e| e.channel), Some(0));
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 560.0),
+                app.view(),
+            );
+            let shot = ui.snapshot(&app.theme()).unwrap();
+            if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
+                shot.matches_image(
+                    std::path::Path::new(&directory).join(format!("legend-{}", language.tag())),
+                )
+                .unwrap();
+            }
+            drop(ui);
+            let _ = app.update(Message::ChannelNameCancel);
+            assert!(app.editing.is_none());
+        }
+    }
+
+    #[test]
+    fn a_lane_dragged_among_the_shown_lanes_moves_the_channel_among_all_of_them() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("lane-move");
+        // Four lanes of the first four channels; all 32 channels are in the order.
+        assert_eq!(app.presentation_move(0, 3), Some((0, 3)));
+        assert_eq!(app.presentation_move(2, 2), None);
+        assert_eq!(app.presentation_move(0, 9), None);
+        // Channel 3 goes to the top of the order: the lanes are now 3, 0, 1, 2.
+        let _ = app.update(Message::Run(Command::MoveChannel { from: 3, to: 0 }));
+        assert_eq!(app.presentation_move(0, 3), Some((0, 3)));
+        assert_eq!(app.presentation_move(3, 0), Some((3, 0)));
+        let _ = app.update(Message::MoveLane { from: 3, to: 0 });
+        let order: Vec<u8> = app
+            .shell
+            .state()
+            .presentation
+            .channels
+            .iter()
+            .take(4)
+            .map(|c| c.index)
+            .collect();
+        assert_eq!(order, [2, 3, 0, 1]);
+    }
+
+    #[test]
+    fn the_name_editor_accepts_with_enter_and_cancels_with_escape() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("legend-name");
+        let _ = app.update(Message::EditChannelName(2, 40.0));
+        let _ = app.update(Message::ChannelNameInput("Clock".to_owned()));
+        let _ = app.update(Message::ChannelNameAccept);
+        assert!(app.editing.is_none());
+        let name = |app: &App| {
+            app.shell
+                .state()
+                .presentation
+                .channels
+                .iter()
+                .find(|c| c.index == 2)
+                .unwrap()
+                .name
+                .clone()
+        };
+        assert_eq!(name(&app), "Clock");
+        // Cancelling keeps the old name.
+        let _ = app.update(Message::EditChannelName(2, 40.0));
+        let _ = app.update(Message::ChannelNameInput("Other".to_owned()));
+        let _ = app.update(Message::ChannelNameCancel);
+        assert_eq!(name(&app), "Clock");
+        // An empty text gives back the default name (the host decides).
+        let _ = app.update(Message::EditChannelName(2, 40.0));
+        let _ = app.update(Message::ChannelNameInput(String::new()));
+        let _ = app.update(Message::ChannelNameAccept);
+        assert_eq!(name(&app), "");
     }
 
     /// Adds the sample decoder to the capture on screen, gives it its channels and waits for it.

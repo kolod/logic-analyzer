@@ -233,5 +233,6 @@ dialog-remove-decoder-confirm = すべて削除
 
 ### Decoders: saving and opening
 notice-decoders-newer = このファイルには、より新しいバージョンのアプリケーションのデコーダーが含まれています。そのまま保持され表示されませんが、キャプチャは通常どおり開きます。
+notice-layout-newer = このファイルには、新しいバージョンのアプリケーションが保存した信号の高さが含まれています。そのまま保持され表示されません。取り込みは自動の高さで開きます。
 settings-save-decoder-results = デコード結果をセッションと一緒に保存する
 settings-save-decoder-results-note = ファイルが大きくなります。保存しない場合は、ファイルを開くときにデコーダーが再実行されます。

@@ -115,6 +115,7 @@ error-host-settings_invalid = The settings file is damaged or from a different v
 error-host-settings_write = Your settings could not be saved and will be lost when you close the program. Check that the settings folder exists and that you can write to it.
 # The saved view (channel names, colours, markers) of an opened session is invalid.
 error-host-view_invalid = The saved view of this session (channel names, colours and markers) could not be restored, so the defaults are shown. The captured signals are not affected. Choose the names and colours again if you want them.
+error-host-layout_invalid = The saved heights of the signals in this session could not be restored, so the automatic heights are shown. The captured signals are not affected. Choose the heights again if you want them.
 # The signal view could not be drawn.
 error-host-render_failed = The signals could not be drawn. The capture is not affected and can still be saved. Resize the window or change the zoom; if it keeps happening, report it with the log file.
 # A command failed unexpectedly (a contained panic or an impossible state).

@@ -7,6 +7,10 @@ use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
 
 /// The number of colours of the built-in palette.
 pub const PALETTE_SIZE: u8 = 16;
+/// The shortest height a user can give a signal.
+pub const MIN_HEIGHT: u16 = 24;
+/// The longest height a user can give a signal.
+pub const MAX_HEIGHT: u16 = 240;
 
 /// The colour of a channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +34,9 @@ pub struct ChannelStyle {
     pub colour: Colour,
     /// Whether it is shown.
     pub visible: bool,
+    /// The height of its signal in logical pixels: 0 is automatic, otherwise
+    /// [`MIN_HEIGHT`]`..=`[`MAX_HEIGHT`].
+    pub height: u16,
 }
 
 /// The presentation of every channel of a capture, in display order.
@@ -50,6 +57,7 @@ impl Presentation {
                 name: String::new(),
                 colour: Colour::Palette(index % PALETTE_SIZE),
                 visible: u32::from(index) < 32 && enabled_mask >> u32::from(index) & 1 == 1,
+                height: 0,
             })
             .collect();
         Self { channels }
@@ -66,6 +74,7 @@ impl Presentation {
                     name: String::new(),
                     colour: Colour::Palette(index % PALETTE_SIZE),
                     visible: u32::from(index) < 32 && enabled_mask >> u32::from(index) & 1 == 1,
+                    height: 0,
                 });
             }
         }
@@ -119,6 +128,24 @@ impl Presentation {
         self.style_mut(channel)
             .map(|s| s.visible = visible)
             .is_some()
+    }
+
+    /// Sets the height of a channel's signal: 0 is automatic, anything else is limited to
+    /// `MIN_HEIGHT..=MAX_HEIGHT`. `false` if the channel does not exist.
+    pub fn set_height(&mut self, channel: u8, height: u16) -> bool {
+        let height = if height == 0 {
+            0
+        } else {
+            height.clamp(MIN_HEIGHT, MAX_HEIGHT)
+        };
+        self.style_mut(channel).map(|s| s.height = height).is_some()
+    }
+
+    /// Makes every height automatic.
+    pub fn clear_heights(&mut self) {
+        for style in &mut self.channels {
+            style.height = 0;
+        }
     }
 
     /// Moves the entry at position `from` of the order to position `to`. `false` if either is

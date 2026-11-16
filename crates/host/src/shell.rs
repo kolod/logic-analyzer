@@ -327,6 +327,7 @@ impl Shell {
                     channel: style.index,
                     name: style.name.clone(),
                     colour: style.colour,
+                    height: style.height,
                 })
                 .collect()
         } else {
@@ -946,8 +947,10 @@ impl Shell {
             Command::MoveChannel { from, to } => {
                 edit_presentation(state, |p| p.move_channel(from, to))
             }
-            Command::SetChannelHeight { .. }
-            | Command::SetSidePanel(_)
+            Command::SetChannelHeight { channel, height } => {
+                edit_presentation(state, |p| p.set_height(channel, height))
+            }
+            Command::SetSidePanel(_)
             | Command::ScrollToEdge { .. }
             | Command::RemoveRecentFile(_)
             | Command::ClearRecentFiles => Err(Reject::Ignored(error::INVALID_COMMAND)),

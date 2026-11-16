@@ -233,5 +233,6 @@ dialog-remove-decoder-confirm = Alle entfernen
 
 ### Decoders: saving and opening
 notice-decoders-newer = Diese Datei enthält Decoder einer neueren Version der Anwendung. Sie bleiben unverändert erhalten und werden nicht angezeigt; die Aufnahme wird normal geöffnet.
+notice-layout-newer = Diese Datei enthält Signalhöhen, die von einer neueren Version der Anwendung gespeichert wurden. Sie bleiben unverändert erhalten und werden nicht angezeigt; die Aufnahme wird mit automatischen Höhen geöffnet.
 settings-save-decoder-results = Decodierte Ergebnisse mit der Sitzung speichern
 settings-save-decoder-results-note = Die Datei wird größer. Ohne dies laufen die Decoder beim Öffnen der Datei erneut.

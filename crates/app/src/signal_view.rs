@@ -1,8 +1,15 @@
 //! The signal view: draws a [`FramePlan`] on a canvas.
 //!
 //! The expensive part (the waveforms, the axis and the labels) is drawn into a cached layer that
-//! is rebuilt only when the plan, the theme or the language change; the hover readout is drawn
-//! into a cheap layer on top that never invalidates the cache.
+//! is rebuilt only when the plan, the theme, the language or the layout change; the hover readout
+//! and the marks of a drag are drawn into a cheap layer on top that never invalidates the cache.
+//!
+//! The legend strip (the first [`GUTTER`] pixels) is where channels are edited: a click on the
+//! colour bar steps the colour, a click on the name edits it, a drag on the name moves the lane, a
+//! drag on the border below a lane changes its height (`specs/014-gui-improvements`). The geometry
+//! comes from [`crate::lane_layout`], so drawing and hit tests agree.
+
+use std::time::{Duration, Instant};
 
 use iced::alignment::Vertical;
 use iced::mouse;
@@ -10,20 +17,25 @@ use iced::widget::canvas::{self, Cache, Frame, Geometry, LineDash, Path, Stroke,
 use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
 use la_host::decoders::AnnotationRef;
 use la_host::plan::{FramePlan, FrameState, Segment};
+use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::{Command, ZoomAnchor, ZoomFactor};
 use la_i18n::{Args, Key, Localizer};
 
 use crate::app::Message;
 use crate::decoder_view::{self, Look};
+use crate::lane_layout::{
+    self, AUTO_MAX, BAR_WIDTH, Hit as LegendHit, LaneKind, LaneSpec, Layout, Zone,
+};
+pub use crate::lane_layout::{AXIS_HEIGHT, GUTTER};
 use crate::theme::Variant;
 
-/// Width of the column with the channel names, in logical pixels.
-pub const GUTTER: f32 = 112.0;
-/// Height of the time axis, in logical pixels.
-pub const AXIS_HEIGHT: f32 = 28.0;
-const LANE_MIN: f32 = 30.0;
-const LANE_MAX: f32 = 72.0;
 const TEXT_SIZE: f32 = 13.0;
+/// How far the pointer must move after a press on a name before it is a drag.
+const DRAG_THRESHOLD: f32 = 4.0;
+/// Two presses on a border this close in time are a double click.
+const DOUBLE_CLICK: Duration = Duration::from_millis(400);
+/// How far one notch of the wheel scrolls the legend.
+const SCROLL_STEP: f32 = 30.0;
 
 /// What the canvas draws.
 pub struct SignalView<'a> {
@@ -37,6 +49,29 @@ pub struct SignalView<'a> {
     pub localizer: &'a Localizer,
     /// The selected annotation, if any.
     pub selected: Option<(u32, AnnotationRef)>,
+    /// A channel name is being edited: a press anywhere in the view accepts it.
+    pub editing: bool,
+}
+
+/// A press in the legend strip that has not been released yet.
+#[derive(Debug, Clone, Copy)]
+struct Press {
+    lane: usize,
+    zone: Zone,
+    at: Point,
+}
+
+/// What a drag in the legend strip is doing.
+#[derive(Debug, Clone, Copy)]
+enum Drag {
+    /// A lane is being moved; `y` is where the pointer is.
+    Lane { from: usize, y: f32 },
+    /// The border below `lane` is being dragged.
+    Resize {
+        lane: usize,
+        start_height: f32,
+        start_y: f32,
+    },
 }
 
 /// What the canvas remembers between events.
@@ -51,14 +86,15 @@ pub struct ViewState {
     /// The marker being dragged and the channel under the pointer.
     drag_marker: Option<u32>,
     /// The last click on an annotation (a second one on it soon after is a double click).
-    last_click: Option<(std::time::Instant, u32, AnnotationRef)>,
-}
-
-fn lane_height(total: f32, lanes: usize) -> f32 {
-    if lanes == 0 {
-        return LANE_MAX;
-    }
-    ((total - AXIS_HEIGHT) / lanes as f32).clamp(LANE_MIN, LANE_MAX)
+    last_click: Option<(Instant, u32, AnnotationRef)>,
+    /// How far the lanes are scrolled.
+    scroll: f32,
+    /// A press in the legend strip.
+    press: Option<Press>,
+    /// A drag that began in the legend strip.
+    drag: Option<Drag>,
+    /// The last press on a border, for the double click.
+    last_border: Option<(Instant, usize)>,
 }
 
 fn message(localizer: &Localizer, key: &'static str) -> String {
@@ -72,6 +108,14 @@ fn fit(text: &str, max_chars: usize) -> String {
     }
     let kept: String = text.chars().take(max_chars.saturating_sub(1)).collect();
     format!("{kept}\u{2026}")
+}
+
+/// The next colour of the palette for a click on the colour bar (a custom colour goes to the first).
+fn next_colour(colour: Colour) -> Colour {
+    match colour {
+        Colour::Palette(index) => Colour::Palette(index.saturating_add(1) % PALETTE_SIZE),
+        Colour::Rgb(..) => Colour::Palette(0),
+    }
 }
 
 impl SignalView<'_> {
@@ -89,6 +133,26 @@ impl SignalView<'_> {
         }
     }
 
+    /// The lanes: the channels with their heights, then the decoders (automatic).
+    fn specs(&self) -> Vec<LaneSpec> {
+        self.plan
+            .channels
+            .iter()
+            .map(|c| LaneSpec {
+                kind: LaneKind::Channel,
+                height: c.height,
+            })
+            .chain(self.plan.lanes.iter().map(|_| LaneSpec {
+                kind: LaneKind::Decoder,
+                height: 0,
+            }))
+            .collect()
+    }
+
+    fn layout(&self, height: f32, scroll: f32) -> Layout {
+        Layout::new(&self.specs(), height, scroll)
+    }
+
     fn centred_text(&self, frame: &mut Frame, size: Size, content: String, color: Color) {
         frame.fill_text(Text {
             content,
@@ -103,24 +167,26 @@ impl SignalView<'_> {
 
     /// The sample under a pointer position (clamped to the window) and the channel of the lane
     /// it is in (the first lane when the pointer is outside the lanes).
-    fn sample_and_channel(&self, position: Point, height: f32) -> Option<(u64, u8)> {
+    fn sample_and_channel(&self, position: Point, layout: &Layout) -> Option<(u64, u8)> {
         let plan = self.plan;
-        Some({
-            let columns = plan.pixels.max(1) as f64;
-            let x = f64::from((position.x - GUTTER).max(0.0)).min(columns);
-            let sample = plan
-                .window
-                .start
-                .saturating_add((x / columns * plan.window.length as f64) as u64);
-            let lane = lane_height(height, plan.channels.len().saturating_add(plan.lanes.len()));
-            let index = (((position.y - AXIS_HEIGHT) / lane).max(0.0) as usize)
-                .min(plan.channels.len().saturating_sub(1));
-            let channel = plan.channels.get(index).map_or(0, |c| c.channel);
-            (sample, channel)
-        })
+        let columns = plan.pixels.max(1) as f64;
+        let x = f64::from((position.x - GUTTER).max(0.0)).min(columns);
+        let sample = plan
+            .window
+            .start
+            .saturating_add((x / columns * plan.window.length as f64) as u64);
+        let index = (0..plan.channels.len())
+            .find(|i| {
+                layout
+                    .lane(*i)
+                    .is_some_and(|l| position.y >= l.top && position.y < l.bottom())
+            })
+            .unwrap_or(0);
+        let channel = plan.channels.get(index).map_or(0, |c| c.channel);
+        Some((sample, channel))
     }
 
-    fn draw_plan(&self, frame: &mut Frame, size: Size, theme: &Theme) {
+    fn draw_plan(&self, frame: &mut Frame, size: Size, theme: &Theme, scroll: f32) {
         let palette = theme.palette();
         let text_colour = palette.text;
         let plan = self.plan;
@@ -147,50 +213,33 @@ impl SignalView<'_> {
         }
         let area_width = (size.width - GUTTER).max(1.0);
         let scale = area_width / plan.pixels.max(1) as f32;
-        let lane = lane_height(
-            size.height,
-            plan.channels.len().saturating_add(plan.lanes.len()),
-        );
+        let layout = self.layout(size.height, scroll);
+        let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
+        let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
         let hairline = self.variant.hairline();
 
-        // Time axis.
+        // The vertical grid of the time axis.
         for tick in &plan.axis.ticks {
-            let x = GUTTER + tick.x as f32 * (area_width / plan.pixels.max(1) as f32);
-            let depth = if tick.major { 10.0 } else { 6.0 };
-            frame.stroke(
-                &Path::line(
-                    Point::new(x, AXIS_HEIGHT - depth),
-                    Point::new(x, AXIS_HEIGHT),
-                ),
-                Stroke::default().with_color(text_colour).with_width(1.0),
-            );
+            let x = GUTTER + tick.x as f32 * scale;
             frame.stroke(
                 &Path::line(Point::new(x, AXIS_HEIGHT), Point::new(x, size.height)),
                 Stroke::default().with_color(hairline).with_width(1.0),
             );
-            frame.fill_text(Text {
-                content: self.localizer.format_duration(tick.seconds),
-                position: Point::new(x + 3.0, 4.0),
-                color: text_colour,
-                size: Pixels(TEXT_SIZE - 1.0),
-                ..Text::default()
-            });
         }
-        frame.stroke(
-            &Path::line(
-                Point::new(0.0, AXIS_HEIGHT),
-                Point::new(size.width, AXIS_HEIGHT),
-            ),
-            Stroke::default().with_color(hairline).with_width(1.0),
-        );
 
-        // Lanes.
+        // Lanes of the channels.
         for (index, channel) in plan.channels.iter().enumerate() {
-            let top = AXIS_HEIGHT + index as f32 * lane;
+            let top = lane_top(index);
+            let lane = lane_height(index);
+            if top + lane < AXIS_HEIGHT || top > size.height {
+                continue;
+            }
             let colour = self.variant.channel(channel.colour);
+            // The colour bar, which a click steps through the palette.
+            frame.fill_rectangle(Point::new(0.0, top), Size::new(BAR_WIDTH, lane), colour);
             frame.fill_text(Text {
-                content: fit(&self.channel_label(index), 14),
-                position: Point::new(8.0, top + lane / 2.0),
+                content: fit(&self.channel_label(index), 13),
+                position: Point::new(BAR_WIDTH + 6.0, top + lane / 2.0),
                 color: colour,
                 size: Pixels(TEXT_SIZE),
                 align_y: Vertical::Center,
@@ -209,7 +258,6 @@ impl SignalView<'_> {
                 Stroke::default().with_color(colour).with_width(1.6),
             );
         }
-        let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
         let look = Look {
             variant: self.variant,
             localizer: self.localizer,
@@ -218,7 +266,8 @@ impl SignalView<'_> {
         };
         // The lanes of the decoders come after the channels.
         for index in 0..plan.lanes.len() {
-            let top = lane_top(plan.channels.len().saturating_add(index));
+            let at = plan.channels.len().saturating_add(index);
+            let (top, lane) = (lane_top(at), lane_height(at));
             frame.stroke(
                 &Path::line(
                     Point::new(0.0, top + lane),
@@ -232,11 +281,54 @@ impl SignalView<'_> {
             plan,
             plan.channels.len(),
             &lane_top,
-            lane,
+            &lane_height,
             scale,
             &look,
         );
-        decoder_view::draw_overlays(frame, plan, &lane_top, lane, scale, &look);
+        decoder_view::draw_overlays(frame, plan, &lane_top, &lane_height, scale, &look);
+        if plan.state == FrameState::Empty {
+            frame.fill_text(Text {
+                content: message(self.localizer, "view-empty"),
+                position: Point::new(GUTTER + area_width / 2.0, AXIS_HEIGHT + AUTO_MAX / 2.0),
+                color: text_colour,
+                size: Pixels(TEXT_SIZE + 1.0),
+                align_x: iced::alignment::Horizontal::Center.into(),
+                align_y: Vertical::Center,
+                ..Text::default()
+            });
+        }
+
+        // The time axis, drawn last so that scrolled lanes pass under it.
+        frame.fill_rectangle(
+            Point::new(0.0, 0.0),
+            Size::new(size.width, AXIS_HEIGHT),
+            palette.background,
+        );
+        for tick in &plan.axis.ticks {
+            let x = GUTTER + tick.x as f32 * scale;
+            let depth = if tick.major { 10.0 } else { 6.0 };
+            frame.stroke(
+                &Path::line(
+                    Point::new(x, AXIS_HEIGHT - depth),
+                    Point::new(x, AXIS_HEIGHT),
+                ),
+                Stroke::default().with_color(text_colour).with_width(1.0),
+            );
+            frame.fill_text(Text {
+                content: self.localizer.format_duration(tick.seconds),
+                position: Point::new(x + 3.0, 4.0),
+                color: text_colour,
+                size: Pixels(TEXT_SIZE - 1.0),
+                ..Text::default()
+            });
+        }
+        frame.stroke(
+            &Path::line(
+                Point::new(0.0, AXIS_HEIGHT),
+                Point::new(size.width, AXIS_HEIGHT),
+            ),
+            Stroke::default().with_color(hairline).with_width(1.0),
+        );
         for marker in &plan.markers {
             let x = GUTTER + marker.x as f32 * scale;
             let accent = palette.primary;
@@ -258,16 +350,28 @@ impl SignalView<'_> {
                 ..Text::default()
             });
         }
-        if plan.state == FrameState::Empty {
-            frame.fill_text(Text {
-                content: message(self.localizer, "view-empty"),
-                position: Point::new(GUTTER + area_width / 2.0, AXIS_HEIGHT + lane / 2.0),
-                color: text_colour,
-                size: Pixels(TEXT_SIZE + 1.0),
-                align_x: iced::alignment::Horizontal::Center.into(),
-                align_y: Vertical::Center,
-                ..Text::default()
-            });
+        // A thin bar at the right edge of the legend when the lanes are taller than the area.
+        if layout.max_offset() > 0.0 {
+            let visible = (size.height - AXIS_HEIGHT).max(1.0);
+            let thumb = (visible * visible / layout.total_height()).clamp(16.0, visible);
+            let travel = (visible - thumb).max(0.0);
+            let y = AXIS_HEIGHT + travel * (layout.offset() / layout.max_offset());
+            frame.fill_rectangle(
+                Point::new(GUTTER - 4.0, AXIS_HEIGHT),
+                Size::new(3.0, visible),
+                Color {
+                    a: 0.15,
+                    ..text_colour
+                },
+            );
+            frame.fill_rectangle(
+                Point::new(GUTTER - 4.0, y),
+                Size::new(3.0, thumb),
+                Color {
+                    a: 0.55,
+                    ..text_colour
+                },
+            );
         }
     }
 
@@ -403,6 +507,10 @@ fn waveform(segments: &[Segment], scale: f32, y_high: f32, y_low: f32) -> Path {
 impl canvas::Program<Message> for SignalView<'_> {
     type State = ViewState;
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one match over the events of the view"
+    )]
     fn update(
         &self,
         state: &mut ViewState,
@@ -428,6 +536,17 @@ impl canvas::Program<Message> for SignalView<'_> {
                 };
                 if lines == 0.0 {
                     return None;
+                }
+                if position.x < GUTTER {
+                    // Over the legend the wheel scrolls the lanes.
+                    let layout = self.layout(bounds.height, state.scroll);
+                    let wanted =
+                        (state.scroll - lines * SCROLL_STEP).clamp(0.0, layout.max_offset());
+                    if (wanted - state.scroll).abs() > f32::EPSILON {
+                        state.scroll = wanted;
+                        self.cache.clear();
+                    }
+                    return Some(canvas::Action::request_redraw().and_capture());
                 }
                 let command = if state.modifiers.shift() {
                     Command::Pan {
@@ -455,7 +574,8 @@ impl canvas::Program<Message> for SignalView<'_> {
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
                 let position = cursor.position_in(bounds)?;
-                let (sample, channel) = self.sample_and_channel(position, bounds.height)?;
+                let layout = self.layout(bounds.height, state.scroll);
+                let (sample, channel) = self.sample_and_channel(position, &layout)?;
                 Some(
                     canvas::Action::publish(Message::Run(Command::PlaceMarker {
                         position: sample,
@@ -466,57 +586,131 @@ impl canvas::Program<Message> for SignalView<'_> {
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = cursor.position_in(bounds)?;
-                if position.x >= GUTTER {
-                    let scale = (bounds.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
-                    // A click on an annotation selects it.
-                    let lane = lane_height(
-                        bounds.height,
-                        self.plan
-                            .channels
-                            .len()
-                            .saturating_add(self.plan.lanes.len()),
-                    );
-                    let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
-                    if let Some(decoder_view::Hit {
-                        instance,
-                        annotation,
-                        ..
-                    }) = decoder_view::hit_test(
-                        self.plan,
-                        position,
-                        self.plan.channels.len(),
-                        &lane_top,
-                        lane,
-                        scale,
-                    ) {
-                        let now = std::time::Instant::now();
-                        let double = state.last_click.is_some_and(|(at, i, a)| {
-                            i == instance
-                                && a == annotation
-                                && now.saturating_duration_since(at)
-                                    < std::time::Duration::from_millis(400)
+                if self.editing {
+                    // A click anywhere accepts the name being edited and does nothing else.
+                    return Some(canvas::Action::publish(Message::ChannelNameAccept).and_capture());
+                }
+                let layout = self.layout(bounds.height, state.scroll);
+                if position.x < GUTTER {
+                    let LegendHit { lane, zone } = layout.zone_at(position.x, position.y)?;
+                    let channel = self.plan.channels.get(lane)?;
+                    if zone == Zone::Border {
+                        let now = Instant::now();
+                        let double = state.last_border.is_some_and(|(at, l)| {
+                            l == lane && now.saturating_duration_since(at) < DOUBLE_CLICK
                         });
-                        state.last_click = Some((now, instance, annotation));
-                        let command = if double {
-                            Command::GoToAnnotation(la_host::AnnotationTarget::Selected)
-                        } else {
-                            Command::SelectAnnotation {
-                                instance,
-                                annotation,
-                            }
-                        };
-                        return Some(canvas::Action::publish(Message::Run(command)).and_capture());
+                        state.last_border = Some((now, lane));
+                        if double {
+                            state.last_border = None;
+                            return Some(
+                                canvas::Action::publish(Message::Run(Command::SetChannelHeight {
+                                    channel: channel.channel,
+                                    height: 0,
+                                }))
+                                .and_capture(),
+                            );
+                        }
+                        state.drag = Some(Drag::Resize {
+                            lane,
+                            start_height: layout.lane(lane).map_or(AUTO_MAX, |l| l.height),
+                            start_y: position.y,
+                        });
                     }
-                    state.drag_marker = self
-                        .plan
-                        .markers
-                        .iter()
-                        .find(|m| (GUTTER + m.x as f32 * scale - position.x).abs() <= 4.0)
-                        .map(|m| m.id);
-                    state.drag_from = Some(position.x);
+                    state.press = Some(Press {
+                        lane,
+                        zone,
+                        at: position,
+                    });
                     return Some(canvas::Action::capture());
                 }
-                None
+                let scale = (bounds.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+                // A click on an annotation selects it.
+                let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
+                let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
+                if let Some(decoder_view::Hit {
+                    instance,
+                    annotation,
+                    ..
+                }) = decoder_view::hit_test(
+                    self.plan,
+                    position,
+                    self.plan.channels.len(),
+                    &lane_top,
+                    &lane_height,
+                    scale,
+                ) {
+                    let now = Instant::now();
+                    let double = state.last_click.is_some_and(|(at, i, a)| {
+                        i == instance
+                            && a == annotation
+                            && now.saturating_duration_since(at) < Duration::from_millis(400)
+                    });
+                    state.last_click = Some((now, instance, annotation));
+                    let command = if double {
+                        Command::GoToAnnotation(la_host::AnnotationTarget::Selected)
+                    } else {
+                        Command::SelectAnnotation {
+                            instance,
+                            annotation,
+                        }
+                    };
+                    return Some(canvas::Action::publish(Message::Run(command)).and_capture());
+                }
+                state.drag_marker = self
+                    .plan
+                    .markers
+                    .iter()
+                    .find(|m| (GUTTER + m.x as f32 * scale - position.x).abs() <= 4.0)
+                    .map(|m| m.id);
+                state.drag_from = Some(position.x);
+                Some(canvas::Action::capture())
+            }
+            // A drag that began in the legend strip: a border is dragged (the height follows the
+            // pointer at once), or a lane is lifted and moved.
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. })
+                if state.press.is_some() || state.drag.is_some() =>
+            {
+                let position = cursor.position_in(bounds)?;
+                match state.drag {
+                    Some(Drag::Resize {
+                        lane,
+                        start_height,
+                        start_y,
+                    }) => {
+                        let channel = self.plan.channels.get(lane)?;
+                        let height = lane_layout::resized_height(start_height, start_y, position.y);
+                        if height != channel.height {
+                            return Some(
+                                canvas::Action::publish(Message::Run(Command::SetChannelHeight {
+                                    channel: channel.channel,
+                                    height,
+                                }))
+                                .and_capture(),
+                            );
+                        }
+                        None
+                    }
+                    Some(Drag::Lane { from, .. }) => {
+                        state.drag = Some(Drag::Lane {
+                            from,
+                            y: position.y,
+                        });
+                        Some(canvas::Action::request_redraw().and_capture())
+                    }
+                    None => {
+                        let press = state.press?;
+                        let far = (position.x - press.at.x).hypot(position.y - press.at.y)
+                            > DRAG_THRESHOLD;
+                        if press.zone == Zone::Name && far {
+                            state.drag = Some(Drag::Lane {
+                                from: press.lane,
+                                y: position.y,
+                            });
+                            return Some(canvas::Action::request_redraw().and_capture());
+                        }
+                        None
+                    }
+                }
             }
             // The hover line follows the pointer: it is drawn from the pointer position, so a
             // plain move over the view (no button, nothing to publish) must still ask for a
@@ -532,7 +726,8 @@ impl canvas::Program<Message> for SignalView<'_> {
                 let from = state.drag_from?;
                 let position = cursor.position_in(bounds)?;
                 if let Some(id) = state.drag_marker {
-                    let (sample, channel) = self.sample_and_channel(position, bounds.height)?;
+                    let layout = self.layout(bounds.height, state.scroll);
+                    let (sample, channel) = self.sample_and_channel(position, &layout)?;
                     return Some(
                         canvas::Action::publish(Message::Run(Command::MoveMarker {
                             id,
@@ -555,7 +750,49 @@ impl canvas::Program<Message> for SignalView<'_> {
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                 state.drag_from = None;
                 state.drag_marker = None;
-                None
+                let press = state.press.take();
+                let drag = state.drag.take();
+                let position = cursor.position_in(bounds);
+                let layout = self.layout(bounds.height, state.scroll);
+                match (drag, press) {
+                    (Some(Drag::Lane { from, y }), _) => {
+                        // Released outside the strip: cancelled.
+                        let inside = position.is_some_and(|p| p.x < GUTTER);
+                        let to = layout.move_target(from, y);
+                        if inside && to != from {
+                            return Some(
+                                canvas::Action::publish(Message::MoveLane { from, to })
+                                    .and_capture(),
+                            );
+                        }
+                        Some(canvas::Action::request_redraw().and_capture())
+                    }
+                    (Some(Drag::Resize { .. }), _) => Some(canvas::Action::capture()),
+                    (None, Some(press)) => {
+                        let channel = self.plan.channels.get(press.lane)?;
+                        match press.zone {
+                            Zone::Bar => Some(
+                                canvas::Action::publish(Message::Run(Command::SetChannelColour {
+                                    channel: channel.channel,
+                                    colour: next_colour(channel.colour),
+                                }))
+                                .and_capture(),
+                            ),
+                            Zone::Name => {
+                                let top = layout.lane(press.lane).map_or(AXIS_HEIGHT, |l| l.top);
+                                Some(
+                                    canvas::Action::publish(Message::EditChannelName(
+                                        channel.channel,
+                                        top,
+                                    ))
+                                    .and_capture(),
+                                )
+                            }
+                            Zone::Border => None,
+                        }
+                    }
+                    (None, None) => None,
+                }
             }
             _ => None,
         }
@@ -563,7 +800,7 @@ impl canvas::Program<Message> for SignalView<'_> {
 
     fn draw(
         &self,
-        _state: &ViewState,
+        state: &ViewState,
         renderer: &Renderer,
         theme: &Theme,
         bounds: Rectangle,
@@ -571,34 +808,101 @@ impl canvas::Program<Message> for SignalView<'_> {
     ) -> Vec<Geometry> {
         let size = bounds.size();
         let waveforms = self.cache.draw(renderer, size, |frame| {
-            let started = std::time::Instant::now();
-            self.draw_plan(frame, size, theme);
+            let started = Instant::now();
+            self.draw_plan(frame, size, theme, state.scroll);
             crate::frame_log::record(crate::frame_log::Stage::Draw, started.elapsed());
         });
         let mut overlay = Frame::new(renderer, size);
         if let Some(position) = cursor.position_in(bounds) {
-            self.draw_hover(&mut overlay, size, position, theme);
+            self.draw_hover(&mut overlay, size, position, theme, state.scroll);
         }
+        self.draw_lane_drag(&mut overlay, size, theme, state);
         vec![waveforms, overlay.into_geometry()]
     }
 
     fn mouse_interaction(
         &self,
-        _state: &ViewState,
+        state: &ViewState,
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
-        if cursor.is_over(bounds) {
-            mouse::Interaction::Crosshair
-        } else {
-            mouse::Interaction::default()
+        if matches!(state.drag, Some(Drag::Lane { .. })) {
+            return mouse::Interaction::Grabbing;
         }
+        if matches!(state.drag, Some(Drag::Resize { .. })) {
+            return mouse::Interaction::ResizingVertically;
+        }
+        let Some(position) = cursor.position_in(bounds) else {
+            return mouse::Interaction::default();
+        };
+        if position.x < GUTTER {
+            let layout = self.layout(bounds.height, state.scroll);
+            return match layout.zone_at(position.x, position.y).map(|h| h.zone) {
+                Some(Zone::Border) => mouse::Interaction::ResizingVertically,
+                Some(Zone::Bar | Zone::Name) => mouse::Interaction::Pointer,
+                None => mouse::Interaction::default(),
+            };
+        }
+        mouse::Interaction::Crosshair
     }
 }
 
 impl SignalView<'_> {
+    /// The lane that is being moved, lifted under the pointer, and the line where it will land.
+    fn draw_lane_drag(&self, frame: &mut Frame, size: Size, theme: &Theme, state: &ViewState) {
+        let Some(Drag::Lane { from, y }) = state.drag else {
+            return;
+        };
+        let layout = self.layout(size.height, state.scroll);
+        let palette = theme.palette();
+        let line = layout.landing_line(layout.landing(y));
+        frame.stroke(
+            &Path::line(Point::new(0.0, line), Point::new(GUTTER, line)),
+            Stroke::default()
+                .with_color(palette.primary)
+                .with_width(2.0),
+        );
+        let Some(lane) = layout.lane(from) else {
+            return;
+        };
+        let top = y - lane.height / 2.0;
+        frame.fill_rectangle(
+            Point::new(0.0, top),
+            Size::new(GUTTER, lane.height),
+            Color {
+                a: 0.55,
+                ..palette.background
+            },
+        );
+        let colour = self
+            .plan
+            .channels
+            .get(from)
+            .map_or(palette.text, |c| self.variant.channel(c.colour));
+        frame.fill_rectangle(
+            Point::new(0.0, top),
+            Size::new(BAR_WIDTH, lane.height),
+            colour,
+        );
+        frame.fill_text(Text {
+            content: fit(&self.channel_label(from), 13),
+            position: Point::new(BAR_WIDTH + 6.0, top + lane.height / 2.0),
+            color: colour,
+            size: Pixels(TEXT_SIZE),
+            align_y: Vertical::Center,
+            ..Text::default()
+        });
+    }
+
     /// The time under the pointer, with a vertical hairline.
-    fn draw_hover(&self, frame: &mut Frame, size: Size, position: Point, theme: &Theme) {
+    fn draw_hover(
+        &self,
+        frame: &mut Frame,
+        size: Size,
+        position: Point,
+        theme: &Theme,
+        scroll: f32,
+    ) {
         let plan = self.plan;
         if plan.state != FrameState::Ok || position.x < GUTTER || plan.pixels == 0 {
             return;
@@ -625,7 +929,7 @@ impl SignalView<'_> {
             align_x: iced::alignment::Horizontal::Right.into(),
             ..Text::default()
         });
-        self.draw_annotation_readout(frame, size, position, theme);
+        self.draw_annotation_readout(frame, size, position, theme, scroll);
     }
 
     /// The full text of the annotation under the pointer and its length in time, in a box next to
@@ -636,17 +940,21 @@ impl SignalView<'_> {
         size: Size,
         position: Point,
         theme: &Theme,
+        scroll: f32,
     ) {
         let plan = self.plan;
-        let lane = lane_height(
-            size.height,
-            plan.channels.len().saturating_add(plan.lanes.len()),
-        );
-        let lane_top = |index: usize| AXIS_HEIGHT + index as f32 * lane;
+        let layout = self.layout(size.height, scroll);
+        let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
+        let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
         let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
-        let Some(hit) =
-            decoder_view::hit_test(plan, position, plan.channels.len(), &lane_top, lane, scale)
-        else {
+        let Some(hit) = decoder_view::hit_test(
+            plan,
+            position,
+            plan.channels.len(),
+            &lane_top,
+            &lane_height,
+            scale,
+        ) else {
             return;
         };
         let seconds = hit.end.saturating_sub(hit.start) as f64 / plan.sample_rate_hz.max(1) as f64;
@@ -711,6 +1019,7 @@ mod tests {
             variant: Variant::Dark,
             localizer: &localizer,
             selected: None,
+            editing: false,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         // The width is reported first, as the view does on its first event.
@@ -769,5 +1078,224 @@ mod tests {
         )
         .expect("a drag is handled");
         assert!(result.0.is_some(), "a drag publishes the pan");
+    }
+
+    /// A plan with four channels of a finished capture, for a view of 900 x 500.
+    fn plan_with_channels() -> (FramePlan, Shell) {
+        use la_host::{Activity, ConfigEdit};
+        let dir = std::env::temp_dir().join(format!("la-legend-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut shell = Shell::new(ShellConfig::for_tests(&dir));
+        for edit in [
+            ConfigEdit::Realtime(false),
+            ConfigEdit::Channels(0b1111),
+            ConfigEdit::SampleRate(1_000_000),
+            ConfigEdit::Length(50_000),
+            ConfigEdit::Seed(Some(3)),
+        ] {
+            shell.apply(Command::EditConfig(edit));
+        }
+        shell.apply(Command::StartCapture);
+        while shell.state().activity != Activity::Idle {
+            shell.poll(Instant::now());
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let plan = shell.frame_plan(ViewSize {
+            pixels: 788,
+            scale: 1.0,
+        });
+        let _ = std::fs::remove_dir_all(&dir);
+        (plan, shell)
+    }
+
+    /// Delivers events to a view of `plan` one after another and collects what they publish.
+    fn drive(
+        plan: &FramePlan,
+        state: &mut ViewState,
+        events: &[(canvas::Event, Point)],
+    ) -> Vec<Message> {
+        let cache = Cache::new();
+        let localizer = la_i18n::Localizer::new(la_i18n::Language::En);
+        let view = SignalView {
+            plan,
+            cache: &cache,
+            variant: Variant::Dark,
+            localizer: &localizer,
+            selected: None,
+            editing: false,
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
+        state.reported_width = bounds.width - GUTTER;
+        let mut published = Vec::new();
+        for (event, at) in events {
+            if let Some(action) = view.update(state, event, bounds, mouse::Cursor::Available(*at)) {
+                let (message, _, _) = action.into_inner();
+                published.extend(message);
+            }
+        }
+        published
+    }
+
+    fn press(at: Point) -> (canvas::Event, Point) {
+        (
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            at,
+        )
+    }
+
+    fn release(at: Point) -> (canvas::Event, Point) {
+        (
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            at,
+        )
+    }
+
+    fn moved(at: Point) -> (canvas::Event, Point) {
+        (
+            canvas::Event::Mouse(mouse::Event::CursorMoved { position: at }),
+            at,
+        )
+    }
+
+    // Four channels in an area of 500: the automatic height is clamp(472 / 4, 30, 72) = 72, so the
+    // lanes are 28..100, 100..172, 172..244 and 244..316.
+
+    #[test]
+    fn a_click_on_the_colour_bar_steps_the_colour() {
+        let (plan, _shell) = plan_with_channels();
+        let first = plan.channels[0].clone();
+        let at = Point::new(3.0, 50.0);
+        let published = drive(&plan, &mut ViewState::default(), &[press(at), release(at)]);
+        assert_eq!(published.len(), 1, "{published:?}");
+        let Message::Run(Command::SetChannelColour { channel, colour }) = &published[0] else {
+            panic!("{published:?}");
+        };
+        assert_eq!(*channel, first.channel);
+        assert_eq!(*colour, next_colour(first.colour));
+        // A custom colour goes back to the first of the palette.
+        assert_eq!(next_colour(Colour::Rgb(1, 2, 3)), Colour::Palette(0));
+        assert_eq!(next_colour(Colour::Palette(15)), Colour::Palette(0));
+        assert_eq!(next_colour(Colour::Palette(4)), Colour::Palette(5));
+    }
+
+    #[test]
+    fn a_click_on_the_name_opens_the_editor_over_that_lane() {
+        let (plan, _shell) = plan_with_channels();
+        let at = Point::new(60.0, 120.0); // lane 1 (100..172)
+        let published = drive(&plan, &mut ViewState::default(), &[press(at), release(at)]);
+        assert_eq!(published.len(), 1, "{published:?}");
+        let Message::EditChannelName(channel, top) = &published[0] else {
+            panic!("{published:?}");
+        };
+        assert_eq!(*channel, plan.channels[1].channel);
+        assert!((top - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_drag_on_the_name_moves_the_lane_and_a_small_movement_does_not() {
+        let (plan, _shell) = plan_with_channels();
+        let start = Point::new(60.0, 50.0);
+        let down = Point::new(60.0, 300.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(start), moved(down), release(down)],
+        );
+        assert!(
+            matches!(published.as_slice(), [Message::MoveLane { from: 0, to: 3 }]),
+            "{published:?}"
+        );
+        // A movement under the threshold is a click on the name.
+        let near = Point::new(62.0, 52.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(start), moved(near), release(near)],
+        );
+        assert!(
+            matches!(published.as_slice(), [Message::EditChannelName(..)]),
+            "{published:?}"
+        );
+        // Released outside the strip: cancelled.
+        let outside = Point::new(500.0, 300.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(start), moved(outside), release(outside)],
+        );
+        assert!(published.is_empty(), "{published:?}");
+    }
+
+    #[test]
+    fn dragging_a_border_sets_the_height_and_a_double_click_makes_it_automatic() {
+        let (plan, _shell) = plan_with_channels();
+        let border = Point::new(60.0, 100.0); // the border below lane 0 (72 high)
+        let to = Point::new(60.0, 130.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(border), moved(to), release(to)],
+        );
+        assert!(
+            matches!(
+                published.as_slice(),
+                [Message::Run(Command::SetChannelHeight { height: 102, .. })]
+            ),
+            "{published:?}"
+        );
+        // The height stops at the limit.
+        let far = Point::new(60.0, 480.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(border), moved(far), release(far)],
+        );
+        assert!(
+            matches!(
+                published.as_slice(),
+                [Message::Run(Command::SetChannelHeight { height: 240, .. })]
+            ),
+            "{published:?}"
+        );
+        // Two presses on the border: automatic.
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[
+                press(border),
+                release(border),
+                press(border),
+                release(border),
+            ],
+        );
+        assert!(
+            published
+                .iter()
+                .any(|m| matches!(m, Message::Run(Command::SetChannelHeight { height: 0, .. }))),
+            "{published:?}"
+        );
+    }
+
+    #[test]
+    fn the_wheel_over_the_legend_scrolls_and_over_the_waveforms_it_zooms() {
+        let (plan, _shell) = plan_with_channels();
+        let wheel = |at: Point| {
+            (
+                canvas::Event::Mouse(mouse::Event::WheelScrolled {
+                    delta: mouse::ScrollDelta::Lines { x: 0.0, y: 1.0 },
+                }),
+                at,
+            )
+        };
+        // Everything fits, so there is nothing to scroll and nothing is published.
+        let mut state = ViewState::default();
+        let published = drive(&plan, &mut state, &[wheel(Point::new(50.0, 100.0))]);
+        assert!(published.is_empty(), "{published:?}");
+        assert!(state.scroll.abs() < f32::EPSILON);
+        let published = drive(&plan, &mut state, &[wheel(Point::new(400.0, 100.0))]);
+        assert!(
+            matches!(published.as_slice(), [Message::Run(Command::Zoom { .. })]),
+            "{published:?}"
+        );
     }
 }

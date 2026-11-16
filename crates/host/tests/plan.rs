@@ -24,6 +24,7 @@ fn view(channels: &[u8]) -> Vec<ChannelView> {
             channel: *c,
             name: format!("ch{c}"),
             colour: Colour::Palette(*c % 16),
+            height: 0,
         })
         .collect()
 }
