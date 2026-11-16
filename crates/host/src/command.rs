@@ -229,8 +229,9 @@ pub enum Command {
     ResetPresentation,
     /// Chooses the view of the panel at the right edge (or hides it).
     SetSidePanel(crate::state::SidePanel),
-    /// Remembers the answer to the question about an unsaved capture (`Some`: the question is not
-    /// asked again and the answer is applied) or goes back to asking (`None`). Saved in the settings.
+    /// Remembers the answer to the question about an unsaved capture (`Some(Save)` or
+    /// `Some(Discard)`: the question is not asked again and the answer is applied) or goes back to
+    /// asking (`None`). `Cancel` cannot be remembered and is ignored. Saved in the settings.
     SetUnsavedChoice(Option<Decision>),
     /// Scrolls to the next edge of a channel beyond the visible window, a quarter of the view from
     /// the side it came from; the zoom does not change.

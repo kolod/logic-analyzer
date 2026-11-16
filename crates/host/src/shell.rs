@@ -551,12 +551,9 @@ impl Shell {
                     .as_deref()
                     .and_then(Decision::from_setting)
                     .filter(|_| !matches!(guarded, Guarded::RemoveDecoder(_)))
-                    // A remembered Cancel must never make the application impossible to leave:
-                    // quitting and closing the window always ask.
-                    .filter(|decision| {
-                        *decision != Decision::Cancel
-                            || !matches!(guarded, Guarded::Quit | Guarded::Close)
-                    });
+                    // Only Save and Discard can be remembered: a remembered Cancel would silently
+                    // stop quitting, closing and opening. A stale word in the file asks instead.
+                    .filter(|decision| *decision != Decision::Cancel);
                 working.pending_decision = Some(guarded.clone());
                 working.version = working.version.saturating_add(1);
                 working.versions.bump(Changes::DECISION);
@@ -983,6 +980,9 @@ impl Shell {
                 changed(Changes::SETTINGS | saved)
             }
             Command::SetUnsavedChoice(choice) => {
+                if choice == Some(Decision::Cancel) {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
                 state.settings.unsaved_choice = choice.map(|c| c.as_setting().to_owned());
                 let saved = self.persist_settings(state);
                 changed(Changes::SETTINGS | saved)

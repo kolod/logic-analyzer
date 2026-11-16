@@ -585,12 +585,11 @@ impl App {
         .spacing(10)
         .max_width(460);
         if remembered.is_some() {
-            // The three answers as buttons side by side; the remembered one is the filled one.
+            // The two answers that can be remembered, side by side; the remembered one is filled.
             let mut answers = row![].spacing(8);
             for (decision, key) in [
                 (Decision::Save, "dialog-save"),
                 (Decision::Discard, "dialog-discard"),
-                (Decision::Cancel, "dialog-cancel"),
             ] {
                 answers = answers.push(
                     button(text(self.t(key)))
@@ -1139,7 +1138,9 @@ impl App {
                 Task::none()
             }
             Message::UnsavedAnswer(decision) => {
-                if std::mem::take(&mut self.remember_choice) {
+                // Only Save and Discard can be remembered; Cancel never is.
+                let remember = std::mem::take(&mut self.remember_choice);
+                if remember && decision != Decision::Cancel {
                     let _ = self.run(Command::SetUnsavedChoice(Some(decision)));
                 }
                 self.run(Command::Decide(decision))
@@ -3025,10 +3026,15 @@ mod tests {
         assert!(ui.find(remember.as_str()).is_ok());
         drop(ui);
         assert!(!app.remember_choice);
-        // An answer with the box unticked is not remembered.
+        // An answer with the box unticked is not remembered, and Cancel never is.
         let _ = app.update(Message::UnsavedAnswer(Decision::Cancel));
         assert!(app.shell.state().settings.unsaved_choice.is_none());
         assert!(app.shell.state().capture.is_some());
+        let _ = app.update(Message::Run(Command::NewCapture));
+        let _ = app.update(Message::RememberToggled(true));
+        let _ = app.update(Message::UnsavedAnswer(Decision::Cancel));
+        assert!(app.shell.state().settings.unsaved_choice.is_none());
+        assert!(!app.remember_choice, "the box is clear again");
         // With the box ticked it is, and the question is not asked again.
         let _ = app.update(Message::Run(Command::NewCapture));
         let _ = app.update(Message::RememberToggled(true));
@@ -3049,15 +3055,11 @@ mod tests {
     }
 
     #[test]
-    fn the_settings_have_the_box_and_the_three_answers() {
+    fn the_settings_have_the_box_and_the_two_answers_that_can_be_remembered() {
         let _turn = render_turn();
         let mut app = app_with_capture("remember-settings");
         let _ = app.update(Message::OpenSettings);
-        let answers = [
-            app.t("dialog-save"),
-            app.t("dialog-discard"),
-            app.t("dialog-cancel"),
-        ];
+        let answers = [app.t("dialog-save"), app.t("dialog-discard")];
         let has = |app: &App, label: &str| {
             let mut ui = iced_test::Simulator::with_size(
                 crate::fonts::settings(),
@@ -3084,10 +3086,11 @@ mod tests {
             app.shell.state().settings.unsaved_choice.as_deref(),
             Some("discard")
         );
+        // Cancel is not one of the answers: it is not offered, and the host would refuse it.
         let _ = app.update(Message::RememberedAnswer(Decision::Cancel));
         assert_eq!(
             app.shell.state().settings.unsaved_choice.as_deref(),
-            Some("cancel")
+            Some("discard")
         );
         // Unticking goes back to asking.
         let _ = app.update(Message::RememberInSettings(false));

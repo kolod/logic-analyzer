@@ -47,15 +47,44 @@ fn a_remembered_discard_throws_the_capture_away_without_asking() {
 }
 
 #[test]
-fn a_remembered_cancel_keeps_the_capture_and_does_not_carry_on() {
+fn cancel_cannot_be_remembered() {
     let dir = TempDir::new("choice-cancel");
     let mut shell = finished_shell(&dir, 0b1, 3_000, 3);
-    remember(&mut shell, Some(Decision::Cancel));
+    let outcome = shell.apply(Command::SetUnsavedChoice(Some(Decision::Cancel)));
+    assert!(
+        matches!(outcome, Outcome::Ignored(c) if c == "host.invalid_command"),
+        "{outcome:?}"
+    );
+    assert_eq!(stored(&dir), None);
+    // The question is still asked, and the capture is still there.
     let outcome = shell.apply(Command::NewCapture);
-    assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
-    assert!(shell.state().pending_decision.is_none());
+    assert!(matches!(outcome, Outcome::NeedsDecision(_)), "{outcome:?}");
     assert!(shell.state().capture.is_some());
-    assert_eq!(shell.state().unsaved, Unsaved::Dirty);
+    // Forgetting what is not remembered is fine, and a remembered answer can be replaced.
+    remember(&mut shell, None);
+    remember(&mut shell, Some(Decision::Save));
+    remember(&mut shell, Some(Decision::Discard));
+    assert_eq!(stored(&dir).as_deref(), Some("discard"));
+    let outcome = shell.apply(Command::SetUnsavedChoice(Some(Decision::Cancel)));
+    assert!(matches!(outcome, Outcome::Ignored(_)), "{outcome:?}");
+    assert_eq!(
+        stored(&dir).as_deref(),
+        Some("discard"),
+        "the old choice stays"
+    );
+}
+
+#[test]
+fn a_cancel_written_in_the_settings_file_asks_as_before() {
+    let dir = TempDir::new("choice-stale-cancel");
+    std::fs::write(
+        dir.path().join("settings.json"),
+        br#"{"version":1,"unsaved_choice":"cancel"}"#,
+    )
+    .unwrap();
+    let mut shell = finished_shell(&dir, 0b1, 3_000, 11);
+    let outcome = shell.apply(Command::NewCapture);
+    assert!(matches!(outcome, Outcome::NeedsDecision(_)), "{outcome:?}");
 }
 
 #[test]
@@ -183,21 +212,5 @@ fn quit_and_close_work_with_a_remembered_discard_or_save() {
         let outcome = shell.apply(command.clone());
         let quit_now = matches!(&outcome, Outcome::Done(c) if c.contains(la_host::Changes::QUIT));
         assert!(quit_now || quits_after(&mut shell), "{name}: {outcome:?}");
-    }
-}
-
-#[test]
-fn a_remembered_cancel_never_blocks_quit_or_close() {
-    for (name, command) in [("quit", Command::Quit), ("close", Command::RequestClose)] {
-        let dir = TempDir::new(&format!("choice-{name}-cancel"));
-        let mut shell = finished_shell(&dir, 0b1, 3_000, 10);
-        remember(&mut shell, Some(Decision::Cancel));
-        // The window cannot be made impossible to close: the question is asked instead.
-        let outcome = shell.apply(command);
-        assert!(
-            matches!(outcome, Outcome::NeedsDecision(_)),
-            "{name}: {outcome:?}"
-        );
-        assert!(shell.state().pending_decision.is_some());
     }
 }

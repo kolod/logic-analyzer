@@ -223,12 +223,11 @@ the capture is unsaved or still running first asks **Save**, **Discard** or **Ca
 capture is stopped and its data kept while you decide. The window title shows the file name and a
 `*` while there are unsaved changes.
 
-Tick **Remember my choice** in that question to stop being asked: the answer you give is applied from
-then on (a remembered **Save** still asks for a name when the capture has no file yet). The same box
-and the three answers are in the **Settings**; untick it there to be asked again. Be careful with a
-remembered **Discard**: it throws unsaved data away without a question. A remembered **Cancel**
-stops a new capture and opening a file, but never closing the program: quitting and closing the
-window still ask.
+Tick **Remember my choice** in that question and press **Save** or **Discard** to stop being asked:
+that answer is applied from then on (a remembered **Save** still asks for a name when the capture
+has no file yet). **Cancel** is never remembered: the box does nothing for it. The same box and the
+two answers are in the **Settings**; untick it there to be asked again. Be careful with a
+remembered **Discard**: it throws unsaved data away without a question.
 
 ## Language and settings
 
