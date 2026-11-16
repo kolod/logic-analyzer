@@ -1850,37 +1850,24 @@ impl App {
             InstanceState::Cancelled => "decoder-state-cancelled",
             InstanceState::Failed => "decoder-state-failed",
         };
-        let fold_tip = self.t(if folded {
-            "decoder-expand"
-        } else {
-            "decoder-collapse"
-        });
         let mut block = column![
             row![
-                tooltip(
-                    button(icons::icon(
-                        if folded {
-                            Icon::ChevronRight
-                        } else {
-                            Icon::ChevronDown
-                        },
-                        false,
-                    ))
+                button(icons::icon(
+                    if folded {
+                        Icon::ChevronRight
+                    } else {
+                        Icon::ChevronDown
+                    },
+                    false,
+                ))
+                .style(button::text)
+                .padding(2)
+                .on_press(Message::DecoderToggled(id)),
+                text(name).size(14).width(Fill),
+                button(icons::icon(Icon::Trash, false))
                     .style(button::text)
                     .padding(2)
-                    .on_press(Message::DecoderToggled(id)),
-                    text(fold_tip),
-                    tooltip::Position::Bottom,
-                ),
-                text(name).size(14).width(Fill),
-                tooltip(
-                    button(icons::icon(Icon::Trash, false))
-                        .style(button::text)
-                        .padding(2)
-                        .on_press(Message::Run(Command::RemoveDecoder(id))),
-                    text(self.t("decoder-remove")),
-                    tooltip::Position::Bottom,
-                ),
+                    .on_press(Message::Run(Command::RemoveDecoder(id))),
             ]
             .spacing(4)
             .align_y(iced::Alignment::Center)

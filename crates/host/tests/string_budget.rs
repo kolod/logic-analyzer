@@ -42,7 +42,6 @@ impl Class {
             "decoders-add"
                 | "decoder-run"
                 | "decoder-cancel"
-                | "decoder-remove"
                 | "decoder-lane-show"
                 | "decoder-source"
                 | "decoder-source-capture"
