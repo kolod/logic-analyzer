@@ -159,6 +159,35 @@ ann-sample-clocked-bits-bit = Bit { $value }
 ann-sample-clocked-bits-incomplete = Byte incompleto: { $value } bits
 ann-sample-clocked-bits-gap = Aquí se perdieron muestras
 
+### Decoders: I2C
+decoder-i2c-name = I2C
+decoder-i2c-description = Lee el bus I2C (dos hilos, reloj y datos): la dirección, los bytes y las confirmaciones de cada transacción.
+decoder-i2c-signal-scl = Reloj (SCL)
+decoder-i2c-signal-sda = Datos (SDA)
+decoder-i2c-option-address = Notación de la dirección
+decoder-i2c-choice-address-addr7 = Dirección de 7 bits (sin el bit de dirección)
+decoder-i2c-choice-address-addr8 = Valor de 8 bits (con el bit de dirección)
+decoder-i2c-option-radix = Base numérica
+decoder-i2c-choice-radix-hex = Hexadecimal
+decoder-i2c-choice-radix-dec = Decimal
+decoder-i2c-choice-radix-bin = Binario
+ann-i2c-start = Inicio
+ann-i2c-repeated-start = Inicio repetido
+ann-i2c-stop = Parada
+ann-i2c-transaction-write = Escritura en { $value }
+ann-i2c-transaction-read = Lectura de { $value }
+ann-i2c-address-write = Dirección { $value } (escritura)
+ann-i2c-address-read = Dirección { $value } (lectura)
+ann-i2c-data = Datos { $value }
+ann-i2c-ack = ACK
+ann-i2c-nak = NAK
+ann-i2c-incomplete = Transacción incompleta
+ann-i2c-error-byte-cut = Byte interrumpido tras { $value } bits
+ann-i2c-error-address-nak = Dirección { $value } sin confirmar
+ann-i2c-error-data-nak = Datos { $value } sin confirmar
+ann-i2c-error-empty = Transacción vacía: sin dirección
+ann-i2c-error-gap = Aquí se perdieron muestras
+
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Decodificadores
 menu-decoders-add = Añadir decodificador

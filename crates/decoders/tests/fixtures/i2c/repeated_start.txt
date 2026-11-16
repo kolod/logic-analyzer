@@ -1,0 +1,153 @@
+# a register write, a repeated start and a read: one transaction
+# SCL is channel 0, SDA channel 1. Runs: <sda><scl> <samples>.
+11 64
+01 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 4
+01 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 8
+11 8
+10 4
+00 4
+01 4
+11 65
+--- expect
+lane point 64 ann-i2c-start
+ch1 point 64 ann-i2c-start
+lane range 72 201 ann-i2c-address-write 0x50
+lane point 200 ann-i2c-ack
+ch0 edge 72 rising =1
+ch0 edge 88 rising =0
+ch0 edge 104 rising =1
+ch0 edge 120 rising =0
+ch0 edge 136 rising =0
+ch0 edge 152 rising =0
+ch0 edge 168 rising =0
+ch0 edge 184 rising =0
+ch0 edge 200 rising ann-i2c-ack
+lane range 216 345 ann-i2c-data 0x10
+lane point 344 ann-i2c-ack
+ch0 edge 216 rising =0
+ch0 edge 232 rising =0
+ch0 edge 248 rising =0
+ch0 edge 264 rising =1
+ch0 edge 280 rising =0
+ch0 edge 296 rising =0
+ch0 edge 312 rising =0
+ch0 edge 328 rising =0
+ch0 edge 344 rising ann-i2c-ack
+lane point 364 ann-i2c-repeated-start
+ch1 point 364 ann-i2c-repeated-start
+lane range 372 501 ann-i2c-address-read 0x50
+lane point 500 ann-i2c-ack
+ch0 edge 372 rising =1
+ch0 edge 388 rising =0
+ch0 edge 404 rising =1
+ch0 edge 420 rising =0
+ch0 edge 436 rising =0
+ch0 edge 452 rising =0
+ch0 edge 468 rising =0
+ch0 edge 484 rising =1
+ch0 edge 500 rising ann-i2c-ack
+lane range 516 645 ann-i2c-data 0x55
+lane point 644 ann-i2c-nak
+ch0 edge 516 rising =0
+ch0 edge 532 rising =1
+ch0 edge 548 rising =0
+ch0 edge 564 rising =1
+ch0 edge 580 rising =0
+ch0 edge 596 rising =1
+ch0 edge 612 rising =0
+ch0 edge 628 rising =1
+ch0 edge 644 rising ann-i2c-nak
+lane point 664 ann-i2c-stop
+ch1 point 664 ann-i2c-stop
+lane range 64 665 ann-i2c-transaction-write 0x50

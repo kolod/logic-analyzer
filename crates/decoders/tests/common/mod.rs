@@ -11,6 +11,8 @@
     clippy::panic
 )]
 
+pub mod i2c;
+
 use la_storage::{Capture, CaptureConfig, Limits};
 
 /// A tiny deterministic generator (tests must not depend on a random crate).

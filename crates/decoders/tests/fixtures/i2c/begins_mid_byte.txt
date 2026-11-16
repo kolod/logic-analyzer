@@ -1,0 +1,127 @@
+# the capture begins inside a byte; only the ordinary transaction after the idle is decoded
+# SCL is channel 0, SDA channel 1. Runs: <sda><scl> <samples>.
+00 6
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 4
+10 4
+11 68
+01 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 8
+00 4
+10 4
+11 8
+10 8
+11 8
+10 4
+00 4
+01 8
+00 4
+10 4
+11 8
+10 4
+00 4
+01 8
+00 8
+01 8
+00 8
+01 8
+00 8
+01 4
+11 65
+--- expect
+lane point 158 ann-i2c-start
+ch1 point 158 ann-i2c-start
+lane range 166 295 ann-i2c-address-write 0x50
+lane point 294 ann-i2c-ack
+ch0 edge 166 rising =1
+ch0 edge 182 rising =0
+ch0 edge 198 rising =1
+ch0 edge 214 rising =0
+ch0 edge 230 rising =0
+ch0 edge 246 rising =0
+ch0 edge 262 rising =0
+ch0 edge 278 rising =0
+ch0 edge 294 rising ann-i2c-ack
+lane range 310 439 ann-i2c-data 0x12
+lane point 438 ann-i2c-ack
+ch0 edge 310 rising =0
+ch0 edge 326 rising =0
+ch0 edge 342 rising =0
+ch0 edge 358 rising =1
+ch0 edge 374 rising =0
+ch0 edge 390 rising =0
+ch0 edge 406 rising =1
+ch0 edge 422 rising =0
+ch0 edge 438 rising ann-i2c-ack
+lane range 454 583 ann-i2c-data 0x34
+lane point 582 ann-i2c-ack
+ch0 edge 454 rising =0
+ch0 edge 470 rising =0
+ch0 edge 486 rising =1
+ch0 edge 502 rising =1
+ch0 edge 518 rising =0
+ch0 edge 534 rising =1
+ch0 edge 550 rising =0
+ch0 edge 566 rising =0
+ch0 edge 582 rising ann-i2c-ack
+lane point 602 ann-i2c-stop
+ch1 point 602 ann-i2c-stop
+lane range 158 603 ann-i2c-transaction-write 0x50

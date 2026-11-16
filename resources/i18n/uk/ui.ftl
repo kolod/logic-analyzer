@@ -159,6 +159,35 @@ ann-sample-clocked-bits-bit = Біт { $value }
 ann-sample-clocked-bits-incomplete = Неповний байт: { $value } бітів
 ann-sample-clocked-bits-gap = Тут втрачено відліки
 
+### Decoders: I2C
+decoder-i2c-name = I2C
+decoder-i2c-description = Читає шину I2C (два дроти, такт і дані): адресу, байти та підтвердження кожної транзакції.
+decoder-i2c-signal-scl = Такт (SCL)
+decoder-i2c-signal-sda = Дані (SDA)
+decoder-i2c-option-address = Запис адреси
+decoder-i2c-choice-address-addr7 = 7-бітна адреса (без біта напрямку)
+decoder-i2c-choice-address-addr8 = 8-бітне значення (з бітом напрямку)
+decoder-i2c-option-radix = Система числення
+decoder-i2c-choice-radix-hex = Шістнадцяткова
+decoder-i2c-choice-radix-dec = Десяткова
+decoder-i2c-choice-radix-bin = Двійкова
+ann-i2c-start = Старт
+ann-i2c-repeated-start = Повторний старт
+ann-i2c-stop = Стоп
+ann-i2c-transaction-write = Запис до { $value }
+ann-i2c-transaction-read = Читання з { $value }
+ann-i2c-address-write = Адреса { $value } (запис)
+ann-i2c-address-read = Адреса { $value } (читання)
+ann-i2c-data = Дані { $value }
+ann-i2c-ack = ACK
+ann-i2c-nak = NAK
+ann-i2c-incomplete = Незавершена транзакція
+ann-i2c-error-byte-cut = Байт обірвано після { $value } бітів
+ann-i2c-error-address-nak = Адресу { $value } не підтверджено
+ann-i2c-error-data-nak = Дані { $value } не підтверджено
+ann-i2c-error-empty = Порожня транзакція: немає адреси
+ann-i2c-error-gap = Тут втрачено відліки
+
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Декодери
 menu-decoders-add = Додати декодер

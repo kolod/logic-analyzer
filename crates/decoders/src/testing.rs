@@ -73,6 +73,15 @@ pub static UPPER_WORDS: Descriptor = Descriptor {
     outputs: &["word"],
     ..descriptor("test.upper_words")
 };
+/// Reads the `i2c` items of the I2C decoder and annotates every one with its span and its payload as
+/// hexadecimal text (a trailing `!` marks an item with the error flag): the upper decoder of the
+/// I2C stacking tests.
+pub static I2C_READER: Descriptor = Descriptor {
+    signals: &[],
+    input: Input::Items("i2c"),
+    outputs: &[],
+    ..descriptor("test.i2c_reader")
+};
 /// Counts chunks and emits a range for each: the healthy neighbour of the faulty ones.
 pub static HEALTHY: Descriptor = descriptor("test.healthy");
 /// Healthy, but takes 20 ms for every chunk.
@@ -95,6 +104,7 @@ enum Kind0 {
     Healthy,
     Lower,
     Upper,
+    I2cReader,
     Slow,
     ReturnsError,
     Panics,
@@ -141,7 +151,7 @@ impl Run for Fixture {
             end: chunk.end,
         };
         match self.kind {
-            Kind0::Upper => {}
+            Kind0::Upper | Kind0::I2cReader => {}
             Kind0::Lower => {
                 sink.emit(Item {
                     kind: "byte",
@@ -242,6 +252,28 @@ impl Run for Fixture {
     }
 
     fn process_items(&mut self, chunk: &ItemChunk, sink: &mut Sink) -> Result<(), DecodeError> {
+        if self.kind == Kind0::I2cReader {
+            for item in &chunk.items {
+                let mut text = String::new();
+                if let Payload::Bytes(bytes) = &item.payload {
+                    for byte in bytes {
+                        text.push_str(&format!("{byte:02x}"));
+                    }
+                }
+                if item.error {
+                    text.push('!');
+                }
+                sink.annotate(annotation(
+                    Kind::Range {
+                        start: item.start,
+                        end: item.end,
+                    },
+                    Target::Lane,
+                    Text::Literal(text),
+                ))?;
+            }
+            return Ok(());
+        }
         if self.kind != Kind0::Upper {
             return Ok(());
         }
@@ -301,6 +333,7 @@ create!(create_healthy, Kind0::Healthy);
 create!(create_slow, Kind0::Slow);
 create!(create_lower, Kind0::Lower);
 create!(create_upper, Kind0::Upper);
+create!(create_i2c_reader, Kind0::I2cReader);
 create!(create_returns_error, Kind0::ReturnsError);
 create!(create_panics, Kind0::Panics);
 create!(create_never_returns, Kind0::NeverReturns);
@@ -316,6 +349,7 @@ pub fn fixtures() -> Vec<(&'static Descriptor, crate::registry::Create)> {
         (&SLOW, create_slow),
         (&LOWER_BYTES, create_lower),
         (&UPPER_WORDS, create_upper),
+        (&I2C_READER, create_i2c_reader),
         (&RETURNS_ERROR, create_returns_error),
         (&PANICS, create_panics),
         (&NEVER_RETURNS, create_never_returns),

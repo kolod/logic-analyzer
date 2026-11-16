@@ -2,3 +2,4 @@
 
 pub mod clocked_bits;
 pub mod composite;
+pub mod i2c;

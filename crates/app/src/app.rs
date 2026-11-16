@@ -2278,7 +2278,10 @@ mod tests {
             let _ = app.update(Message::Tick(Instant::now()));
             std::thread::sleep(Duration::from_millis(5));
         }
-        let _ = app.update(Message::AddDecoderMenu);
+        let _ = app.update(Message::AddDecoderPicked(Choice {
+            value: la_decoders::decoders::clocked_bits::ID.to_owned(),
+            label: String::new(),
+        }));
         let id = app.shell.state().decoders.instances[0].id;
         for (role, channel) in [("clock", 0_u8), ("data", 1)] {
             let _ = app.update(Message::DecoderChannelPicked(
@@ -2409,7 +2412,10 @@ mod tests {
 
     /// Adds the sample decoder to the capture on screen, gives it its channels and waits for it.
     fn decode(app: &mut App) {
-        let _ = app.update(Message::AddDecoderMenu);
+        let _ = app.update(Message::AddDecoderPicked(Choice {
+            value: la_decoders::decoders::clocked_bits::ID.to_owned(),
+            label: String::new(),
+        }));
         let id = app.shell.state().decoders.instances[0].id;
         for (role, channel) in [("clock", 0_u8), ("data", 1)] {
             let _ = app.update(Message::DecoderChannelPicked(
@@ -2467,12 +2473,12 @@ mod tests {
     fn a_registered_test_decoder_appears_without_changing_the_shell() {
         let _turn = render_turn();
         let mut app = app_with_capture("decoder-registered");
-        assert_eq!(app.shell.state().decoders.catalogue.len(), 1);
+        assert_eq!(app.shell.state().decoders.catalogue.len(), 2);
         app.shell
             .register_decoder(&ECHO, la_decoders::decoders::clocked_bits::create)
             .unwrap();
         let catalogue = &app.shell.state().decoders.catalogue;
-        assert_eq!(catalogue.len(), 2);
+        assert_eq!(catalogue.len(), 3);
         let echo = catalogue.iter().find(|c| c.id == "test.echo").unwrap();
         // The setup form is built from the descriptor: its signals and options.
         assert_eq!(echo.signals.len(), 2);

@@ -159,6 +159,35 @@ ann-sample-clocked-bits-bit = ビット { $value }
 ann-sample-clocked-bits-incomplete = 不完全なバイト：{ $value } ビット
 ann-sample-clocked-bits-gap = ここでサンプルが失われました
 
+### Decoders: I2C
+decoder-i2c-name = I2C
+decoder-i2c-description = I2Cバス（クロックとデータの2線）を読み取り、各トランザクションのアドレス、バイト、応答を表示します。
+decoder-i2c-signal-scl = クロック (SCL)
+decoder-i2c-signal-sda = データ (SDA)
+decoder-i2c-option-address = アドレスの表記
+decoder-i2c-choice-address-addr7 = 7ビットアドレス（方向ビットなし）
+decoder-i2c-choice-address-addr8 = 8ビット値（方向ビットあり）
+decoder-i2c-option-radix = 進数
+decoder-i2c-choice-radix-hex = 16進数
+decoder-i2c-choice-radix-dec = 10進数
+decoder-i2c-choice-radix-bin = 2進数
+ann-i2c-start = スタート
+ann-i2c-repeated-start = リピートスタート
+ann-i2c-stop = ストップ
+ann-i2c-transaction-write = { $value } への書き込み
+ann-i2c-transaction-read = { $value } からの読み出し
+ann-i2c-address-write = アドレス { $value }（書き込み）
+ann-i2c-address-read = アドレス { $value }（読み出し）
+ann-i2c-data = データ { $value }
+ann-i2c-ack = ACK
+ann-i2c-nak = NAK
+ann-i2c-incomplete = 未完了のトランザクション
+ann-i2c-error-byte-cut = { $value } ビット後にバイトが途切れました
+ann-i2c-error-address-nak = アドレス { $value } に応答がありません
+ann-i2c-error-data-nak = データ { $value } に応答がありません
+ann-i2c-error-empty = 空のトランザクション：アドレスがありません
+ann-i2c-error-gap = ここでサンプルが失われました
+
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = デコーダー
 menu-decoders-add = デコーダーを追加

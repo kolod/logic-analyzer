@@ -1,4 +1,7 @@
 {
+  "decode_i2c": {
+    "microseconds_per_million_samples": 25798.0
+  },
   "decode_throughput": {
     "microseconds_per_million_samples": 1857.0
   },

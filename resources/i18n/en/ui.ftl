@@ -279,6 +279,52 @@ ann-sample-clocked-bits-incomplete = Incomplete byte: { $value } bits
 # Annotation (error): positions of the capture were lost here.
 ann-sample-clocked-bits-gap = Samples lost here
 
+### Decoders: I2C
+# The I2C decoder (decoders describe themselves with these keys).
+decoder-i2c-name = I2C
+decoder-i2c-description = Reads the I2C bus (two wires, clock and data): the address, the bytes and the acknowledgements of every transaction.
+decoder-i2c-signal-scl = Clock (SCL)
+decoder-i2c-signal-sda = Data (SDA)
+decoder-i2c-option-address = Address notation
+decoder-i2c-choice-address-addr7 = 7-bit address (without the direction bit)
+decoder-i2c-choice-address-addr8 = 8-bit value (with the direction bit)
+decoder-i2c-option-radix = Number base
+decoder-i2c-choice-radix-hex = Hexadecimal
+decoder-i2c-choice-radix-dec = Decimal
+decoder-i2c-choice-radix-bin = Binary
+# Annotation: a start condition (the data line falls while the clock is high).
+ann-i2c-start = Start
+# Annotation: a repeated start condition (a start without a stop before it).
+ann-i2c-repeated-start = Repeated start
+# Annotation: a stop condition (the data line rises while the clock is high).
+ann-i2c-stop = Stop
+# Annotation: a whole transaction that writes. $value is the address of the target, such as 0x50.
+ann-i2c-transaction-write = Write to { $value }
+# Annotation: a whole transaction that reads. $value is the address of the target, such as 0x50.
+ann-i2c-transaction-read = Read from { $value }
+# Annotation: the address byte of a write. $value is the address, such as 0x50.
+ann-i2c-address-write = Address { $value } (write)
+# Annotation: the address byte of a read. $value is the address, such as 0x50.
+ann-i2c-address-read = Address { $value } (read)
+# Annotation: a data byte. $value is its value, such as 0x12.
+ann-i2c-data = Data { $value }
+# Annotation: the receiver acknowledged the byte.
+ann-i2c-ack = ACK
+# Annotation: the receiver did not acknowledge the byte.
+ann-i2c-nak = NAK
+# Annotation: a transaction that was not finished (the capture ended or samples were lost).
+ann-i2c-incomplete = Incomplete transaction
+# Annotation (error): a byte that ended early. $value is the number of bits that were read.
+ann-i2c-error-byte-cut = Byte cut short after { $value } bits
+# Annotation (error): the address was not acknowledged. $value is the address, such as 0x50.
+ann-i2c-error-address-nak = Address { $value } not acknowledged
+# Annotation (error): a byte written to a target was not acknowledged. $value is the byte, such as 0x12.
+ann-i2c-error-data-nak = Data { $value } not acknowledged
+# Annotation (error): a start condition followed by a stop condition with no clock pulse between them.
+ann-i2c-error-empty = Empty transaction: no address
+# Annotation (error): positions of the capture were lost here.
+ann-i2c-error-gap = Samples lost here
+
 ### Decoders: menu, panel and the selected annotation
 menu-decoders = Decoders
 menu-decoders-add = Add decoder

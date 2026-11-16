@@ -72,8 +72,9 @@ fn with_decoder(dir: &TempDir) -> (Shell, u32) {
 fn a_decoder_needs_a_capture() {
     let dir = TempDir::new("deco-none");
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
-    assert_eq!(shell.state().decoders.catalogue.len(), 1);
-    assert_eq!(shell.state().decoders.catalogue[0].id, ID);
+    // The built-in decoders: the sample decoder and I2C.
+    assert_eq!(shell.state().decoders.catalogue.len(), 2);
+    assert!(shell.state().decoders.catalogue.iter().any(|c| c.id == ID));
     let outcome = shell.apply(Command::AddDecoder {
         decoder: ID.to_owned(),
     });
@@ -85,7 +86,14 @@ fn a_decoder_needs_a_capture() {
 fn the_catalogue_is_built_from_the_descriptor_in_the_current_language() {
     let dir = TempDir::new("deco-catalogue");
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
-    let entry = shell.state().decoders.catalogue[0].clone();
+    let entry = shell
+        .state()
+        .decoders
+        .catalogue
+        .iter()
+        .find(|c| c.id == ID)
+        .unwrap()
+        .clone();
     assert_eq!(entry.name, "Clocked bits");
     let roles: Vec<&str> = entry.signals.iter().map(|s| s.role.as_str()).collect();
     assert_eq!(roles, ["clock", "data"]);
@@ -94,7 +102,14 @@ fn the_catalogue_is_built_from_the_descriptor_in_the_current_language() {
     assert_eq!(options, ["clock_edge", "bit_order", "bits", "idle"]);
     assert!(entry.has_generator && !entry.reads_items);
     done(&mut shell, Command::SetLanguage(la_i18n::Language::Uk));
-    assert_eq!(shell.state().decoders.catalogue[0].name, "Тактовані біти");
+    let entry = shell
+        .state()
+        .decoders
+        .catalogue
+        .iter()
+        .find(|c| c.id == ID)
+        .unwrap();
+    assert_eq!(entry.name, "Тактовані біти");
 }
 
 #[test]
