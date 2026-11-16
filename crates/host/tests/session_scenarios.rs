@@ -144,7 +144,14 @@ fn a_saved_capture_opens_exactly_as_it_was() {
     assert!(!b.auto_fit);
     assert_eq!(b.unsaved, Unsaved::Clean);
     assert_eq!(b.session_path.as_deref(), Some(path.as_path()));
-    assert_eq!(fresh.recent_files(), [path]);
+    assert_eq!(
+        fresh
+            .recent_files()
+            .into_iter()
+            .map(|r| r.path)
+            .collect::<Vec<_>>(),
+        [path]
+    );
 }
 
 #[test]
@@ -504,32 +511,6 @@ fn unknown_sections_of_an_opened_file_are_written_back() {
     let tags: Vec<&str> = session.extras().iter().map(|s| s.tag.as_str()).collect();
     assert_eq!(tags, ["NOTE", "VIEW"]);
     assert_eq!(session.extras()[0].payload, b"a note from another version");
-}
-
-#[test]
-fn recent_files_are_newest_first_limited_to_ten_and_missing_ones_are_skipped() {
-    let dir = TempDir::new("sess-recent");
-    let mut shell = finished_shell(&dir, 0b1, 5_000, 14);
-    let mut paths = Vec::new();
-    for i in 0..12 {
-        let path = dir.path().join(format!("f{i}.lasession"));
-        done(&mut shell, Command::SaveSessionAs(path.clone()));
-        wait_operation(&mut shell);
-        paths.push(path);
-    }
-    assert_eq!(shell.state().settings.recent_files.len(), 10);
-    let recent = shell.recent_files();
-    assert_eq!(recent[0], paths[11]);
-    assert_eq!(recent[9], paths[2]);
-    std::fs::remove_file(&paths[11]).unwrap();
-    assert_eq!(
-        shell.recent_files()[0],
-        paths[10],
-        "a missing file is skipped"
-    );
-    // The list is remembered: a new shell reads it from the settings file.
-    let again = Shell::new(ShellConfig::for_tests(dir.path()));
-    assert_eq!(again.state().settings.recent_files.len(), 10);
 }
 
 #[test]

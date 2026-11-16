@@ -349,12 +349,12 @@ the view from the left with the zoom unchanged; the same to the left.
 
 ### Tests for User Story 5 (write first; they must fail)
 
-- [ ] T041 [P] [US5] `crates/host/tests/recent_files.rs`: `MAX_RECENT_FILES` is 15; saving or opening 16 files keeps 15 newest first;
+- [X] T041 [P] [US5] `crates/host/tests/recent_files.rs`: `MAX_RECENT_FILES` is 15; saving or opening 16 files keeps 15 newest first;
   re-using an old one moves it to the top without a duplicate; `recent_files()` marks a deleted file
   `exists: false` and an existing one `true`; `RemoveRecentFile` removes an entry and ignores one that is not
   listed; `ClearRecentFiles` empties the list; a settings file with 30 entries is truncated to 15 on load; the
   lists are saved to the settings.
-- [ ] T042 [P] [US5] Application tests (no display): the File menu has Open recent as a submenu; up to 15 entries with the file
+- [X] T042 [P] [US5] Application tests (no display): the File menu has Open recent as a submenu; up to 15 entries with the file
   name and the folder as secondary text; a missing file's entry has no press action and a marker; the last
   entries "Remove unavailable entries" (only when one is missing) and "Clear the list"; an empty list shows
   one disabled entry; choosing an entry sends `OpenSession`. Headless rendering of the submenu in English and
@@ -362,10 +362,10 @@ the view from the left with the zoom unchanged; the same to the left.
 
 ### Implementation for User Story 5
 
-- [ ] T043 [US5] `crates/host/src/settings.rs` (15), `crates/host/src/sessions.rs`: `RecentFile { path, exists }`,
+- [X] T043 [US5] `crates/host/src/settings.rs` (15), `crates/host/src/sessions.rs`: `RecentFile { path, exists }`,
   `Shell::recent_files()` returning it, the commands `RemoveRecentFile` and `ClearRecentFiles` (saving the settings).
   T041 passes.
-- [ ] T044 [US5] `crates/app/src/app.rs`: the Open recent submenu on the mechanism of T040; keys `menu-file-recent`
+- [X] T044 [US5] `crates/app/src/app.rs`: the Open recent submenu on the mechanism of T040; keys `menu-file-recent`
   (exists, now the submenu title), `menu-file-recent-empty`, `menu-file-recent-missing`,
   `menu-file-recent-remove-missing`, `menu-file-recent-clear` in six languages; the flat list under File is
   removed. T042 passes.

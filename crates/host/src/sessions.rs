@@ -27,6 +27,15 @@ use crate::state::{Activity, OperationKind, OperationView, State, Unsaved};
 use crate::view_section::{self, Bounds, Decoded, ViewState};
 use crate::window::ViewWindow;
 
+/// One entry of the list of recent files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecentFile {
+    /// The path as it was remembered.
+    pub path: PathBuf,
+    /// Whether the file is there now.
+    pub exists: bool,
+}
+
 /// The save or load the shell is watching.
 pub(crate) enum Operation {
     /// Writing `path`; `then` is the command that waits for this save.
@@ -447,6 +456,22 @@ impl Shell {
         changes
     }
 
+    /// Takes a file out of the list of recent files (the file itself stays); `None` when it is
+    /// not listed.
+    pub(crate) fn remove_recent(&mut self, state: &mut State, path: &Path) -> Option<Changes> {
+        let text = path.to_string_lossy();
+        let recent = &mut state.settings.recent_files;
+        let before = recent.len();
+        recent.retain(|r| r.as_str() != text);
+        (recent.len() != before).then(|| Changes::SETTINGS | self.persist_settings(state))
+    }
+
+    /// Empties the list of recent files.
+    pub(crate) fn clear_recent(&mut self, state: &mut State) -> Changes {
+        state.settings.recent_files.clear();
+        Changes::SETTINGS | self.persist_settings(state)
+    }
+
     /// Remembers a file in the list of recent files and saves the settings.
     fn add_recent(&mut self, state: &mut State, path: &Path) -> Changes {
         let text = path.to_string_lossy().into_owned();
@@ -472,15 +497,18 @@ impl Shell {
         }
     }
 
-    /// The recent files that still exist, newest first.
+    /// The recent files, newest first, each marked with whether it still exists.
     #[must_use]
-    pub fn recent_files(&self) -> Vec<PathBuf> {
+    pub fn recent_files(&self) -> Vec<RecentFile> {
         self.state
             .settings
             .recent_files
             .iter()
-            .map(PathBuf::from)
-            .filter(|p| p.exists())
+            .map(|text| {
+                let path = PathBuf::from(text);
+                let exists = path.is_file();
+                RecentFile { path, exists }
+            })
             .collect()
     }
 

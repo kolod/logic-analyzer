@@ -20,7 +20,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 /// The largest settings file that is read (a larger one is treated as damaged).
 pub const MAX_SETTINGS_BYTES: u64 = 1024 * 1024;
 /// The most recent files that are remembered.
-pub const MAX_RECENT_FILES: usize = 10;
+pub const MAX_RECENT_FILES: usize = 15;
 /// The range of the interface scale, in percent.
 pub const UI_SCALE_RANGE: (u16, u16) = (75, 200);
 /// The largest memory limit that is accepted (1 TiB); a larger value falls back to the default.

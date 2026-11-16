@@ -1000,9 +1000,11 @@ impl Shell {
                 state.follow_latest = false;
                 changed(Changes::WINDOW)
             }
-            Command::RemoveRecentFile(_) | Command::ClearRecentFiles => {
-                Err(Reject::Ignored(error::INVALID_COMMAND))
-            }
+            Command::RemoveRecentFile(path) => self
+                .remove_recent(state, &path)
+                .map(Executed::Changed)
+                .ok_or(Reject::Ignored(error::INVALID_COMMAND)),
+            Command::ClearRecentFiles => Ok(Executed::Changed(self.clear_recent(state))),
             Command::ResetPresentation => {
                 state.presentation = Presentation::defaults(
                     presentation_channels(state),

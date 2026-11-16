@@ -201,6 +201,10 @@ menu-file-save = Save
 menu-file-save-as = Save as…
 # Heading of the list of recently used session files in the File menu.
 menu-file-recent = Recent files
+menu-file-recent-empty = No recent files
+menu-file-recent-missing = (missing)
+menu-file-recent-remove-missing = Remove unavailable entries
+menu-file-recent-clear = Clear the list
 # Shown while a session file is being written.
 dialog-saving = Saving the session…
 # Shown while a session file is being read.

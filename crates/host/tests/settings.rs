@@ -176,8 +176,8 @@ fn the_recent_files_list_is_bounded() {
     let names: Vec<String> = (0..25).map(|i| format!("\"/f{i}.lasession\"")).collect();
     let json = format!(r#"{{"version":1,"recent_files":[{}]}}"#, names.join(","));
     let loaded = load(json.as_bytes());
-    assert_eq!(MAX_RECENT_FILES, 10);
-    assert_eq!(loaded.settings.recent_files.len(), 10);
+    assert_eq!(MAX_RECENT_FILES, 15);
+    assert_eq!(loaded.settings.recent_files.len(), 15);
     assert_eq!(loaded.settings.recent_files[0], "/f0.lasession");
 }
 

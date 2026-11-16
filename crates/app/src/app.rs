@@ -121,6 +121,8 @@ pub enum Message {
     /// The menu entry that adds a decoder.
     /// An entry of the open menu that has a submenu (the index in the table) is pressed.
     SubmenuToggled(usize),
+    /// "Remove unavailable entries" of the recent files.
+    RemoveMissingRecent,
     /// A source was chosen for a decoder instance (the capture, or another instance).
     DecoderSourcePicked(u32, Choice<Source>),
     /// A decoder was chosen in the list of decoders to add.
@@ -356,6 +358,14 @@ struct ChannelEdit {
 
 /// The identity of the in-place editor, for focusing it.
 const NAME_EDITOR: &str = "channel-name-editor";
+
+/// The index `SubmenuToggled` carries for the recent files of the File menu (not a table entry).
+const RECENT_SUBMENU: usize = usize::MAX;
+
+/// How many entries of the menu `title` are in the table: the row where the extra entry follows.
+fn table_count_in(table: &[ShortcutEntry], title: &str) -> usize {
+    table.iter().filter(|e| e.menu[0] == title).count()
+}
 
 impl App {
     /// Builds the application with the host shell of the current user.
@@ -1088,6 +1098,22 @@ impl App {
                 self.open_submenu = None;
                 self.run(command)
             }
+            Message::RemoveMissingRecent => {
+                self.open_menu = None;
+                self.open_submenu = None;
+                let missing: Vec<_> = self
+                    .shell
+                    .recent_files()
+                    .into_iter()
+                    .filter(|f| !f.exists)
+                    .map(|f| f.path)
+                    .collect();
+                let mut task = Task::none();
+                for path in missing {
+                    task = self.run(Command::RemoveRecentFile(path));
+                }
+                task
+            }
             Message::SubmenuToggled(entry) => {
                 self.open_submenu = if self.open_submenu == Some(entry) {
                     None
@@ -1332,23 +1358,14 @@ impl App {
             }
         }
         if *title == "menu-file" {
-            let recent = self.shell.recent_files();
-            if !recent.is_empty() {
-                items = items.push(text(self.t("menu-file-recent")).size(12));
-                for path in recent {
-                    let label = path.file_name().map_or_else(
-                        || path.display().to_string(),
-                        |n| n.to_string_lossy().into_owned(),
-                    );
-                    let mut item = button(text(label).size(13))
-                        .style(button::text)
-                        .padding([3, 20])
-                        .width(Length::Shrink);
-                    if self.shell.state().operation.is_none() {
-                        item = item.on_press(Message::Run(Command::OpenSession(path)));
-                    }
-                    items = items.push(item);
-                }
+            let recent = button(text(format!("{}  \u{25b8}", self.t("menu-file-recent"))))
+                .style(button::text)
+                .padding([4, 12])
+                .width(Length::Shrink)
+                .on_press(Message::SubmenuToggled(RECENT_SUBMENU));
+            items = items.push(recent);
+            if self.open_submenu == Some(RECENT_SUBMENU) {
+                submenu = Some((table_count_in(&self.table, title), self.recent_submenu()));
             }
         }
         let offset = 6.0 + index as f32 * 90.0;
@@ -1373,6 +1390,68 @@ impl App {
                 })
                 .into(),
         )
+    }
+
+    /// The submenu of File: the recent files with the folder as secondary text, then the entries
+    /// that clean the list up.
+    fn recent_submenu(&self) -> Element<'_, Message> {
+        let recent = self.shell.recent_files();
+        let idle = self.shell.state().operation.is_none();
+        let mut items = column![].spacing(1).padding(4);
+        if recent.is_empty() {
+            items = items.push(
+                button(text(self.t("menu-file-recent-empty")).size(13))
+                    .style(button::text)
+                    .padding([4, 12]),
+            );
+        }
+        let mut any_missing = false;
+        for file in &recent {
+            let name = file.path.file_name().map_or_else(
+                || file.path.display().to_string(),
+                |n| n.to_string_lossy().into_owned(),
+            );
+            let folder = file
+                .path
+                .parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            let label = if file.exists {
+                name
+            } else {
+                any_missing = true;
+                format!("{name}  {}", self.t("menu-file-recent-missing"))
+            };
+            let content = column![
+                text(label).size(13),
+                text(folder).size(10).style(text::secondary)
+            ];
+            let mut item = button(content)
+                .style(button::text)
+                .padding([3, 12])
+                .width(Length::Shrink);
+            if file.exists && idle {
+                item = item.on_press(Message::Run(Command::OpenSession(file.path.clone())));
+            }
+            items = items.push(item);
+        }
+        if any_missing {
+            items = items.push(
+                button(text(self.t("menu-file-recent-remove-missing")).size(13))
+                    .style(button::text)
+                    .padding([4, 12])
+                    .on_press(Message::RemoveMissingRecent),
+            );
+        }
+        if !recent.is_empty() {
+            items = items.push(
+                button(text(self.t("menu-file-recent-clear")).size(13))
+                    .style(button::text)
+                    .padding([4, 12])
+                    .on_press(Message::Run(Command::ClearRecentFiles)),
+            );
+        }
+        container(items).style(container::bordered_box).into()
     }
 
     /// The decoders of the catalogue by name, in the order of the catalogue.
@@ -3098,6 +3177,152 @@ mod tests {
             drop(ui);
             let _ = app.update(Message::MenuClosed);
         }
+    }
+
+    /// An app that has saved `count` sessions `r0` .. in a scratch directory.
+    fn app_with_recent(
+        name: &str,
+        count: usize,
+    ) -> (App, std::path::PathBuf, Vec<std::path::PathBuf>) {
+        let mut app = app_with_capture(name);
+        let dir = std::env::temp_dir().join(format!("la-app-{name}-files-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut paths = Vec::new();
+        for i in 0..count {
+            let path = dir.join(format!("r{i}.lasession"));
+            let _ = app.update(Message::Run(Command::SaveSessionAs(path.clone())));
+            let deadline = Instant::now().checked_add(Duration::from_secs(20)).unwrap();
+            while app.shell.operation_running() {
+                let _ = app.update(Message::Tick(Instant::now()));
+                assert!(Instant::now() < deadline, "the save did not end");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            paths.push(path);
+        }
+        (app, dir, paths)
+    }
+
+    fn open_recent(app: &mut App) {
+        let file = app
+            .table
+            .iter()
+            .position(|e| e.menu[0] == "menu-file")
+            .unwrap();
+        let mut titles: Vec<&'static str> = Vec::new();
+        for e in &app.table {
+            if !titles.contains(&e.menu[0]) {
+                titles.push(e.menu[0]);
+            }
+        }
+        let index = titles
+            .iter()
+            .position(|t| *t == app.table[file].menu[0])
+            .unwrap();
+        let _ = app.update(Message::MenuToggled(index));
+        let _ = app.update(Message::SubmenuToggled(RECENT_SUBMENU));
+    }
+
+    #[test]
+    fn open_recent_is_a_submenu_of_file_with_the_name_and_the_folder_of_each_file() {
+        let _turn = render_turn();
+        let (mut app, dir, paths) = app_with_recent("recent-menu", 3);
+        open_recent(&mut app);
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(800.0, 560.0),
+            app.view(),
+        );
+        for path in &paths {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            assert!(ui.find(name.as_str()).is_ok(), "{name}");
+        }
+        assert!(ui.find(dir.display().to_string().as_str()).is_ok());
+        assert!(ui.find(app.t("menu-file-recent-clear").as_str()).is_ok());
+        // Nothing is missing: no entry to remove what is not there.
+        assert!(
+            ui.find(app.t("menu-file-recent-remove-missing").as_str())
+                .is_err()
+        );
+        // Choosing an entry opens that file.
+        let _ = ui.click("r0.lasession");
+        let messages: Vec<Message> = ui.into_messages().collect();
+        assert!(
+            messages.iter().any(|m| matches!(
+                m,
+                Message::Run(Command::OpenSession(p)) if *p == paths[0]
+            )),
+            "{}",
+            messages.len()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_file_is_marked_and_cannot_be_opened_and_can_be_removed() {
+        let _turn = render_turn();
+        let (mut app, dir, paths) = app_with_recent("recent-missing", 3);
+        std::fs::remove_file(&paths[1]).unwrap();
+        open_recent(&mut app);
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(800.0, 560.0),
+            app.view(),
+        );
+        let marker = format!("r1.lasession  {}", app.t("menu-file-recent-missing"));
+        assert!(ui.find(marker.as_str()).is_ok(), "{marker}");
+        let _ = ui.click(marker.as_str());
+        assert!(
+            !ui.into_messages()
+                .any(|m| matches!(m, Message::Run(Command::OpenSession(_)))),
+            "a missing file has no action"
+        );
+        assert!(app.shell.recent_files().iter().any(|f| !f.exists));
+        let _ = app.update(Message::RemoveMissingRecent);
+        let list: Vec<_> = app
+            .shell
+            .recent_files()
+            .into_iter()
+            .map(|f| f.path)
+            .collect();
+        assert_eq!(list, vec![paths[2].clone(), paths[0].clone()]);
+        let _ = app.update(Message::Run(Command::ClearRecentFiles));
+        assert!(app.shell.recent_files().is_empty());
+        // An empty list shows one entry that says so.
+        open_recent(&mut app);
+        let ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(800.0, 560.0),
+            app.view(),
+        );
+        let mut ui = ui;
+        assert!(ui.find(app.t("menu-file-recent-empty").as_str()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_submenu_of_recent_files_fits_the_minimum_window_in_english_and_japanese() {
+        let _turn = render_turn();
+        let (mut app, dir, paths) = app_with_recent("recent-fit", 15);
+        assert_eq!(app.shell.recent_files().len(), 15);
+        std::fs::remove_file(&paths[3]).unwrap();
+        for language in [la_i18n::Language::En, la_i18n::Language::Ja] {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            open_recent(&mut app);
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 560.0),
+                app.view(),
+            );
+            let found = ui.find(app.t("menu-file-recent-clear").as_str()).unwrap();
+            let bounds = found.bounds();
+            assert!(
+                bounds.x >= 0.0 && bounds.x + bounds.width <= 800.0,
+                "{language:?}: {bounds:?}"
+            );
+            drop(ui);
+            let _ = app.update(Message::MenuClosed);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

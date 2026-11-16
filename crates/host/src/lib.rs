@@ -39,6 +39,7 @@ pub use command::{
     PanStep, Tick, ZoomAnchor, ZoomDirection, ZoomFactor,
 };
 pub use devices::SignalProfile;
+pub use sessions::RecentFile;
 pub use shell::{Shell, ShellConfig};
 pub use state::{
     Activity, EdgeDirection, OperationKind, OperationView, SidePanel, State, Unsaved, Versions,
