@@ -1096,6 +1096,9 @@ impl Shell {
             .start(&device.id, config, options)
             .map_err(Reject::Failed)?;
         let snapshot = acquisition.capture().snapshot();
+        // The device may already have delivered its first samples: the window is made for what
+        // the snapshot holds, not for an empty capture.
+        let first_length = snapshot.length();
         let description = acquisition.description();
         state.capture = Some(CaptureView::new(
             snapshot,
@@ -1117,7 +1120,7 @@ impl Shell {
         state.unsaved = Unsaved::Running;
         state.auto_fit = true;
         state.pending_decision = None;
-        state.window = ViewWindow::fit_all(&window_limits(0, state.view_size.pixels));
+        state.window = ViewWindow::fit_all(&window_limits(first_length, state.view_size.pixels));
         self.running = Some(Running {
             acquisition,
             started: Instant::now(),

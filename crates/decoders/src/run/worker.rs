@@ -22,6 +22,8 @@ use crate::store::{Budget, Limits};
 
 /// How often the worker publishes results while it runs.
 const PUBLISH_EVERY: Duration = Duration::from_millis(25);
+/// The longest a worker rests after a chunk.
+const MAX_REST: Duration = Duration::from_millis(20);
 /// How long the worker sleeps when it has caught up with a capture that is still growing.
 const FOLLOW_PAUSE: Duration = Duration::from_millis(2);
 
@@ -296,6 +298,7 @@ fn work(spec: JobSpec, shared: Arc<Shared>) -> JobEnd {
         Sink::with_stream(limits, budget, output.clone()),
     );
     let mut last_publish = Instant::now();
+    let mut last_chunk = Instant::now();
     let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let mut wait = || {
             std::thread::sleep(FOLLOW_PAUSE);
@@ -307,16 +310,22 @@ fn work(spec: JobSpec, shared: Arc<Shared>) -> JobEnd {
             let snapshot = capture.snapshot();
             shared.length.store(snapshot.length(), Ordering::Release);
             beat(&shared);
-            // The capture and the interface come first: give up the processor after every
-            // chunk, and a little more while a capture is still being recorded.
-            std::thread::yield_now();
-            if !snapshot.status().closed {
-                std::thread::sleep(Duration::from_millis(1));
-            }
             if last_publish.elapsed() >= PUBLISH_EVERY {
                 last_publish = Instant::now();
                 publish(&shared, sink.results());
             }
+            // The capture, the interface and the rest of the machine come first: after every
+            // chunk the worker rests as long as the chunk took (at most 20 ms), so that a pass
+            // uses about half of a core and not all of it, and at least a millisecond while a
+            // capture is still being recorded.
+            let busy = last_chunk.elapsed().min(MAX_REST);
+            let rest = if snapshot.status().closed {
+                busy
+            } else {
+                busy.max(Duration::from_millis(1))
+            };
+            std::thread::sleep(rest);
+            last_chunk = Instant::now();
         };
         match &input {
             Some(stream) => run_item_pass(
