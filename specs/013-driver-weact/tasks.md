@@ -97,7 +97,7 @@ the repository with its licence.
 
 ### Tests first
 
-- [ ] T004 [P] `crates/driver-weact/tests/protocol.rs`: the start payload of every one of the 16 rates equals
+- [X] T004 [P] `crates/driver-weact/tests/protocol.rs`: the start payload of every one of the 16 rates equals
   the table of the USB contract, written by hand (for example 1,000,000 → `[0x40, 0x00, 0x2F]`, 20,000 →
   `[0x00, 0x05, 0xDB]`, 24,000,000 → `[0x40, 0x00, 0x01]`); every rate not in the list (0, 1, 19,999, 3,000,001,
   24,000,001, 48,000,000, `u64::MAX`) is an error and never a panic; the clock rule at its boundary (the
@@ -117,7 +117,7 @@ the repository with its licence.
 
 ### Implementation
 
-- [ ] T006 `crates/driver-weact/src/protocol.rs`: the constants of the USB contract (vendor requests `0xA0`,
+- [X] T006 `crates/driver-weact/src/protocol.rs`: the constants of the USB contract (vendor requests `0xA0`,
   `0xB0`, `0xB1`, `0xB2`, endpoint `0x82`, CPUCS `0xE600`, identity `1d50:608c`, the strings `sigrok` and
   `fx2lafw`, the required major version 1, timeouts, the silence limits and the renumeration times of the
   behaviour contract), `SAMPLE_RATES: [u64; 16]`, `start_payload(rate) -> Result<[u8; 3]>` by the rule

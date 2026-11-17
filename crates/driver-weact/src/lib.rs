@@ -12,12 +12,12 @@
 
 #![deny(missing_docs)]
 
-pub mod error;
-mod protocol;
-mod usb;
-mod nusb_backend;
-mod firmware;
 mod boards;
 mod device;
+pub mod error;
+mod firmware;
+mod nusb_backend;
+pub mod protocol;
 #[cfg(feature = "test-support")]
 pub mod testing;
+mod usb;
