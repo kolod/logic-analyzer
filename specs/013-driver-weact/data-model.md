@@ -5,8 +5,10 @@ and the vocabulary of the contracts. Names are those of the Rust types to come, 
 
 ## BoardKey
 
-Where a board is on the USB bus: the bus identifier and the chain of port numbers from the root hub
-(as `nusb` reports them). It is the identity of a board: `DeviceId` is `weact:<bus>-<p1>.<p2>…`.
+Where a board is on the USB bus: the bus identifier **as text** (on Windows the path of the host
+controller such as `PCIROOT(0)#PCI(1400)#USBROOT(0)`, on Linux the bus number) and the chain of port
+numbers from the root hub, as `nusb` reports them. It is the identity of a board: `DeviceId` is
+`weact:<bus>-<p1>.<p2>…`; the text is built and compared as a whole and never split to recover the parts.
 
 - Stable while the board stays plugged into the same port, **including across re-enumeration** (the
   device address changes, the position does not).

@@ -83,6 +83,25 @@ OS interfaces (`unsafe`). Rejected.
 pass `cargo deny`; a spike compiles an empty use of it on both systems and in the MSRV job before any
 other code depends on it.
 
+**Result of the spike (task T002, 2026-11-17, Windows 11)**: `nusb` 0.2.9 and `serialport` 4.10.1 build
+with `cargo +1.85 check -p la-driver-weact --all-targets` and the crate passes clippy with `-D warnings`.
+(`cargo deny` is not installed on the development machine; it runs in CI, and the licences of the new
+crates are MIT or Apache-2.0 and MPL-2.0, all in the allowed list.) `examples/probe.rs` lists the bus with
+what `nusb` reads without opening a device, and showed on the maintainer's machine:
+
+- `DeviceInfo::driver()` exists on Windows and returned `Some("libusb0")` for the board and
+  `Some("FTDIBUS")` for the Nano's FTDI chip: the **bound driver name is available** (open item 3 is
+  settled), so `weact.driver_missing` names it.
+- The blank board shows `manufacturer None | product None | serial None`, `rev 0000`, class `ff`: it has
+  **no strings at all**. The rule "the strings are `sigrok` / `fx2lafw` ⇒ the firmware runs, anything
+  else ⇒ blank" holds.
+- `bus_id()` is a **string**, not a number: on Windows the path of the host controller
+  (`PCIROOT(0)#PCI(1400)#USBROOT(0)`), on Linux the bus number as text. The `BoardKey` is therefore a
+  string (the bus id as given) and the chain of port numbers (`[13, 2]` here: port 2 of the hub on root
+  port 13); it must be built and compared as text.
+- The board here sits behind a hub (`05e3:0608` on root port 13). Whether that hub keeps the board from
+  24 MHz is checked in the manual procedure, not assumed.
+
 ## R4. The Windows driver
 
 **Decision**: the documented and supported driver on Windows is **WinUSB**, installed with Zadig
@@ -284,9 +303,8 @@ depend on the driver crate (Principle II: the host knows only the abstraction).
    values (0 or 256 clocks in the GPIF delay encoding): confirmed on the real board with the rig
    (a 1 MS/s capture of a 100 µs step must show about 100 samples per step; each rate of the table is
    checked).
-3. Whether `nusb` reports the bound Windows driver name (used to name it in `weact.driver_missing`); if
-   not, the message names the symptom only.
-4. That the transitive dependencies of `nusb` build on Rust 1.85 on both systems and pass `cargo deny`
-   (the first task, a spike).
+3. ~~Whether `nusb` reports the bound Windows driver name~~: settled by T002, it does (`libusb0` seen).
+4. ~~That the transitive dependencies of `nusb` build on Rust 1.85~~: settled on Windows by T002; Debian
+   and `cargo deny` are checked by the CI of the first pull request.
 5. The vendor's `Tools` folder (`WeAct LogicAnalyzer Write.exe`, `setup_linux.sh`) was not read; they
    are not needed.
