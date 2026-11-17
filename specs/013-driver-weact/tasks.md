@@ -139,7 +139,7 @@ the repository with its licence.
   that logs every request the driver sent (`written()` as a list of typed entries for assertions) and has a
   controllable clock. Its own unit tests in the file: steps are consumed in order, a hang is released by the
   handle, the log is exact, an unexpected request is reported (not ignored).
-- [ ] T009 `crates/driver-weact/src/nusb_backend.rs`: the only code that uses `nusb`: a `UsbBackend` and `UsbLink`
+- [X] T009 `crates/driver-weact/src/nusb_backend.rs`: the only code that uses `nusb`: a `UsbBackend` and `UsbLink`
   over `list_devices`, `open`, `claim_interface(0)`, vendor `control_in`/`control_out` with the timeout, the
   bulk `Endpoint` `0x82` with `submit`, `wait_next_complete(timeout)` and `cancel_all`; a pure function
   `map_usb_error(kind, context) -> Error` (Disconnected → `device.disconnected`, PermissionDenied →

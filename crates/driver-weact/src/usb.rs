@@ -98,12 +98,17 @@ impl UsbInfo {
             && self.product_id == crate::protocol::PRODUCT_ID
     }
 
-    /// Whether the board runs the firmware: its strings are `sigrok` and `fx2lafw`. A board
-    /// without firmware has other strings or none.
+    /// Whether the board runs the firmware: its product string is `fx2lafw`, and its manufacturer
+    /// string is `sigrok` where the platform reports one (Windows does not cache it, so a missing
+    /// manufacturer is accepted; a different one is not). A board without firmware has other
+    /// strings or none.
     #[must_use]
     pub fn runs_firmware(&self) -> bool {
-        self.manufacturer.as_deref() == Some(crate::protocol::MANUFACTURER)
-            && self.product.as_deref() == Some(crate::protocol::PRODUCT)
+        self.product.as_deref() == Some(crate::protocol::PRODUCT)
+            && self
+                .manufacturer
+                .as_deref()
+                .is_none_or(|name| name == crate::protocol::MANUFACTURER)
     }
 }
 
@@ -278,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn a_board_runs_the_firmware_only_with_both_strings() {
+    fn a_board_runs_the_firmware_when_its_product_string_says_so() {
         let mut info = UsbInfo {
             key: BoardKey::new("001", [1]),
             vendor_id: 0x1d50,
@@ -291,9 +296,23 @@ mod tests {
         assert!(info.is_weact());
         assert!(!info.runs_firmware(), "no strings: blank");
         info.manufacturer = Some("sigrok".to_owned());
-        assert!(!info.runs_firmware(), "one string is not enough");
+        assert!(
+            !info.runs_firmware(),
+            "the manufacturer alone is not enough"
+        );
         info.product = Some("fx2lafw".to_owned());
         assert!(info.runs_firmware());
+        info.manufacturer = None;
+        assert!(
+            info.runs_firmware(),
+            "Windows does not report the manufacturer"
+        );
+        info.manufacturer = Some("someone else".to_owned());
+        assert!(
+            !info.runs_firmware(),
+            "a different manufacturer is not ours"
+        );
+        info.manufacturer = None;
         info.product = Some("FX2LAFW".to_owned());
         assert!(!info.runs_firmware(), "the strings are compared exactly");
         info.vendor_id = 0x04b4;

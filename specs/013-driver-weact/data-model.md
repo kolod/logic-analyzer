@@ -25,8 +25,8 @@ and product string (when the OS has them), the device address, and the bound dri
 
 - The board is *ours* when the IDs are `1d50:608c`; everything else on the bus is ignored and never
   opened (FR-004).
-- It is *running the firmware* when manufacturer is `sigrok` and product is `fx2lafw`; otherwise it
-  is *blank*.
+- It is *running the firmware* when the product string is `fx2lafw` and the manufacturer is `sigrok`
+  or not reported (Windows never reports it); otherwise it is *blank*.
 
 ## Board (an entry of the table)
 

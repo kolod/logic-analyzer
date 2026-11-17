@@ -20,6 +20,7 @@ pub mod error;
 pub const PROVIDER_NAME: &str = "weact";
 
 mod firmware;
+#[expect(dead_code, reason = "used by T013, the provider")]
 mod nusb_backend;
 pub mod protocol;
 #[cfg(feature = "test-support")]

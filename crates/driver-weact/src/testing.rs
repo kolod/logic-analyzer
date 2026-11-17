@@ -241,6 +241,7 @@ struct Board {
     open_fail: Option<Fail>,
     version: Vec<u8>,
     renumerate_after: Option<Duration>,
+    hide_manufacturer: bool,
     returns_at: Option<Duration>,
     image: Vec<u8>,
     captures: VecDeque<Capture>,
@@ -330,6 +331,7 @@ impl RecordedUsb {
                 open_fail: None,
                 version: vec![1, 4],
                 renumerate_after: Some(Duration::from_millis(900)),
+                hide_manufacturer: false,
                 returns_at: None,
                 image: Vec::new(),
                 captures: VecDeque::new(),
@@ -353,6 +355,11 @@ impl RecordedUsb {
     /// Makes opening the board fail (or work again with `None`).
     pub fn fail_open(&self, key: &BoardKey, fail: Option<Fail>) {
         self.with_board(key, |board| board.open_fail = fail);
+    }
+
+    /// Makes the bus stop reporting the manufacturer string of the board, as Windows does.
+    pub fn hide_manufacturer(&self, key: &BoardKey, hide: bool) {
+        self.with_board(key, |board| board.hide_manufacturer = hide);
     }
 
     /// Makes listing the bus fail (or work again with `None`).
@@ -471,7 +478,8 @@ impl UsbBackend for RecordedUsb {
                     key: board.key.clone(),
                     vendor_id: board.vendor_id,
                     product_id: board.product_id,
-                    manufacturer: board.running.then(|| MANUFACTURER.to_owned()),
+                    manufacturer: (board.running && !board.hide_manufacturer)
+                        .then(|| MANUFACTURER.to_owned()),
                     product: board.running.then(|| PRODUCT.to_owned()),
                     address: board.address,
                     driver: board.driver.clone(),

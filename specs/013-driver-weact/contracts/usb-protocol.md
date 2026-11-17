@@ -9,8 +9,12 @@ first rig run.
 
 | State | VID:PID | Manufacturer / product strings | `bcdDevice` |
 |-------|---------|--------------------------------|-------------|
-| blank (no firmware) | `1d50:608c` | not the two below | `0x0000` (observed) |
+| blank (no firmware) | `1d50:608c` | none (observed on the maintainer's board) | `0x0000` (observed) |
 | running the firmware | `1d50:608c` | `sigrok` / `fx2lafw` | `0x0100` |
+
+**Telling the two apart without opening the board**: the product string is `fx2lafw`. The manufacturer
+string is `sigrok` where the platform reports it; on Windows `nusb` never reports it (the system does not
+cache it), so a missing manufacturer is accepted and a different one is not.
 
 One configuration (1), one interface (0, alternate 0, vendor class `0xFF`), one endpoint: bulk IN
 `0x82` (512-byte packets at high speed, 64 at full speed).

@@ -8,8 +8,10 @@ nothing below is guessed silently.
 ## R1. What the board is, and how it identifies itself
 
 **Decision**: the driver recognises the board by the USB identity `1d50:608c` (spec FR-004). A board
-runs the firmware when its USB manufacturer string is `sigrok` and its product string is `fx2lafw`
-(the rule libsigrok uses); otherwise it is **blank** and must be prepared.
+runs the firmware when its USB product string is `fx2lafw` and its manufacturer string is `sigrok` **or
+not reported** (libsigrok checks both by reading the descriptors; `nusb` on Windows never reports the
+manufacturer, "not cached by the OS", found while writing the backend); otherwise it is **blank** and
+must be prepared.
 
 **Rationale**:
 
@@ -99,6 +101,11 @@ what `nusb` reads without opening a device, and showed on the maintainer's machi
   (`PCIROOT(0)#PCI(1400)#USBROOT(0)`), on Linux the bus number as text. The `BoardKey` is therefore a
   string (the bus id as given) and the chain of port numbers (`[13, 2]` here: port 2 of the hub on root
   port 13); it must be built and compared as text.
+- **Control transfers on Windows go through the interface**: in `nusb` 0.2.9 `Device::control_in/out`
+  exist only on Linux, macOS and Android; on Windows they are methods of `Interface`. The backend therefore
+  claims interface 0 when it opens a board and sends every control transfer (the download too) through it,
+  on every platform, as libsigrok does when it opens. Whether the blank board exposes interface 0 is
+  confirmed on the real board (T038).
 - The board here sits behind a hub (`05e3:0608` on root port 13). Whether that hub keeps the board from
   24 MHz is checked in the manual procedure, not assumed.
 
