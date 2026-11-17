@@ -382,6 +382,15 @@ struct ChannelEdit {
 /// The identity of the in-place editor, for focusing it.
 const NAME_EDITOR: &str = "channel-name-editor";
 
+/// The room around the content of every view of the panel: the same on all four sides, so the
+/// left and the right margins look alike.
+const PANEL_PADDING: iced::Padding = iced::Padding {
+    top: 8.0,
+    right: 8.0,
+    bottom: 8.0,
+    left: 8.0,
+};
+
 /// The height of a channel button and the gap between two; the buttons share the width of the panel.
 const CHANNEL_BUTTON: f32 = 28.0;
 const CHANNEL_GAP: f32 = 3.0;
@@ -1766,12 +1775,7 @@ impl App {
             realtime,
         ]
         .spacing(8)
-        .padding(iced::Padding {
-            top: 6.0,
-            right: 18.0,
-            bottom: 6.0,
-            left: 6.0,
-        });
+        .padding(PANEL_PADDING);
         view = view.push(self.channel_buttons());
         scrollable(view).height(Fill).into()
     }
@@ -1780,12 +1784,7 @@ impl App {
     fn markers_panel(&self) -> Element<'_, Message> {
         let state = self.shell.state();
         let localizer = self.shell.localizer();
-        let mut list = column![].spacing(4).padding(iced::Padding {
-            top: 6.0,
-            right: 18.0,
-            bottom: 6.0,
-            left: 6.0,
-        });
+        let mut list = column![].spacing(4).padding(PANEL_PADDING);
         list = list.push(text(self.t("panel-markers")).size(14));
         for (position, marker) in state.markers.list.iter().enumerate() {
             let default_label = localizer.message(
@@ -1870,12 +1869,7 @@ impl App {
     fn decoders_panel(&self) -> Element<'_, Message> {
         let state = self.shell.state();
         let localizer = self.shell.localizer();
-        let mut list = column![].spacing(6).padding(iced::Padding {
-            top: 6.0,
-            right: 18.0,
-            bottom: 6.0,
-            left: 6.0,
-        });
+        let mut list = column![].spacing(6).padding(PANEL_PADDING);
         list = list.push(text(self.t("panel-decoders")).size(14));
         if state.capture.is_none() {
             list = list.push(text(self.t("decoders-need-capture")).size(12));
@@ -2917,9 +2911,9 @@ mod tests {
 
     #[test]
     fn eight_channel_buttons_fit_a_row_of_the_narrowest_panel() {
-        // The content has 6 px on the left and 18 px on the right; the buttons share what is left.
+        // The content has the same room on both sides; the buttons share what is left.
         let (narrowest, _) = la_host::settings::PANEL_WIDTH_RANGE;
-        let room = narrowest as f32 - 6.0 - 18.0 - 7.0 * CHANNEL_GAP;
+        let room = narrowest as f32 - PANEL_PADDING.left - PANEL_PADDING.right - 7.0 * CHANNEL_GAP;
         assert!(
             room / 8.0 >= 20.0,
             "a button would be {} px wide",
