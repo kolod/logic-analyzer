@@ -1180,12 +1180,12 @@ impl Shell {
             .config
             .to_device_config(&device, seed, &failures, source);
         let limits = capture_limits(&state.settings);
+        let chunk_samples =
+            chunk_samples_for(limits.memory_budget_bytes, device.capabilities.channels);
         let options = AcquisitionOptions {
             limits,
-            chunk_samples: chunk_samples_for(
-                limits.memory_budget_bytes,
-                device.capabilities.channels,
-            ),
+            chunk_samples,
+            channel_capacity: channel_capacity_for(config.sample_rate_hz, chunk_samples),
             ..AcquisitionOptions::default()
         };
         let acquisition = self
@@ -1242,6 +1242,16 @@ fn chunk_samples_for(budget_bytes: u64, channels: u8) -> usize {
     let per_sample = u64::from(channels.max(1)).saturating_mul(32);
     let samples = budget_bytes.checked_div(per_sample).unwrap_or(0);
     usize::try_from(samples.clamp(64, 16_384)).unwrap_or(16_384)
+}
+
+/// How many chunks may wait for the store: a device that cannot wait (a real board) loses the
+/// samples that arrive while the queue is full, so the queue holds about a fifth of a second of
+/// the device's rate, never fewer than the default of 8 nor more than 512 chunks. Measured on a
+/// WeAct analyzer at 24 MS/s: 8 chunks (5 ms) lost 27 % to 38 % of a capture, 32 chunks lost none.
+fn channel_capacity_for(rate_hz: u64, chunk_samples: usize) -> usize {
+    let chunk = u64::try_from(chunk_samples).unwrap_or(u64::MAX).max(1);
+    let wanted = (rate_hz / 5).div_ceil(chunk);
+    usize::try_from(wanted.clamp(8, 512)).unwrap_or(512)
 }
 
 /// The device selected when nothing else is: the first simulated one, else the first.
@@ -1415,4 +1425,23 @@ pub(crate) fn clear_capture(state: &mut State) {
     state.window = ViewWindow::fit_all(&window_limits(0, state.view_size.pixels));
     // What the user set for the channels (names, colours, order) stays for the next capture.
     sync_presentation(state);
+}
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::channel_capacity_for;
+
+    #[test]
+    fn the_queue_holds_about_a_fifth_of_a_second_between_eight_and_five_hundred_twelve_chunks() {
+        // 24 MS/s in chunks of 16,384: 4.8 million samples in a fifth of a second is 293 chunks.
+        assert_eq!(channel_capacity_for(24_000_000, 16_384), 293);
+        // Slow rates keep the default of 8.
+        assert_eq!(channel_capacity_for(1_000_000, 16_384), 13);
+        assert_eq!(channel_capacity_for(20_000, 16_384), 8);
+        assert_eq!(channel_capacity_for(0, 16_384), 8);
+        // Never more than 512, also for tiny chunks.
+        assert_eq!(channel_capacity_for(24_000_000, 64), 512);
+        // A chunk of zero samples does not divide by zero.
+        assert_eq!(channel_capacity_for(24_000_000, 0), 512);
+    }
 }
