@@ -650,6 +650,9 @@ fn opening_a_file_with_many_saved_results_does_not_hold_the_interface() {
         assert!(Instant::now() < deadline, "the results never arrived");
         std::thread::sleep(Duration::from_millis(2));
     }
-    assert!(worst < Duration::from_millis(100), "a poll took {worst:?}");
+    // The freeze this guards against lasted seconds. The limit is generous because a shared CI
+    // runner is slow and noisy: a poll took 112 to 345 ms there, against well under 100 ms on a
+    // development machine.
+    assert!(worst < Duration::from_millis(500), "a poll took {worst:?}");
     assert_eq!(reopened.state().decoders.instances[0].annotations, saved);
 }

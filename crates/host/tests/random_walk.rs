@@ -652,7 +652,9 @@ fn random_action(rng: &mut Lcg, files: &Files, shell: &Shell) -> Command {
         51 if rng.below(8) == 0 => Command::TestPanic,
         52 => Command::RequestClose,
         53 => Command::Quit,
-        54 => Command::SetSidePanel(
+        // These write the settings file, so they are drawn rarely: a slow disk would otherwise
+        // dominate the time of the walk.
+        54 if rng.below(8) == 0 => Command::SetSidePanel(
             [
                 la_host::SidePanel::Capture,
                 la_host::SidePanel::Decoders,
@@ -668,12 +670,12 @@ fn random_action(rng: &mut Lcg, files: &Files, shell: &Shell) -> Command {
                 la_host::EdgeDirection::Previous
             },
         },
-        58 => Command::RemoveRecentFile(match rng.below(3) {
+        58 if rng.below(8) == 0 => Command::RemoveRecentFile(match rng.below(3) {
             0 => files.good.clone(),
             1 => files.targets[rng.below(3) as usize].clone(),
             _ => files.missing.clone(),
         }),
-        59 => Command::ClearRecentFiles,
+        59 if rng.below(8) == 0 => Command::ClearRecentFiles,
         60..=61 => Command::SetChannelHeight {
             channel,
             height: [0, 1, 24, 100, 240, 241, u16::MAX][rng.below(7) as usize],
