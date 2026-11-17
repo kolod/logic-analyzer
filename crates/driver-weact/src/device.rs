@@ -12,9 +12,10 @@ use la_core::Error;
 use la_devices::error as device_error;
 use la_devices::{AppliedConfig, Device, DeviceDescriptor, ReadOutcome, ResolvedConfig};
 
+use crate::error;
 use crate::protocol::{
-    self, COMMAND_TIMEOUT, DRAIN_LIMIT, READ_WAIT, REQUEST_START, STOP_WAIT, buffer_plan,
-    samples_from_bytes, start_payload,
+    self, COMMAND_TIMEOUT, DRAIN_LIMIT, FIRST_DATA_TIMEOUT, READ_WAIT, REQUEST_START,
+    SILENCE_FLOOR, STOP_WAIT, buffer_plan, samples_from_bytes, start_payload,
 };
 use crate::usb::{BulkStream, StreamEvent, Timer, UsbLink};
 
@@ -33,6 +34,14 @@ struct Run {
     taken: usize,
     /// The set length was reached: the next `read` says `Finished`.
     complete: bool,
+    /// When the start command was sent (the provider's timer).
+    started_at: Duration,
+    /// When bytes last arrived; `None` until the first transfer with data.
+    last_data: Option<Duration>,
+    /// How long the stream may be silent after data came before it counts as stopped.
+    silence_limit: Duration,
+    /// The loss at the end of a set-length capture was reported; the next `read` fails.
+    lost_reported: bool,
 }
 
 /// An open board.
@@ -120,6 +129,10 @@ impl Device for WeActDevice {
             pending: Vec::new(),
             taken: 0,
             complete: false,
+            started_at: self.timer.now(),
+            last_data: None,
+            silence_limit: silence_limit(plan.size, rate),
+            lost_reported: false,
         });
         Ok(AppliedConfig::new(rate))
     }
@@ -133,6 +146,9 @@ impl Device for WeActDevice {
         if run.complete {
             return Ok(ReadOutcome::Finished);
         }
+        if run.lost_reported {
+            return Err(stream_error(run, self.timer.now()));
+        }
         if max_samples == 0 {
             return Ok(ReadOutcome::Idle);
         }
@@ -141,8 +157,11 @@ impl Device for WeActDevice {
                 StreamEvent::Data(bytes) => {
                     run.pending = bytes;
                     run.taken = 0;
+                    run.last_data = Some(self.timer.now());
                 }
-                StreamEvent::Empty | StreamEvent::Timeout => return Ok(ReadOutcome::Idle),
+                StreamEvent::Empty | StreamEvent::Timeout => {
+                    return silence(run, self.timer.now());
+                }
                 StreamEvent::Error(error) => return Err(error),
             }
         }
@@ -186,6 +205,51 @@ impl Drop for WeActDevice {
     }
 }
 
+/// How long a stream that has delivered data may be silent: the larger of 2 s and four transfer
+/// periods (a period is the time the board needs to fill one buffer).
+fn silence_limit(buffer_size: usize, rate: u64) -> Duration {
+    let size = u64::try_from(buffer_size).unwrap_or(u64::MAX);
+    let period_ns = size
+        .saturating_mul(1_000_000_000)
+        .checked_div(rate.max(1))
+        .unwrap_or(0);
+    SILENCE_FLOOR.max(Duration::from_nanos(period_ns.saturating_mul(4)))
+}
+
+/// Nothing came in this wait: `Idle` while the silence is within the limit, otherwise the end of
+/// the stream. For a capture of a set length the missing samples are reported as lost first.
+fn silence(run: &mut Run, now: Duration) -> Result<ReadOutcome, Error> {
+    let since = run.last_data.unwrap_or(run.started_at);
+    let limit = if run.last_data.is_some() {
+        run.silence_limit
+    } else {
+        FIRST_DATA_TIMEOUT
+    };
+    if now.saturating_sub(since) < limit {
+        return Ok(ReadOutcome::Idle);
+    }
+    if run.last_data.is_none() {
+        return Err(stream_error(run, now));
+    }
+    match run.requested {
+        Some(length) if length > run.received => {
+            run.lost_reported = true;
+            Ok(ReadOutcome::Lost(length.saturating_sub(run.received)))
+        }
+        _ => Err(stream_error(run, now)),
+    }
+}
+
+/// The error of a stream that ended without the board being unplugged.
+fn stream_error(run: &Run, now: Duration) -> Error {
+    if run.last_data.is_none() {
+        let waited = now.saturating_sub(run.started_at);
+        error::no_data(u64::try_from(waited.as_millis()).unwrap_or(u64::MAX))
+    } else {
+        error::stream_stopped(run.received, run.requested)
+    }
+}
+
 /// The version check of a freshly opened board: the firmware must be of the major version the
 /// driver works with.
 ///
@@ -197,7 +261,7 @@ pub(crate) fn check_firmware(link: &mut dyn UsbLink) -> Result<protocol::Version
     let answer = link.control_in(protocol::REQUEST_GET_FW_VERSION, 0, 0, 2, COMMAND_TIMEOUT)?;
     let version = protocol::parse_version(&answer)?;
     if version.major != protocol::REQUIRED_MAJOR {
-        return Err(crate::error::firmware_rejected(format!(
+        return Err(error::firmware_rejected(format!(
             "the board reports firmware version {}.{}; this driver needs major version {}",
             version.major,
             version.minor,

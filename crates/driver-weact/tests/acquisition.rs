@@ -93,7 +93,10 @@ fn a_set_length_shorter_than_the_data_truncates_the_last_chunk_and_finishes() {
 #[test]
 fn an_open_ended_capture_runs_until_stopped_and_stops_promptly() {
     let (usb, key, provider) = one_ready_board();
-    usb.script_capture(&key, Capture::endless(vec![0xA5, 0x5A, 0x00, 0xFF]));
+    usb.script_capture(
+        &key,
+        Capture::endless([0xA5, 0x5A, 0x00, 0xFF].repeat(1_024)),
+    );
     let registry = registry_with(provider);
     let id = key.device_id();
     assert!(wait_until(Duration::from_secs(5), || registry

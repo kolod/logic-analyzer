@@ -270,7 +270,7 @@ and leave the data.
 
 ### Tests for User Story 3 (write first; they must fail)
 
-- [ ] T019 [P] [US3] `crates/driver-weact/tests/failures.rs`, through the registry and acquisition engine: an unplug at
+- [X] T019 [P] [US3] `crates/driver-weact/tests/failures.rs`, through the registry and acquisition engine: an unplug at
   `start`, before the first data, in the middle of a stream and during `stop` gives `device.disconnected` (the
   capture keeps the samples already stored, is closed interrupted and marked incomplete); a bulk error status gives
   `device.transport`; short and empty chunks and one timeout are not errors; the stream stops in the middle of a
@@ -284,7 +284,7 @@ and leave the data.
   (the registry reports `device.driver_panic` or `device.unresponsive`, other devices and the list are not
   affected) — a loop of 1,000 injected panics and hangs over varied points never crashes or freezes the test
   (SC-006); `weact.in_use` at start is reported without a capture.
-- [ ] T020 [P] [US3] `crates/driver-weact/tests/hostile.rs`: data from the device that is wrong never panics and is typed: a
+- [X] T020 [P] [US3] `crates/driver-weact/tests/hostile.rs`: data from the device that is wrong never panics and is typed: a
   control answer of the wrong length for `0xB0` and `0xB2`, strings that are not valid UTF-8 or are enormous, a
   port chain of 255 hops, a vendor ID of `u16::MAX`, a bulk completion of length 0, one longer than its buffer,
   one of an odd length, a stream of random bytes of random chunk lengths for 10,000 cases from a fixed seed (an
@@ -292,7 +292,7 @@ and leave the data.
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] `crates/driver-weact/src/device.rs`: silence tracking with the clock seam (first data 2 s; later the larger of
+- [X] T021 [US3] `crates/driver-weact/src/device.rs`: silence tracking with the clock seam (first data 2 s; later the larger of
   2 s and four transfer periods), the `Lost`-then-error sequence for a set length and the error alone otherwise,
   mapping of every link error to its typed error, `stop` safe after a failed `read` and when called twice,
   `Drop` cancels and releases; fix whatever T020 finds (checked lengths, no indexing). T019 and T020 pass.
