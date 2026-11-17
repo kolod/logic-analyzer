@@ -58,7 +58,7 @@ Commits are signed; if signing fails, ask the owner to unlock GPG, never bypass 
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the crate `crates/driver-weact/`: `Cargo.toml` (package `la-driver-weact`, edition and
+- [X] T001 Create the crate `crates/driver-weact/`: `Cargo.toml` (package `la-driver-weact`, edition and
   MSRV from the workspace, license GPL-3.0-only, `publish = false`; dependencies `la-core`, `la-devices`,
   `la-diagnostics`, `tracing`, and `nusb = "0.2"`; feature `test-support = []`; dev-dependencies
   `la-devices` with `test-support`, `la-driver-weact` with `test-support`, `serialport = { version = "4",
@@ -68,7 +68,7 @@ Commits are signed; if signing fails, ask the owner to unlock GPG, never bypass 
   `testing` behind `test-support`), each with a one-line doc comment. Nothing uses them yet: unused items
   get `#[expect(dead_code, reason = "used by T0xx")]`. `cargo build -p la-driver-weact` and
   `cargo clippy -p la-driver-weact --all-targets -- -D warnings` pass.
-- [ ] T002 Spike the USB crate (research R3 risk, open items 3 and 4): write `crates/driver-weact/examples/probe.rs`
+- [X] T002 Spike the USB crate (research R3 risk, open items 3 and 4): write `crates/driver-weact/examples/probe.rs`
   that lists every USB device with `nusb::list_devices()` and prints for each the vendor and product ID,
   the manufacturer and product strings, the bus id, the port chain, the device address and, if the API
   has it, the bound driver name. Run it on the maintainer's machine (the board is attached: expect
