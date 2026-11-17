@@ -65,6 +65,8 @@ pub enum Message {
     /// A number of channels was chosen.
     /// The sample rate text changed.
     RateText(String),
+    /// A sample rate was chosen from the list of the device.
+    RatePicked(RateChoice),
     /// The capture length text changed.
     LengthText(String),
     /// The seed text changed.
@@ -238,6 +240,30 @@ pub struct DeviceChoice {
 impl fmt::Display for DeviceChoice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.label)
+    }
+}
+
+/// A sample rate in the chooser of a device that has a list of rates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RateChoice {
+    hz: u64,
+}
+
+/// A rate as a person reads it: whole megahertz, whole kilohertz, else hertz.
+fn format_rate(hz: u64) -> String {
+    let (unit, divisor) = if hz >= 1_000_000 && hz.checked_rem(1_000_000) == Some(0) {
+        ("MHz", 1_000_000)
+    } else if hz >= 1_000 && hz.checked_rem(1_000) == Some(0) {
+        ("kHz", 1_000)
+    } else {
+        ("Hz", 1)
+    };
+    format!("{} {unit}", hz.checked_div(divisor).unwrap_or(hz))
+}
+
+impl fmt::Display for RateChoice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format_rate(self.hz))
     }
 }
 
@@ -1362,6 +1388,12 @@ impl App {
                 self.sync_texts();
                 task
             }
+            Message::RatePicked(choice) => {
+                if self.shell.state().activity != Activity::Idle {
+                    return Task::none();
+                }
+                self.update(Message::RateText(choice.hz.to_string()))
+            }
             Message::RateText(text) => {
                 self.rate_text.clone_from(&text);
                 match text.trim().parse::<u64>() {
@@ -1774,11 +1806,35 @@ impl App {
                 .style(text::danger),
             );
         }
+        // A device with a list of rates (a real board) gets a chooser of exactly those rates;
+        // one that takes any rate in a range (the virtual device) gets a field to type it in.
+        let rate_row = match state
+            .devices
+            .iter()
+            .find(|d| Some(&d.id) == state.selected_device.as_ref())
+            .map(|d| &d.capabilities.sample_rates)
+        {
+            Some(la_devices::SampleRates::List(rates)) => {
+                let choices: Vec<RateChoice> =
+                    rates.iter().map(|hz| RateChoice { hz: *hz }).collect();
+                let current = choices
+                    .iter()
+                    .find(|c| c.hz == state.config.sample_rate_hz)
+                    .cloned();
+                labelled(
+                    self.t("toolbar-rate-choice"),
+                    pick_list(choices, current, Message::RatePicked)
+                        .width(Fill)
+                        .into(),
+                )
+            }
+            _ => labelled(self.t("toolbar-rate"), rate.into()),
+        };
         let mut view = column![
             text(self.t("panel-capture")).size(14),
             self.start_block(),
             labelled(self.t("toolbar-device"), device_picker.width(Fill).into()),
-            labelled(self.t("toolbar-rate"), rate.into()),
+            rate_row,
             length_block,
             labelled(self.t("toolbar-seed"), seed.into()),
             labelled(self.t("toolbar-profile"), profile_picker.width(Fill).into()),
@@ -3338,6 +3394,36 @@ mod tests {
         let _ = ui.snapshot(&app.theme()).unwrap();
         drop(ui);
         let _ = app.shell.apply(Command::StopCapture);
+    }
+
+    #[test]
+    fn rates_are_shown_in_the_unit_a_person_reads() {
+        for (hz, text) in [
+            (20_000, "20 kHz"),
+            (250_000, "250 kHz"),
+            (1_000_000, "1 MHz"),
+            (24_000_000, "24 MHz"),
+            (1_500_000, "1500 kHz"),
+            (999, "999 Hz"),
+            (0, "0 Hz"),
+        ] {
+            assert_eq!(format_rate(hz), text);
+            assert_eq!(RateChoice { hz }.to_string(), text);
+        }
+    }
+
+    #[test]
+    fn a_rate_chosen_from_the_list_sets_the_rate_and_keeps_the_length_in_seconds() {
+        let _turn = render_turn();
+        let dir = std::env::temp_dir().join(format!("la-app-rate-pick-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        let _ = app.update(Message::RateText("1000000".into()));
+        let _ = app.update(Message::LengthText("2.5".into()));
+        let _ = app.update(Message::RatePicked(RateChoice { hz: 2_000_000 }));
+        assert_eq!(app.shell.state().config.sample_rate_hz, 2_000_000);
+        assert_eq!(app.rate_text, "2000000");
+        assert_eq!(app.shell.state().config.length, 5_000_000);
     }
 
     #[test]

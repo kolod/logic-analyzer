@@ -34,6 +34,7 @@ menu-capture-stop = 停止
 
 toolbar-device = デバイス
 toolbar-rate = サンプルレート (Hz)
+toolbar-rate-choice = サンプルレート
 toolbar-seed = シード
 toolbar-seed-random = ランダム
 toolbar-profile = 信号

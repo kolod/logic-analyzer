@@ -58,6 +58,7 @@ menu-capture-stop = Stop
 toolbar-device = Device
 # Label of the sample rate field (the value is in hertz).
 toolbar-rate = Sample rate (Hz)
+toolbar-rate-choice = Sample rate
 # Label of the seed of the simulated signals.
 toolbar-seed = Seed
 # Placeholder of the seed field: a new seed is chosen at every start.
