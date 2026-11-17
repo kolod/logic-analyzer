@@ -391,6 +391,12 @@ const PANEL_PADDING: iced::Padding = iced::Padding {
     left: 8.0,
 };
 
+/// The drivers for real hardware the application registers at start-up. The host knows only the
+/// device abstraction; this is the one place that lists the drivers.
+pub(crate) fn device_providers() -> Vec<std::sync::Arc<dyn la_devices::DeviceProvider>> {
+    vec![la_driver_weact::provider()]
+}
+
 /// The height of a channel button and the gap between two; the buttons share the width of the panel.
 const CHANNEL_BUTTON: f32 = 28.0;
 const CHANNEL_GAP: f32 = 3.0;
@@ -418,7 +424,11 @@ impl App {
     /// Builds the application with the host shell of the current user.
     #[must_use]
     pub fn new() -> Self {
-        Self::with_shell(Shell::new(ShellConfig::for_user()))
+        let shell = Shell::new(ShellConfig::for_user());
+        for provider in device_providers() {
+            shell.add_provider(provider);
+        }
+        Self::with_shell(shell)
     }
 
     /// Builds the application around an existing host shell.
@@ -3254,6 +3264,13 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_application_registers_the_driver_of_the_weact_analyzer() {
+        let providers = device_providers();
+        let names: Vec<&str> = providers.iter().map(|p| p.name()).collect();
+        assert_eq!(names, vec!["weact"]);
     }
 
     #[test]

@@ -298,8 +298,10 @@ impl Shell {
         self.test_failures = failures;
     }
 
-    /// Adds a device provider (tests and failure checks: scripted devices).
-    #[cfg(feature = "test-support")]
+    /// Registers a device provider (a driver for real hardware, or a scripted one in tests). The
+    /// application does this once at start-up; the registry scans the provider from then on and its
+    /// devices appear in the device list. The host does not depend on any driver: the application
+    /// is the one place that knows which drivers exist.
     pub fn add_provider(&self, provider: Arc<dyn la_devices::DeviceProvider>) {
         self.registry.add_provider(provider);
     }

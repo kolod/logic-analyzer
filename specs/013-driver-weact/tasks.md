@@ -200,7 +200,7 @@ other device, with a stored capture equal to the signal.
   length and return `Finished` after the last sample, `Idle` when nothing came), `stop` (cancel, wait up to
   500 ms, release, no command). No failure handling beyond mapping a link error to its typed error yet (T021).
   T011 and T012 pass.
-- [ ] T015 [US1] Composition: `crates/host/src/shell.rs` makes `Shell::add_provider` an ordinary public method (remove the
+- [X] T015 [US1] Composition: `crates/host/src/shell.rs` makes `Shell::add_provider` an ordinary public method (remove the
   `#[cfg(feature = "test-support")]` on it; document it) and keeps the doc line in `docs/host-api.md`
   ("`Shell::add_provider`: registers a device provider; the application does this at start-up"); in
   `crates/app/src/main.rs` (or `app.rs` where the shell is created) add `fn device_providers() ->

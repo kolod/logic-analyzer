@@ -1691,6 +1691,7 @@ dependencies = [
  "la-decoders",
  "la-devices",
  "la-diagnostics",
+ "la-driver-weact",
  "la-host",
  "la-i18n",
  "la-session",

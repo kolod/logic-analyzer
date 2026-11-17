@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 iced = { version = "0.14.0", features = ["canvas", "tokio"] }
 la-devices = { path = "../devices" }
+la-driver-weact = { path = "../driver-weact" }
 la-diagnostics = { path = "../diagnostics" }
 la-host = { path = "../host" }
 la-decoders = { path = "../decoders" }
