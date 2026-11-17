@@ -79,6 +79,11 @@ fn transfer_error(error: TransferError, what: &str) -> Error {
         TransferError::Disconnected => {
             device_error::disconnected(format!("{what}: the board was unplugged"))
         }
+        // A control transfer that gets no answer within its time is cancelled: the board does not
+        // answer any more (a firmware stuck in its main loop), not a transfer that failed.
+        TransferError::Cancelled => device_error::unresponsive(format!(
+            "{what} got no answer; the board has stopped responding and must be unplugged and plugged in again"
+        )),
         other => device_error::transport(format!("{what} failed: {other:?}")),
     }
 }
@@ -376,6 +381,10 @@ mod tests {
         assert_eq!(
             transfer_error(TransferError::Disconnected, "x").code(),
             "device.disconnected"
+        );
+        assert_eq!(
+            transfer_error(TransferError::Cancelled, "x").code(),
+            "device.unresponsive"
         );
         for other in [
             TransferError::Stall,

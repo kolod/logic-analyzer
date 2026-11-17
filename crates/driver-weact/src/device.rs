@@ -14,7 +14,7 @@ use la_devices::{AppliedConfig, Device, DeviceDescriptor, ReadOutcome, ResolvedC
 
 use crate::error;
 use crate::protocol::{
-    self, COMMAND_TIMEOUT, DRAIN_LIMIT, FIRST_DATA_TIMEOUT, READ_WAIT, REQUEST_START,
+    self, COMMAND_TIMEOUT, DRAIN_LIMIT, FIRST_DATA_TIMEOUT, READ_WAIT, REQUEST_START, REQUEST_STOP,
     SILENCE_FLOOR, STOP_WAIT, buffer_plan, samples_from_bytes, start_payload,
 };
 use crate::usb::{BulkStream, StreamEvent, Timer, UsbLink};
@@ -49,6 +49,8 @@ pub(crate) struct WeActDevice {
     descriptor: DeviceDescriptor,
     link: Box<dyn UsbLink>,
     timer: Arc<dyn Timer>,
+    /// What the firmware of the board reports: it decides how a capture is started and ended.
+    version: protocol::Version,
     run: Option<Run>,
 }
 
@@ -57,12 +59,43 @@ impl WeActDevice {
         descriptor: DeviceDescriptor,
         link: Box<dyn UsbLink>,
         timer: Arc<dyn Timer>,
+        version: protocol::Version,
     ) -> Self {
         Self {
             descriptor,
             link,
             timer,
+            version,
             run: None,
+        }
+    }
+
+    /// Ends the capture in progress: cancels the transfers and, if the firmware has a stop
+    /// command, tells the board to abort and empty its FIFO. Safe to call with no capture.
+    fn end_run(&mut self) {
+        let Some(mut run) = self.run.take() else {
+            return;
+        };
+        run.stream.close(STOP_WAIT);
+        self.stop_board();
+    }
+
+    /// The stop command of firmware 1.5; a failure is only logged (the next START resets the
+    /// board anyway).
+    fn stop_board(&mut self) {
+        if !self.version.has_stop() {
+            return;
+        }
+        if let Err(error) = self
+            .link
+            .control_out(REQUEST_STOP, 0, 0, &[], COMMAND_TIMEOUT)
+        {
+            tracing::warn!(
+                target: "la_driver_weact",
+                code = error.code(),
+                detail = error.detail(),
+                "the stop command did not reach the board"
+            );
         }
     }
 
@@ -107,18 +140,27 @@ impl Device for WeActDevice {
         let plan = buffer_plan(rate)?;
         let mut stream = self.link.open_stream(plan)?;
         // Every failure from here on closes the stream: the board is left as it was found.
-        if let Err(error) = stream
-            .submit_all()
-            .and_then(|()| self.drain(&mut *stream, rate))
-        {
+        let begun = if self.version.has_stop() {
+            // The firmware empties its FIFO at START and starts sampling at the first read that
+            // follows it: send START with nothing in flight, then submit the transfers. Reading
+            // while START is handled is what made the original firmware stop answering.
+            self.link
+                .control_out(REQUEST_START, 0, 0, &payload, COMMAND_TIMEOUT)
+                .and_then(|()| stream.submit_all())
+        } else {
+            // Stock firmware: it keeps a few KB of an earlier capture, so read them out first,
+            // with the transfers already submitted, then start.
+            stream
+                .submit_all()
+                .and_then(|()| self.drain(&mut *stream, rate))
+                .and_then(|()| {
+                    self.link
+                        .control_out(REQUEST_START, 0, 0, &payload, COMMAND_TIMEOUT)
+                })
+        };
+        if let Err(error) = begun {
             stream.close(STOP_WAIT);
-            return Err(error);
-        }
-        if let Err(error) = self
-            .link
-            .control_out(REQUEST_START, 0, 0, &payload, COMMAND_TIMEOUT)
-        {
-            stream.close(STOP_WAIT);
+            self.stop_board();
             return Err(error);
         }
         self.run = Some(Run {
@@ -190,18 +232,15 @@ impl Device for WeActDevice {
     }
 
     fn stop(&mut self) -> Result<(), Error> {
-        if let Some(mut run) = self.run.take() {
-            run.stream.close(STOP_WAIT);
-        }
+        self.end_run();
         Ok(())
     }
 }
 
 impl Drop for WeActDevice {
     fn drop(&mut self) {
-        if let Some(mut run) = self.run.take() {
-            run.stream.close(STOP_WAIT);
-        }
+        // A panic here, while another one unwinds, would abort the whole process: contain it.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.end_run()));
     }
 }
 

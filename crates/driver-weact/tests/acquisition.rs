@@ -14,7 +14,7 @@ mod common;
 use std::time::{Duration, Instant};
 
 use la_devices::{AcquisitionOptions, EndReason};
-use la_driver_weact::protocol::{REQUEST_GET_FW_VERSION, REQUEST_START};
+use la_driver_weact::protocol::{REQUEST_GET_FW_VERSION, REQUEST_START, REQUEST_STOP};
 use la_driver_weact::testing::{Capture, Request, StreamStep, steps_from_signal};
 
 use common::{
@@ -136,7 +136,17 @@ fn an_open_ended_capture_runs_until_stopped_and_stops_promptly() {
 
 #[test]
 fn two_captures_in_a_row_work_and_old_bytes_in_the_buffer_never_enter_the_second() {
+    two_captures_in_a_row(&[1, 5]);
+}
+
+#[test]
+fn the_same_holds_for_the_stock_firmware_that_keeps_old_bytes_until_they_are_read() {
+    two_captures_in_a_row(&[1, 4]);
+}
+
+fn two_captures_in_a_row(firmware: &[u8]) {
     let (usb, key, provider) = one_ready_board();
+    usb.set_version(&key, firmware);
     let first = signal(30_000, 4, 20);
     // Bytes left in the board's buffer by the first capture; the signal starts with 0x00 and
     // never has 0xFF in its first samples, so a leak would be visible.
@@ -177,7 +187,53 @@ fn two_captures_in_a_row_work_and_old_bytes_in_the_buffer_never_enter_the_second
 
 #[test]
 fn the_requests_are_sent_in_the_order_of_the_contract() {
+    let log = requests_of_one_capture(&[1, 5]);
+    let position = |wanted: &dyn Fn(&Request) -> bool| log.iter().position(wanted);
+    let open = position(&|r| matches!(r, Request::Open(_))).expect("the board is opened");
+    let version = position(&|r| matches!(r, Request::ControlIn(REQUEST_GET_FW_VERSION, 0, 0, 2)))
+        .expect("the firmware version is read");
+    let stream = position(&|r| matches!(r, Request::OpenStream(_))).expect("the stream is opened");
+    let start = position(&|r| {
+        matches!(r, Request::ControlOut(REQUEST_START, 0, 0, data) if data == &[0x40, 0x00, 0x2F])
+    })
+    .expect("CMD_START with the payload of 1 MHz: 48 MHz clock, delay 47");
+    let submit = position(&|r| matches!(r, Request::SubmitAll)).expect("the buffers are submitted");
+    let close = position(&|r| matches!(r, Request::Close)).expect("the stream is closed");
+    let stop = position(
+        &|r| matches!(r, Request::ControlOut(REQUEST_STOP, 0, 0, data) if data.is_empty()),
+    )
+    .expect("CMD_STOP ends the capture of firmware 1.5");
+    // START with nothing in flight, then the reads; the stop after the transfers are cancelled.
+    assert!(
+        open < version
+            && version < stream
+            && stream < start
+            && start < submit
+            && submit < close
+            && close < stop,
+        "{log:?}"
+    );
+}
+
+#[test]
+fn stock_firmware_is_started_with_the_buffers_already_submitted_and_gets_no_stop() {
+    let log = requests_of_one_capture(&[1, 4]);
+    let position = |wanted: &dyn Fn(&Request) -> bool| log.iter().position(wanted);
+    let submit = position(&|r| matches!(r, Request::SubmitAll)).unwrap();
+    let start = position(&|r| matches!(r, Request::ControlOut(REQUEST_START, ..))).unwrap();
+    let close = position(&|r| matches!(r, Request::Close)).unwrap();
+    assert!(submit < start && start < close, "{log:?}");
+    assert!(
+        !log.iter()
+            .any(|r| matches!(r, Request::ControlOut(REQUEST_STOP, ..))),
+        "firmware 1.4 has no stop command: {log:?}"
+    );
+}
+
+/// The requests of one 5,000-sample capture at 1 MHz on a board with this firmware version.
+fn requests_of_one_capture(firmware: &[u8]) -> Vec<Request> {
     let (usb, key, provider) = one_ready_board();
+    usb.set_version(&key, firmware);
     let bytes = signal(5_000, 6, 10);
     usb.script_capture(&key, Capture::stream(steps_from_signal(&bytes, 2_048)));
     let registry = registry_with(provider);
@@ -190,27 +246,12 @@ fn the_requests_are_sent_in_the_order_of_the_contract() {
         .start(&id, config(0xFF, 1_000_000, Some(5_000)), options())
         .unwrap();
     assert_eq!(outcome(&acquisition).end, EndReason::Completed);
-    let log: Vec<Request> = usb
-        .log()
+    // The stop command follows the end of the capture: give the worker a moment.
+    std::thread::sleep(Duration::from_millis(100));
+    usb.log()
         .into_iter()
         .filter(|r| !matches!(r, Request::List))
-        .collect();
-    let position = |wanted: &dyn Fn(&Request) -> bool| log.iter().position(wanted);
-    let open =
-        position(&|r| matches!(r, Request::Open(k) if *k == key)).expect("the board is opened");
-    let version = position(&|r| matches!(r, Request::ControlIn(REQUEST_GET_FW_VERSION, 0, 0, 2)))
-        .expect("the firmware version is read");
-    let stream = position(&|r| matches!(r, Request::OpenStream(_))).expect("the stream is opened");
-    let submit = position(&|r| matches!(r, Request::SubmitAll)).expect("the buffers are submitted");
-    let start = position(&|r| {
-        matches!(r, Request::ControlOut(REQUEST_START, 0, 0, data) if data == &[0x40, 0x00, 0x2F])
-    })
-    .expect("CMD_START with the payload of 1 MHz: 48 MHz clock, delay 47");
-    let close = position(&|r| matches!(r, Request::Close)).expect("the stream is closed");
-    assert!(
-        open < version && version < stream && stream < submit && submit < start && start < close,
-        "{log:?}"
-    );
+        .collect()
 }
 
 #[test]

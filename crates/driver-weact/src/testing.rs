@@ -386,7 +386,7 @@ impl RecordedUsb {
                 vendor_id: spec.vendor_id,
                 product_id: spec.product_id,
                 open_fail: None,
-                version: vec![1, 4],
+                version: vec![1, 5],
                 renumerate_after: Some(Duration::from_millis(900)),
                 hide_manufacturer: false,
                 returns_at: None,
@@ -661,22 +661,27 @@ impl UsbLink for RecordedLink {
         if self.gone() {
             return Err(Fail::Disconnected.build());
         }
-        let capture = self
+        let (capture, clears_on_start) = self
             .usb
             .with_board(&self.key, |board| {
-                board
-                    .captures
-                    .pop_front()
-                    .or_else(|| board.default_capture.clone())
+                (
+                    board
+                        .captures
+                        .pop_front()
+                        .or_else(|| board.default_capture.clone()),
+                    // Firmware 1.5 empties the FIFO when it is started.
+                    matches!(board.version.as_slice(), [1, minor] if *minor >= 5),
+                )
             })
-            .flatten()
             .unwrap_or_default();
+        let capture = capture.unwrap_or_default();
         Ok(Box::new(RecordedStream {
             usb: self.usb.clone(),
             key: self.key.clone(),
             stale: capture.stale.into(),
             stream: capture.stream.into(),
             endless: capture.endless,
+            clears_on_start,
             started: false,
             closed: false,
         }))
@@ -689,6 +694,7 @@ struct RecordedStream {
     stale: VecDeque<StreamStep>,
     stream: VecDeque<StreamStep>,
     endless: Option<Vec<u8>>,
+    clears_on_start: bool,
     started: bool,
     closed: bool,
 }
@@ -723,6 +729,9 @@ impl BulkStream for RecordedStream {
             return StreamEvent::Error(error);
         }
         self.started = self.started || self.start_seen();
+        if self.started && self.clears_on_start {
+            self.stale.clear();
+        }
         // What was left in the buffer by an earlier capture comes out first, before or after the
         // start command, until the driver has read it all; only then does the new stream follow.
         let step = self.stale.pop_front().or_else(|| {

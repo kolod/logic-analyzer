@@ -32,8 +32,12 @@ pub const REQUEST_GET_FW_VERSION: u8 = 0xB0;
 pub const REQUEST_START: u8 = 0xB1;
 /// Vendor request: read the chip revision (1 byte).
 pub const REQUEST_GET_REVID: u8 = 0xB2;
+/// Vendor request: stop the acquisition and empty the FIFO (firmware 1.5 and later, no data).
+pub const REQUEST_STOP: u8 = 0xB3;
 /// The firmware major version the driver works with.
 pub const REQUIRED_MAJOR: u8 = 1;
+/// The first minor version that has [`REQUEST_STOP`] and a START that cannot hang the board.
+pub const MINOR_WITH_STOP: u8 = 5;
 
 /// `CMD_START` flag: the 48 MHz clock (clear: 30 MHz).
 const FLAG_CLOCK_48_MHZ: u8 = 0x40;
@@ -138,8 +142,17 @@ pub fn start_payload(rate: u64) -> Result<[u8; 3], Error> {
 pub struct Version {
     /// Changes with an incompatible change; the driver requires [`REQUIRED_MAJOR`].
     pub major: u8,
-    /// Changes with a compatible change; logged only.
+    /// Changes with a compatible change; from [`MINOR_WITH_STOP`] the board has a stop command.
     pub minor: u8,
+}
+
+impl Version {
+    /// Whether the firmware has the stop command and a START that resets the FIFO (the image that
+    /// ships with the application does; a stock `fx2lafw` 1.4 loaded by another program does not).
+    #[must_use]
+    pub fn has_stop(&self) -> bool {
+        self.major == REQUIRED_MAJOR && self.minor >= MINOR_WITH_STOP
+    }
 }
 
 /// Reads the answer of `CMD_GET_FW_VERSION`: exactly two bytes, major then minor.

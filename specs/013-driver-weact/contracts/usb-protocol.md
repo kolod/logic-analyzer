@@ -28,11 +28,12 @@ for the commands, 500 ms for each download chunk.
 |------|-----------|-----------|------|---------|
 | firmware download | `0xA0` | OUT | up to 4,096 bytes, `wValue` = RAM address **[verify chunk size]** | handled by the chip's own loader; also writes the CPUCS register |
 | CPUCS | `0xA0` with `wValue = 0xE600` | OUT | 1 byte: `0x01` holds the 8051 in reset, `0x00` releases it | start / stop the loaded program **[verify]** |
-| `CMD_GET_FW_VERSION` | `0xB0` | IN, 2 bytes | `[major, minor]` | the firmware version; the driver requires `major == 1` (the source reports 1.4); the minor is logged, not checked |
+| `CMD_GET_FW_VERSION` | `0xB0` | IN, 2 bytes | `[major, minor]` | the firmware version; the driver requires `major == 1`: stock `fx2lafw` reports 1.4, the image that ships with the application 1.5 (see `firmware/SOURCE.md`) |
 | `CMD_START` | `0xB1` | OUT, 3 bytes | `[flags, delay_hi, delay_lo]` | prepare the acquisition; the firmware begins on the first IN request after it |
-| `CMD_GET_REVID_VERSION` | `0xB2` | IN, 1 byte | the chip revision | logged only |
+| `CMD_GET_REVID_VERSION` | `0xB2` | IN, 1 byte | the chip revision | not read by the driver |
+| `CMD_STOP` | `0xB3` | OUT, no data | none | **firmware 1.5 only (our patch)**: abort the waveform, empty the FIFO, back to idle |
 
-There is **no stop request**.
+Stock firmware 1.4 has **no stop request**. Its `CMD_START` handler also waits **for ever** (`while (!(GPIFTRIG & 0x80))` in the main loop) for the previous waveform to end, which it does only when the FIFO is full, that is when the host has stopped reading. A START sent while a capture is being read therefore leaves the board deaf to every request until it is unplugged (seen on the maintainer's board, 2026-11-17). The patched 1.5 aborts the waveform and resets the FIFO instead.
 
 ### `CMD_START` payload
 
@@ -69,16 +70,18 @@ pattern step of 100 µs must show about 100 samples per step).
 
 - Endpoint `0x82`, one byte per sample, no framing, no header. Bit `i` of a byte is input `i`
   (`D0` to `D7`). Disabled channels are masked to zero by the driver.
-- The host **submits the IN transfers before sending `CMD_START`**; the firmware begins sampling when it
-  sees the first IN request after the start command.
+- Firmware 1.5: the host sends `CMD_START` **with no transfer in flight**, then submits the IN transfers;
+  the firmware begins sampling at the first IN request after the start command. Firmware 1.4: the host
+  submits the transfers, drains the stale data, then sends `CMD_START` (the older order, kept for a board
+  that another program loaded with stock firmware).
 - Buffers: size = `10 ms * rate` bytes rounded up to a multiple of 512 (at least 512); count =
   `500 ms * rate / size`, at least 4 and at most 32.
 - The firmware has **no lost-sample counter and no end marker**. When the host does not drain the
   endpoint fast enough, the buffer fills and the firmware ends the capture and resets the buffer; the
   host sees transfers that stay empty. A new `CMD_START` is needed for the next capture.
-- Stale data: after a cancelled capture the board can hold up to about 4 KB of old samples until its
-  buffer fills and resets (about 200 ms at 20 kHz). The driver drains the endpoint before a new start
-  (see `driver-behaviour.md`).
+- Stale data: with firmware 1.4, after a cancelled capture the board can hold up to about 4 KB of old
+  samples; the driver drains the endpoint before a new start (see `driver-behaviour.md`). Firmware 1.5
+  empties the FIFO at every `CMD_START` and `CMD_STOP`.
 
 ## Re-enumeration after the download
 

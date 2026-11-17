@@ -136,11 +136,12 @@ impl DeviceProvider for WeActProvider {
     fn open(&self, id: &DeviceId) -> Result<Box<dyn Device>, Error> {
         let (key, descriptor) = lock_recover(&self.shared.table).take_open(id)?;
         let mut link = self.shared.backend.open(&key)?;
-        check_firmware(&mut *link)?;
+        let version = check_firmware(&mut *link)?;
         Ok(Box::new(WeActDevice::new(
             descriptor,
             link,
             Arc::clone(&self.shared.timer),
+            version,
         )))
     }
 }

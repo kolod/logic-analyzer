@@ -21,9 +21,9 @@ board and never sees a board leave during its preparation.
 |------|-----------|
 | `descriptor()` | the descriptor of the data model |
 | `flow()` | default `Flow::Realtime` (the board cannot wait) |
-| `start(config)` | within 2 s: drain stale data (≤ 500 ms), create the buffers, **submit the IN transfers**, send `CMD_START` with the payload of the rate; returns `AppliedConfig::new(rate)` (every listed rate is exact). Errors: `device.disconnected`, `device.transport`, `weact.in_use` |
+| `start(config)` | within 2 s. Firmware 1.5: create the buffers, send `CMD_START` with the payload of the rate **with nothing in flight**, then submit the IN transfers. Firmware 1.4 (stock, loaded by another program): submit the transfers, drain stale data (≤ 500 ms), then send `CMD_START`; returns `AppliedConfig::new(rate)` (every listed rate is exact). Errors: `device.disconnected`, `device.transport`, `weact.in_use` |
 | `read(max, out)` | within 50 ms (waits at most 40 ms): fills `out` with up to `max` words and returns `Samples`; `Idle` when nothing came; `Finished` after the last sample of a set length; on silence beyond the limit: `Lost(requested - received)` once (set length), then the error of the next call |
-| `stop()` | cancels the transfers, waits at most 500 ms for them to return, releases the interface and closes the link; sends no command; called once, also after a failed `read` |
+| `stop()` | cancels the transfers, waits at most 500 ms for them to return, releases the interface and closes the link; with firmware 1.5 then sends `CMD_STOP` (a failure is only logged); called once, also after a failed `read`; `Drop` does the same and cannot panic |
 
 ## Silence limits
 

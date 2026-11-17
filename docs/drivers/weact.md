@@ -86,7 +86,7 @@ the board permanently; unplugging it forgets the firmware.
 ## The firmware
 
 The firmware is `fx2lafw` of the open-source **sigrok** project, the file
-`fx2lafw-sigrok-fx2-8ch.fw` of the release sigrok-firmware-fx2lafw 0.1.7. It is licensed under the
+`fx2lafw-sigrok-fx2-8ch.fw`, built from the release sigrok-firmware-fx2lafw 0.1.7 with a small patch of this project (a START that cannot hang the board and a STOP command; see `crates/driver-weact/firmware/SOURCE.md`). It is licensed under the
 GNU **GPL** version 2 or later (the helper library inside it under the LGPL 2.1 or later). It ships
 inside the application: nothing is downloaded and nothing is read from anywhere else. The licence
 texts, the exact release, the checksum and the place of the source are in

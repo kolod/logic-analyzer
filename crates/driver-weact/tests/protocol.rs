@@ -182,3 +182,18 @@ fn a_long_input_is_converted_without_trouble() {
     assert_eq!(out[250], 250 & 0x0F);
     assert_eq!(out[251], 0);
 }
+
+#[test]
+fn only_firmware_one_point_five_or_later_has_the_stop_command() {
+    use la_driver_weact::protocol::{REQUEST_STOP, Version};
+    assert_eq!(REQUEST_STOP, 0xB3);
+    for (major, minor, stop) in [
+        (1, 4, false),
+        (1, 5, true),
+        (1, 6, true),
+        (2, 9, false),
+        (0, 9, false),
+    ] {
+        assert_eq!(Version { major, minor }.has_stop(), stop, "{major}.{minor}");
+    }
+}
