@@ -95,7 +95,7 @@ fn info_of(device: &DeviceInfo) -> UsbInfo {
         manufacturer: device.manufacturer_string().map(str::to_owned),
         product: device.product_string().map(str::to_owned),
         address: device.device_address(),
-        driver: device.driver().map(str::to_owned),
+        driver: bound_driver(device),
     }
 }
 
@@ -119,7 +119,7 @@ impl UsbBackend for NusbBackend {
                 "the board at {key} is not on the bus"
             )));
         };
-        let driver = found.driver().map(str::to_owned);
+        let driver = bound_driver(&found);
         // A board that is not on WinUSB cannot be opened on Windows; say so before trying.
         if let Some(name) = driver.as_deref().filter(|name| !is_winusb(name)) {
             if cfg!(windows) {
@@ -293,6 +293,18 @@ impl BulkStream for NusbStream {
         }
         self.idle.clear();
     }
+}
+
+/// The name of the driver the system bound to the device, where the platform tells (Windows).
+#[cfg(windows)]
+fn bound_driver(info: &nusb::DeviceInfo) -> Option<String> {
+    info.driver().map(str::to_owned)
+}
+
+/// The name of the driver the system bound to the device, where the platform tells (Windows).
+#[cfg(not(windows))]
+fn bound_driver(_info: &nusb::DeviceInfo) -> Option<String> {
+    None
 }
 
 #[cfg(test)]

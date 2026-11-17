@@ -420,14 +420,14 @@ machine; without it they are skipped with a reason.
   lengths, chunks of random bytes and lengths, errors of every kind, hangs, panics) driven through `scan`, `open`,
   `start`, `read` and `stop`: nothing panics outside the contained workers, every capture's books balance (stored plus
   lost equals what was claimed), the list never shows a board twice, and every run ends with the board released.
-- [ ] T035 Mutation checks for tests that passed the first time they ran (the payload of one rate, the 1,536 boundary of the delay,
+- [X] T035 Mutation checks for tests that passed the first time they ran (the payload of one rate, the 1,536 boundary of the delay,
   the silence limit, the truncation of the last chunk, the `Lost(requested - received)` arithmetic, the 5 s renumeration
   limit, the stale-data drain, the removal of a vanished board, the identity from the port chain): break the guarded line,
   see a test fail, restore; record in `specs/013-driver-weact/verification.md`.
-- [ ] T036 Localization review: the nine codes exist in six languages with advice in each (`cargo test -p la-i18n`, the host
+- [X] T036 Localization review: the nine codes exist in six languages with advice in each (`cargo test -p la-i18n`, the host
   error-code test); list for a person who reads Japanese and German the messages most likely to be long or odd in
   `verification.md`; the device name is not translated.
-- [ ] T037 Principle I and licence review of the new code: no `unwrap`, `expect`, indexing, unchecked arithmetic, `unsafe`
+- [X] T037 Principle I and licence review of the new code: no `unwrap`, `expect`, indexing, unchecked arithmetic, `unsafe`
   (`cargo clippy --workspace --all-targets -- -D warnings`), `cargo +1.85 check -p la-driver-weact --all-targets`;
   every parser of device data has its hostile-input test (T020, T022); `cargo deny check` (runs in CI) accepts `nusb`
   and its tree; the third-party table of `plan.md` matches `docs/third-party-notices.md` and `firmware/SOURCE.md`.
