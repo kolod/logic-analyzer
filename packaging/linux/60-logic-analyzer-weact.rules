@@ -1,0 +1,10 @@
+# WeAct LogicAnalyzer V1 (Cypress FX2, USB 1d50:608c).
+#
+# Lets the user who is logged in on the machine open the analyzer without administrator rights:
+# `uaccess` gives access to the active desktop session, MODE/GROUP also let members of `plugdev`
+# use it from a remote or text session.
+#
+# Install:  sudo cp 60-logic-analyzer-weact.rules /etc/udev/rules.d/
+#           sudo udevadm control --reload-rules && sudo udevadm trigger
+# then unplug the analyzer and plug it in again.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="608c", TAG+="uaccess", MODE="0660", GROUP="plugdev"

@@ -15,8 +15,9 @@ messages, plurals, locale formatting, a translation parity check) and the applic
 window, signal view, markers, channels, saving and opening, settings and six languages) and the
 decoder framework (`la-decoders`: decoders as resumable state machines run in the background, an
 indexed annotation store, lanes and overlays on the signals, stacking, fault isolation, a generator
-for the virtual device and the sample decoder "Clocked bits") exist so far. You can run the application and try it with the simulated device; there are no real
-hardware drivers yet. See the [user guide](docs/user-guide.md), the
+for the virtual device and the sample decoder "Clocked bits") exist so far. You can run the application and try it with the simulated device, or with the
+[WeAct LogicAnalyzer V1](docs/drivers/weact.md) (8 channels, up to 24 MHz); other hardware drivers
+arrive in later features. See the [user guide](docs/user-guide.md), the
 [host API](docs/host-api.md), the [decoder API](docs/decoder-api.md) and [roadmap.md](roadmap.md).
 
 Supported operating systems: Windows 10/11 and Debian 13.

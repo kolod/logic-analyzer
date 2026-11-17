@@ -39,6 +39,16 @@ the capture ended, the sample rate, whether the data is simulated and whether th
 changes. A capture that lost samples or ended with an error is shown with its data and marked as
 incomplete; it is never presented as a clean measurement.
 
+### WeAct LogicAnalyzer
+
+A plugged-in WeAct LogicAnalyzer V1 appears in the **Device** list as **WeAct LogicAnalyzer V1**. The
+first time it is plugged in the application prepares it automatically, which takes a second or two.
+It has 8 channels, up to 24 MHz and no trigger. If a capture ends early, with a message that the
+stream stopped, the computer could not take the data fast enough: the capture is kept and marked as
+incomplete; use a lower sample rate and plug the board directly into the computer. How to give the
+program access (WinUSB on Windows, a udev rule on Debian) and what each message means is in
+`docs/drivers/weact.md`.
+
 While a capture runs, **Capture → Follow latest data** (F6) keeps the newest data in view; moving
 the view by hand turns it off.
 
@@ -281,7 +291,7 @@ Every menu entry shows its shortcut, and every command can be reached from the k
 
 ## Real hardware
 
-Drivers for the supported devices (Raspberry Pi Pico, Logic16 clone, WeAct) arrive in later
-features. Each will bring its own short section here: how to give your user access to the device
-(a udev rule on Debian, a driver on Windows) and how to connect it. *Placeholder until the first
-driver is added.*
+Each driver has its own page in `docs/drivers/`: how to give your user access to the device (a udev
+rule on Debian, a driver on Windows) and how to connect it. So far: the WeAct LogicAnalyzer V1
+(`docs/drivers/weact.md`). The drivers for the Raspberry Pi Pico and the Logic16 clone arrive in later
+features.

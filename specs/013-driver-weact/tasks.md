@@ -380,7 +380,7 @@ machine; without it they are skipped with a reason.
 
 ### Tests for User Story 5 (write first; they must fail)
 
-- [ ] T030 [P] [US5] `crates/driver-weact/tests/docs.rs`: `docs/drivers/weact.md` exists and mentions every `weact.*` code of
+- [X] T030 [P] [US5] `crates/driver-weact/tests/docs.rs`: `docs/drivers/weact.md` exists and mentions every `weact.*` code of
   `error.rs` and every `device.*` code the driver returns (`device.disconnected`, `device.transport`,
   `device.not_found`), the words WinUSB and Zadig, `udev`, `24 MHz`, `5.5 V`, `no trigger`, the firmware licence
   (`GPL`) and its origin (`sigrok`); `packaging/linux/60-logic-analyzer-weact.rules` exists and contains `1d50`, `608c`
@@ -389,7 +389,7 @@ machine; without it they are skipped with a reason.
 
 ### Implementation for User Story 5
 
-- [ ] T031 [US5] `docs/drivers/weact.md` (English): the device and its limits (8 channels, at most 24 MHz and the exact list of
+- [X] T031 [US5] `docs/drivers/weact.md` (English): the device and its limits (8 channels, at most 24 MHz and the exact list of
   rates, input levels 0 to 5.5 V with the fixed thresholds above 2 V and below 0.8 V, no trigger, no memory so a slow
   or shared USB path stops the capture early, why a docking station or a hub can hurt and 48 MHz is not offered, what
   the lights mean); **access on Windows 10/11** (install WinUSB with Zadig, step by step, replacing libusb-win32 or
@@ -399,11 +399,11 @@ machine; without it they are skipped with a reason.
   (the nine `weact.*` codes and the `device.*` codes the driver returns); the firmware (what it is, where it comes
   from, its licence GPL-2.0-or-later, that it ships with the application and nothing is downloaded or read from
   elsewhere); a link to the verification procedure. T030 passes for this file.
-- [ ] T032 [US5] `packaging/linux/60-logic-analyzer-weact.rules` (`SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50",
+- [X] T032 [US5] `packaging/linux/60-logic-analyzer-weact.rules` (`SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50",
   ATTRS{idProduct}=="608c", TAG+="uaccess", MODE="0660", GROUP="plugdev"`, with a comment) and the WeAct section of
   `packaging/windows/README.md` (the board needs WinUSB; the installer of a later feature may ship an INF, nothing is
   installed by the application). T030 passes.
-- [ ] T033 [P] [US5] The other documents: `docs/user-guide.md` (a short "WeAct LogicAnalyzer" subsection under Devices and
+- [X] T033 [P] [US5] The other documents: `docs/user-guide.md` (a short "WeAct LogicAnalyzer" subsection under Devices and
   capturing: it appears in the Device list, first connection, a pointer to `docs/drivers/weact.md`; what an
   early-ending capture means), `docs/third-party-notices.md` (`nusb`; the firmware was added by T003; `serialport` and
   `sha2` as test-only), `README.md` (the supported device list, if it has one), `docs/host-api.md` (checked in T015).
