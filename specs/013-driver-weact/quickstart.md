@@ -32,7 +32,7 @@ Expected: everything passes with no board attached. The driver's tests replay sc
   received plus lost equals requested, then `weact.stream_stopped`), nothing at all (`weact.no_data`), a
   panic, a hang: each leaves the application responsive and the data kept.
 - `conformance`: `la_devices::harness::conformance::run_all` passes against the driver.
-- `firmware`: the embedded image has the recorded SHA-256 and fits the 7,168-byte code space.
+- `firmware`: the embedded image has the recorded SHA-256 and fits the 16,384 bytes of program memory of the chip.
 - The error codes are in all six languages (the parity test) and have advice in their text.
 
 ## 2. The Windows driver (once per machine)

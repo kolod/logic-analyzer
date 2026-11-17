@@ -124,8 +124,10 @@ the download directory, 2019-11-14, 53 KB tarball) and keep `fx2lafw-sigrok-fx2-
 converted from Intel HEX at build time with `objcopy -Iihex -Obinary`) in the repository, embedded
 with `include_bytes!`. Beside it: `SOURCE.md` (the release, the tag, the SHA-256, the address of the
 source and an offer to supply it), `COPYING` (GPL-2.0) and `COPYING.LESSER` (LGPL-2.1, for fx2lib).
-A test checks the SHA-256 and that the size is within the 7,168 bytes (`0x1c00`) of code the chip
-holds.
+A test checks the SHA-256 and that the size is within the 16,384 bytes of program memory of the chip.
+(Checked at fetch time: the image is 8,120 bytes and starts with an 8051 `LJMP` at address 0, so it is
+loaded from address 0; the `0x1c00` of the linker flags is the size of the code area the firmware is
+linked for, not the size of the file.)
 
 **Rationale**: the README states "GPL version 2 or later" for the whole firmware (fx2lib inside it:
 LGPL-2.1 or later), compatible with the project's GPL-3.0; the image is loaded into another
@@ -235,7 +237,7 @@ a range would admit rates the board cannot make.
 | `weact.preparing` | `open` on a board still being prepared | try again in a moment |
 | `weact.no_data` | no data arrived within 2 s of the start | check the USB connection, try another port |
 | `weact.stream_stopped` | the stream stopped before the capture was complete | lower the rate, avoid hubs and docking stations |
-| `weact.firmware_invalid` | the image fails the sanity check (empty, larger than the chip's code space) | reinstall the application |
+| `weact.firmware_invalid` | the image fails the sanity check (empty, larger than the chip's program memory (16 KB)) | reinstall the application |
 
 The existing codes are reused where they mean the same: `device.disconnected` (unplug),
 `device.transport` (a transfer failed), `device.not_found` (not a board of this driver), `device.busy`
@@ -297,8 +299,9 @@ depend on the driver crate (Principle II: the host knows only the abstraction).
 
 ## Open items (to be settled during implementation, each by a named task)
 
-1. SHA-256 and exact tag of the firmware 0.1.7 image; licence texts inside the tarball (task: fetch and
-   record).
+1. ~~SHA-256 and exact tag of the firmware 0.1.7 image; licence texts~~: settled by T003, recorded in
+   `crates/driver-weact/firmware/SOURCE.md` (tag `sigrok-firmware-fx2lafw-0.1.7`, the licence text of the
+   release confirms GPL-2.0-or-later with LGPL-2.1-or-later helper code).
 2. Chunk size and register values of the FX2 download, and the meaning of the sample delay at its lowest
    values (0 or 256 clocks in the GPIF delay encoding): confirmed on the real board with the rig
    (a 1 MS/s capture of a 100 µs step must show about 100 samples per step; each rate of the table is

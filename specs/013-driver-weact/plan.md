@@ -39,7 +39,7 @@ MPL-2.0 is already allowed by `deny.toml`; built with `default-features = false`
 `libudev`). `sha2` (dev-dependency only, to check the checksum of the firmware image in a test).
 Existing: `la-core`, `la-devices`, `la-diagnostics` (contained workers), `tracing`.
 
-**Storage**: none new. The firmware image (about 7 KB) is a file of the repository embedded into the
+**Storage**: none new. The firmware image (8,120 bytes) is a file of the repository embedded into the
 crate with `include_bytes!`.
 
 **Testing**: `cargo test` with no hardware: the driver's own tests replay scripted USB exchanges
@@ -143,7 +143,7 @@ crates/
 └── driver-weact/                      # new: package la-driver-weact
     ├── Cargo.toml
     ├── firmware/
-    │   ├── fx2lafw-sigrok-fx2-8ch.fw  # the image (raw binary, < 7 KB)
+    │   ├── fx2lafw-sigrok-fx2-8ch.fw  # the image (raw binary, 8,120 bytes)
     │   ├── SOURCE.md                  # release, tag, SHA-256, where the source is, offer of source
     │   ├── COPYING                    # GPL-2.0 text; COPYING.LESSER (LGPL-2.1) for fx2lib
     │   └── COPYING.LESSER

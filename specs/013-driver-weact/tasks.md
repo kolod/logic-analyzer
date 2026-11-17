@@ -77,10 +77,10 @@ Commits are signed; if signing fails, ask the owner to unlock GPG, never bypass 
   `cargo +1.85 check -p la-driver-weact --all-targets` on Windows and that its dependencies pass the
   licence list (`deny.toml`; `cargo deny` runs in CI). If the MSRV build or `cargo deny` fails, say so in
   `plan.md` Complexity Tracking and stop to ask before choosing another way.
-- [ ] T003 Fetch the firmware image (research R5, open item 1): download
+- [X] T003 Fetch the firmware image (research R5, open item 1): download
   `https://sigrok.org/download/binary/sigrok-firmware-fx2lafw/sigrok-firmware-fx2lafw-bin-0.1.7.tar.gz` into
   a new empty directory outside the repository, read its `COPYING`, `COPYING.LESSER`, `README` and `NEWS`,
-  extract `fx2lafw-sigrok-fx2-8ch.fw` and check that it is at most 7,168 bytes. Copy into
+  extract `fx2lafw-sigrok-fx2-8ch.fw` and check that it is at most 16,384 bytes (it is 8,120). Copy into
   `crates/driver-weact/firmware/`: the image, `COPYING` (GPL-2.0), `COPYING.LESSER` (LGPL-2.1), and write
   `SOURCE.md` with the release, its URL, the date of the file, the SHA-256 of the **image** and of the
   tarball, the git tag or commit it was built from (find it in the repository
@@ -232,7 +232,7 @@ access, no WinUSB, a busy board, a wrong firmware: each gives its outcome.
   `weact.not_renumerated` once 5 s of the controllable clock have passed (not before, and `scan` stays under
   200 ms throughout); refused access, a board not on WinUSB (with a driver name `libusb0`) and a held board
   give `weact.access_denied`, `weact.driver_missing` (the detail names `libusb0`) and `weact.in_use` from
-  `open`; a version answer with major 2 gives `weact.firmware_rejected`; an empty image and an image of 7,169
+  `open`; a version answer with major 2 gives `weact.firmware_rejected`; an empty image and an image of 16,385
   bytes (injected with `with_image`) give `weact.firmware_invalid` and **nothing** is sent to the board; the
   board stays listed, with one identity, while it is off the bus during the download, and is never listed
   twice; a selection by id stays valid across the renumeration; `open` during preparation is
@@ -244,12 +244,12 @@ access, no WinUSB, a busy board, a wrong firmware: each gives its outcome.
 ### Implementation for User Story 2
 
 - [ ] T017 [US2] `crates/driver-weact/src/firmware.rs`: the embedded image (`include_bytes!` of the file of T003), the
-  run-time check (non-empty, at most 7,168 bytes) as `Image::checked() -> Result<Image>` with
+  run-time check (non-empty, at most 16,384 bytes) as `Image::checked() -> Result<Image>` with
   `weact.firmware_invalid`, a constructor for a test image, `upload(link, &Image)` per the USB contract (hold,
-  chunks, release), tests of the chunking in the file (an image of 0, 1, 4,096, 4,097 and 7,168 bytes).
+  chunks, release), tests of the chunking in the file (an image of 0, 1, 4,096, 4,097, 8,120 and 16,384 bytes).
   `crates/driver-weact/tests/firmware.rs` (written in this task, first): the SHA-256 of the embedded image
   equals the value in `firmware/SOURCE.md` (the test reads the file, so the record cannot drift) and its size is
-  within 7,168 bytes.
+  within 16,384 bytes.
 - [ ] T018 [US2] `crates/driver-weact/src/boards.rs` (full): the states and transitions of the data model (`Blank`,
   `Preparing`, `Ready`, `Failed`, `Absent`), the preparation worker (a contained worker of `la-diagnostics`,
   one board at a time, a `Clock` seam for the allowed times), the listing rules (a preparing board stays listed

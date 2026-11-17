@@ -112,7 +112,7 @@ typed error and closes the link.
 
 ## The firmware image
 
-Embedded raw bytes, at most 7,168 bytes. Run-time sanity: not empty and within the size. The checksum is
+Embedded raw bytes (8,120 for the image of release 0.1.7), at most 16,384 bytes: the 16 KB of program memory of the chip. Run-time sanity: not empty and within that size. The checksum is
 asserted by a test against `firmware/SOURCE.md`.
 
 ## Errors

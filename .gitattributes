@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# The firmware image of the WeAct driver is a binary: never convert its bytes.
+*.fw binary
