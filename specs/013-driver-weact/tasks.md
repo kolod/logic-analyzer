@@ -331,7 +331,7 @@ machine; without it they are skipped with a reason.
   from the USB contract**; each header says "hand-written from the protocol facts, not recorded from a board" and
   names the signal and the expected outcome in words. When the rig run of T038 produces real recordings they are
   added next to these after review, with their header saying where they came from. T023 passes.
-- [ ] T026 [P] [US4] The sketch `rig/arduino-nano/la_rig/la_rig.ino` and `rig/arduino-nano/README.md` per the rig contract: D2 to D9 as outputs,
+- [X] T026 [P] [US4] The sketch `rig/arduino-nano/la_rig/la_rig.ino` and `rig/arduino-nano/README.md` per the rig contract: D2 to D9 as outputs,
   the value written as `PORTD` bits 2 to 7 and `PORTB` bits 0 and 1, the serial protocol at 115200 baud
   (`HELLO`, `STOP`, `HOLD <hex>`, `COUNTER <step_us>`, `WALK <step_us>`, `SQUARE <step_us>`, `ERR` for anything
   else), the greeting `LA-RIG 1` after a reset, the serial port polled by registers between steps; the README
@@ -339,7 +339,7 @@ machine; without it they are skipped with a reason.
   board "Arduino Nano", "ATmega328P (Old Bootloader)" for clones) and the protocol. The sketch cannot be tested by
   `cargo`; its behaviour is checked by T029 on the rig, and the reviewer checks the pin mapping against the
   contract.
-- [ ] T027 [US4] `crates/driver-weact/tests/rig/mod.rs`, `tests/rig/patterns.rs`: the support of the rig tests: reading `LA_RIG_PORT`,
+- [X] T027 [US4] `crates/driver-weact/tests/rig/mod.rs`, `tests/rig/patterns.rs`: the support of the rig tests: reading `LA_RIG_PORT`,
   opening the port at 115200 with `serialport`, waiting for the greeting (up to 5 s, accepting the reset caused by
   opening the port), sending a command and reading its answer line with a timeout, a guard value whose `Drop`
   sends `STOP` and idles the analyzer, the skip rule (prints `SKIPPED: <reason>` and returns when the variable, the
@@ -349,7 +349,7 @@ machine; without it they are skipped with a reason.
   captures pass; captures with a missing channel, a skipped counter value, a stuck bit, run lengths 2× too long and
   an empty capture fail with a message naming the defect; the parsing of answer lines and the skip rule need no
   hardware.
-- [ ] T028 [US4] `crates/driver-weact/tests/rig.rs`: the opt-in tests, all `#[ignore = "needs the rig: set LA_RIG_PORT and run with --ignored"]`:
+- [X] T028 [US4] `crates/driver-weact/tests/rig.rs`: the opt-in tests, all `#[ignore = "needs the rig: set LA_RIG_PORT and run with --ignored"]`:
   `HOLD` on each of the eight channels; `WALK` at 1 MS/s with a step of 100 µs (every channel seen, one-hot, cycle
   order); `COUNTER` at 1 MS/s, step 100 µs, over 300 ms; `SQUARE` at 500 kS/s; the rates of the table whose period
   divides the step (at least 100 kS/s up to 1 MS/s with the steps the Nano can keep: 20 µs and up); two captures in a
@@ -357,7 +357,7 @@ machine; without it they are skipped with a reason.
   exercised when the board is blank); every test ends with `STOP` and the analyzer idle; `LA_RIG_RECORD=<dir>` also
   writes the exchange of the test with `RecordingLink`. Without `LA_RIG_PORT`, `cargo test -p la-driver-weact --test rig -- --ignored`
   prints `SKIPPED` for each and passes; without `--ignored` they are listed as ignored.
-- [ ] T029 [US4] `docs/drivers/weact-verification.md`: the manual hardware verification procedure (English): the setup (the rig
+- [X] T029 [US4] `docs/drivers/weact-verification.md`: the manual hardware verification procedure (English): the setup (the rig
   wiring table, or any known source), one numbered step per check with the **expected result** beside it — list; the
   blank board becoming ready within a few seconds; configure and capture at 20 kHz, 1 MHz, 12 MHz and 24 MHz (24 MHz
   with a source that can reach it); all eight channels with the walk; a known signal compared with the capture; stop;

@@ -83,6 +83,12 @@ impl WeActProvider {
     }
 }
 
+/// The access to the real USB bus (for tests that wrap it, for example to record the exchange).
+#[must_use]
+pub fn system_backend() -> Arc<dyn UsbBackend> {
+    Arc::new(NusbBackend)
+}
+
 /// The provider of the real USB bus, for the application to register.
 #[must_use]
 pub fn provider() -> Arc<WeActProvider> {
