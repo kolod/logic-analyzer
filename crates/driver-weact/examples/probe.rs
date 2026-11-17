@@ -33,7 +33,19 @@ fn main() {
             device.bus_id(),
             device.device_address(),
             device.port_chain(),
-            device.driver(),
+            driver_name(&device),
         );
     }
+}
+
+/// The driver bound to the device, where the platform tells (Windows).
+#[cfg(windows)]
+fn driver_name(device: &nusb::DeviceInfo) -> Option<String> {
+    device.driver().map(str::to_owned)
+}
+
+/// The driver bound to the device, where the platform tells (Windows).
+#[cfg(not(windows))]
+fn driver_name(_device: &nusb::DeviceInfo) -> Option<String> {
+    None
 }
