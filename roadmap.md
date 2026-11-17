@@ -23,7 +23,7 @@ built and verified without capture hardware, using the virtual device.
 | 011 | `011-driver-pico-logic-analyzer` | gusmanb Raspberry Pi Pico driver, recorded-transport tests, manual hardware verification procedure, device access (udev, Windows driver). | 004 |
 | 012 | `012-driver-logic16-clone` | mcupro Logic16 clone driver, same requirements. | 004 |
 | 013 | `013-driver-weact` | WeAct LogicAnalyzer driver, same requirements. | 004 |
-| 014 | `014-gui-improvements` | Interface rework (no change to the host API contract of decoding or storage), in one feature or split in two when planning: see the list under "GUI improvements" below. | 006, 007, 008 |
+| 014 | `014-gui-improvements` (merged) | Interface rework (no change to the host API contract of decoding or storage), in one feature or split in two when planning: see the list under "GUI improvements" below. | 006, 007, 008 |
 | 015+ | as needed | More decoders (SPI, UART, 1-Wire, ...), raw data export, `.sr` import/export, packaging (Windows installer, `.deb`). | — |
 
 ## Notes on the order
