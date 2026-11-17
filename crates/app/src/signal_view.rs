@@ -92,6 +92,41 @@ enum Drag {
     },
 }
 
+/// The room around the text of the time under the pointer.
+const HOVER_PAD_X: f32 = 5.0;
+/// The height of the box of the time under the pointer.
+const HOVER_LABEL_HEIGHT: f32 = 20.0;
+/// How far the box is from the crosshair, both ways.
+const HOVER_OFFSET: f32 = 10.0;
+
+/// The size of the box for `content` (the glyphs of a proportional font are estimated).
+fn hover_label_size(content: &str) -> Size {
+    let glyphs = content.chars().count() as f32;
+    Size::new(
+        glyphs * TEXT_SIZE * 0.62 + 2.0 * HOVER_PAD_X,
+        HOVER_LABEL_HEIGHT,
+    )
+}
+
+/// Where the box with the time goes: below and to the right of the crosshair; below and to the left
+/// when there is no room on the right; above when there is no room below. It never covers the
+/// time axis or the legend.
+fn hover_label_rect(pointer: Point, size: Size, label: Size) -> Rectangle {
+    let right_fits = pointer.x + HOVER_OFFSET + label.width <= size.width - 2.0;
+    let x = if right_fits {
+        pointer.x + HOVER_OFFSET
+    } else {
+        (pointer.x - HOVER_OFFSET - label.width).max(GUTTER)
+    };
+    let below_fits = pointer.y + HOVER_OFFSET + label.height <= size.height - 2.0;
+    let y = if below_fits {
+        pointer.y + HOVER_OFFSET
+    } else {
+        pointer.y - HOVER_OFFSET - label.height
+    };
+    Rectangle::new(Point::new(x, y.max(AXIS_HEIGHT + 2.0)), label)
+}
+
 /// What the canvas remembers between events.
 #[derive(Debug, Default)]
 pub struct ViewState {
@@ -101,6 +136,8 @@ pub struct ViewState {
     modifiers: iced::keyboard::Modifiers,
     /// The x position where a drag last was, while the left button is down.
     drag_from: Option<f32>,
+    /// The view has been moved sideways since the button went down: the pointer is a hand.
+    panning: bool,
     /// The marker being dragged and the channel under the pointer.
     drag_marker: Option<u32>,
     /// The last click on an annotation (a second one on it soon after is a double click).
@@ -864,6 +901,7 @@ impl canvas::Program<Message> for SignalView<'_> {
                     return None;
                 }
                 state.drag_from = Some(position.x);
+                state.panning = true;
                 Some(
                     canvas::Action::publish(Message::Run(Command::Pan { pixels: moved }))
                         .and_capture(),
@@ -871,6 +909,7 @@ impl canvas::Program<Message> for SignalView<'_> {
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                 state.drag_from = None;
+                state.panning = false;
                 state.drag_marker = None;
                 let press = state.press.take();
                 let drag = state.drag.take();
@@ -982,6 +1021,10 @@ impl canvas::Program<Message> for SignalView<'_> {
         }
         if matches!(state.drag, Some(Drag::Resize { .. })) {
             return mouse::Interaction::ResizingVertically;
+        }
+        // The view is being moved sideways with the mouse: a hand, until the button is released.
+        if state.panning {
+            return mouse::Interaction::Grabbing;
         }
         let Some(position) = cursor.position_in(bounds) else {
             return mouse::Interaction::default();
@@ -1195,12 +1238,30 @@ impl SignalView<'_> {
                 .with_color(Color { a: 0.5, ..colour })
                 .with_width(1.0),
         );
+        // The time is attached to the pointer, not to a corner where it would merge with the axis.
+        let content = self.localizer.format_duration(seconds);
+        let label = hover_label_rect(position, size, hover_label_size(&content));
+        let palette = theme.palette();
+        frame.fill_rectangle(
+            label.position(),
+            label.size(),
+            Color {
+                a: 0.92,
+                ..palette.background
+            },
+        );
+        frame.stroke(
+            &Path::rectangle(label.position(), label.size()),
+            Stroke::default()
+                .with_color(Color { a: 0.5, ..colour })
+                .with_width(1.0),
+        );
         frame.fill_text(Text {
-            content: self.localizer.format_duration(seconds),
-            position: Point::new(size.width - 8.0, 4.0),
+            content,
+            position: Point::new(label.x + HOVER_PAD_X, label.y + label.height / 2.0),
             color: colour,
             size: Pixels(TEXT_SIZE),
-            align_x: iced::alignment::Horizontal::Right.into(),
+            align_y: Vertical::Center,
             ..Text::default()
         });
         self.draw_annotation_readout(frame, size, position, theme, scroll);
@@ -1239,7 +1300,8 @@ impl SignalView<'_> {
         );
         let width = content.chars().count() as f32 * 7.0 + 12.0;
         let x = (position.x + 12.0).min((size.width - width - 4.0).max(0.0));
-        let y = (position.y + 14.0).min((size.height - 24.0).max(0.0));
+        // Below the time of the pointer, which sits right under the crosshair.
+        let y = (position.y + 14.0 + HOVER_LABEL_HEIGHT + 4.0).min((size.height - 24.0).max(0.0));
         let palette = theme.palette();
         frame.fill_rectangle(
             Point::new(x, y),
@@ -1363,6 +1425,117 @@ mod tests {
         let result = event_result(&mut state, &left, mouse::Cursor::Unavailable)
             .expect("leaving is handled");
         assert!(matches!(result.1, iced::window::RedrawRequest::NextFrame));
+    }
+
+    #[test]
+    fn the_time_is_below_and_to_the_right_of_the_crosshair_when_there_is_room() {
+        let size = Size::new(900.0, 500.0);
+        let label = Size::new(80.0, HOVER_LABEL_HEIGHT);
+        let place = hover_label_rect(Point::new(300.0, 200.0), size, label);
+        assert_eq!(place.x, 300.0 + HOVER_OFFSET);
+        assert_eq!(place.y, 200.0 + HOVER_OFFSET);
+        assert_eq!(place.size(), label);
+    }
+
+    #[test]
+    fn the_time_goes_to_the_left_when_the_right_side_is_too_narrow() {
+        let size = Size::new(900.0, 500.0);
+        let label = Size::new(80.0, HOVER_LABEL_HEIGHT);
+        let place = hover_label_rect(Point::new(880.0, 200.0), size, label);
+        assert_eq!(place.x, 880.0 - HOVER_OFFSET - 80.0);
+        assert!(place.x + place.width <= 880.0, "left of the crosshair");
+        assert_eq!(place.y, 200.0 + HOVER_OFFSET, "still below");
+    }
+
+    #[test]
+    fn the_time_goes_above_near_the_bottom_and_never_over_the_axis_or_outside_the_view() {
+        let size = Size::new(900.0, 500.0);
+        let label = Size::new(80.0, HOVER_LABEL_HEIGHT);
+        let low = hover_label_rect(Point::new(300.0, 495.0), size, label);
+        assert!(low.y + low.height <= 495.0, "above the crosshair: {low:?}");
+        // At the top the pointer is in the axis: the box stays under it.
+        let top = hover_label_rect(Point::new(300.0, 5.0), size, label);
+        assert!(top.y >= AXIS_HEIGHT, "{top:?}");
+        // At the corners the box stays inside the view and clear of the legend.
+        for point in [
+            Point::new(GUTTER, 5.0),
+            Point::new(size.width, size.height),
+            Point::new(size.width, 5.0),
+            Point::new(GUTTER + 1.0, size.height),
+        ] {
+            let r = hover_label_rect(point, size, label);
+            assert!(r.x >= GUTTER, "{point:?}: {r:?}");
+            assert!(r.x + r.width <= size.width + 0.5, "{point:?}: {r:?}");
+            assert!(r.y >= AXIS_HEIGHT, "{point:?}: {r:?}");
+        }
+    }
+
+    #[test]
+    fn the_box_grows_with_its_text() {
+        assert!(hover_label_size("1.234567 ms").width > hover_label_size("1 ms").width);
+        assert_eq!(hover_label_size("").height, HOVER_LABEL_HEIGHT);
+    }
+
+    #[test]
+    fn the_pointer_is_a_hand_while_the_view_is_moved_sideways_and_not_before() {
+        let shell = Shell::new(ShellConfig::for_tests(&std::env::temp_dir()));
+        let plan = shell.frame_plan(ViewSize::default());
+        let cache = Cache::new();
+        let localizer = la_i18n::Localizer::new(la_i18n::Language::En);
+        let view = SignalView {
+            plan: &plan,
+            cache: &cache,
+            variant: Variant::Dark,
+            localizer: &localizer,
+            selected: None,
+            editing: false,
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
+        let at = mouse::Cursor::Available(Point::new(400.0, 200.0));
+        // Pressed but not moved: still the crosshair.
+        let pressed = ViewState {
+            drag_from: Some(400.0),
+            ..ViewState::default()
+        };
+        assert_eq!(
+            view.mouse_interaction(&pressed, bounds, at),
+            mouse::Interaction::Crosshair
+        );
+        // Moved: a hand.
+        let moving = ViewState {
+            drag_from: Some(400.0),
+            panning: true,
+            ..ViewState::default()
+        };
+        assert_eq!(
+            view.mouse_interaction(&moving, bounds, at),
+            mouse::Interaction::Grabbing
+        );
+    }
+
+    #[test]
+    fn dragging_sideways_makes_the_pointer_a_hand_until_the_button_is_released() {
+        let mut state = ViewState {
+            drag_from: Some(500.0),
+            ..ViewState::default()
+        };
+        assert!(!state.panning);
+        let moved = canvas::Event::Mouse(mouse::Event::CursorMoved {
+            position: Point::new(480.0, 200.0),
+        });
+        let _ = event_result(
+            &mut state,
+            &moved,
+            mouse::Cursor::Available(Point::new(480.0, 200.0)),
+        );
+        assert!(state.panning, "the view moved");
+        let released = canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+        let _ = event_result(
+            &mut state,
+            &released,
+            mouse::Cursor::Available(Point::new(480.0, 200.0)),
+        );
+        assert!(!state.panning, "the hand goes with the button");
     }
 
     #[test]

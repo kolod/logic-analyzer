@@ -129,15 +129,19 @@ record were brought up to date afterwards (the Clarifications of `spec.md`; the 
 The tests named here are the ones the commits added or changed; the table was written from the commit
 history, not from a new run of the whole suite.
 
-## Specified, not yet built
+## Asked for on 2026-11-17, now built
 
-Asked for on 2026-11-17 and added to `spec.md` (Clarifications and User Story 8); none of it is
-implemented or tested yet.
+Specified in `spec.md` (Clarifications and User Story 8) and built after the first record above.
 
-| Change | Requirement | Where it will be |
-|--------|-------------|------------------|
-| The Start button as wide as the panel | FR-030 | `capture_panel` and `start_block` of `la-app` |
-| Fixed-width numbers in the status line | FR-031 | `status_bar` of `la-app` (a font with equal-width digits, or fixed fields) |
-| The time under the pointer next to the pointer | FR-032 | the overlay of `signal_view` of `la-app` |
-| A hand while the view is moved with the mouse | FR-033 | `mouse_interaction` of `signal_view` |
+| Change | Requirement | Covered by |
+|--------|-------------|------------|
+| The Start button as wide as the panel | FR-030 | `the_start_button_is_as_wide_as_the_panel` (panel widths 220, 280 and 480) |
+| Fixed-width numbers in the status line | FR-031 | `the_numbers_of_the_status_line_keep_their_width_while_the_digits_change`, `a_text_of_wide_characters_counts_two_columns_each` (the pure padding; the look of the line is not tested) |
+| The time under the pointer next to the pointer | FR-032 | `the_time_is_below_and_to_the_right_of_the_crosshair_when_there_is_room`, `the_time_goes_to_the_left_when_the_right_side_is_too_narrow`, `the_time_goes_above_near_the_bottom_and_never_over_the_axis_or_outside_the_view`, `the_box_grows_with_its_text` |
+| A hand while the view is moved with the mouse | FR-033 | `the_pointer_is_a_hand_while_the_view_is_moved_sideways_and_not_before`, `dragging_sideways_makes_the_pointer_a_hand_until_the_button_is_released` |
 
+How it is done: the numbers that change (elapsed time, samples, memory) are shown in a monospaced font
+and padded with no-break spaces to the widest they have been in the running capture. The box with the
+time is an estimate of the text width (the canvas cannot measure a text), so a very wide glyph may touch
+its edge. The box with the text of an annotation under the pointer moved down by the height of the time
+box so that the two do not overlap. None of it was looked at on a screen by the author.

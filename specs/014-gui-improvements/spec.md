@@ -69,7 +69,7 @@ the requirements they touch are marked "amended" below.
   stops the application from quitting or a window from closing (FR-028).
 - Q: Where are the Settings? -> A: Also under a cog at the foot of the icon strip (FR-029).
 
-Asked for on 2026-11-17 and **not built yet** (they are specified here first; see `verification.md`):
+Asked for on 2026-11-17 (specified here first, then built; see `verification.md`):
 
 - Q: How wide is the Start button? -> A: The width of the panel, like the other controls of the Capture
   view (FR-030).
