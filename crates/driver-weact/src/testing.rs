@@ -39,23 +39,41 @@ use crate::protocol::{
 };
 use crate::usb::{BoardKey, BulkStream, StreamEvent, Timer, UsbBackend, UsbInfo, UsbLink};
 
-/// The virtual clock: it moves only when the driver sleeps or waits, or when a test advances it.
+/// The virtual clock: it moves only when the driver waits, or when a test advances it.
+///
+/// A **free-running** clock (`new`) lets `sleep` return at once with the time moved on, so a test of
+/// the 5-second limit takes no real time. A **stepped** clock (`stepped`) makes `sleep` block until
+/// a test has moved the time on far enough, so a test can look at the state of a board in the middle
+/// of its preparation.
 #[derive(Debug, Default)]
 pub struct ManualTimer {
     now: Mutex<Duration>,
+    moved: Condvar,
+    stepped: bool,
 }
 
 impl ManualTimer {
-    /// A clock at zero.
+    /// A free-running clock at zero.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Moves the clock forward.
+    /// A stepped clock at zero: `sleep` waits for [`advance`](Self::advance).
+    #[must_use]
+    pub fn stepped() -> Self {
+        Self {
+            stepped: true,
+            ..Self::default()
+        }
+    }
+
+    /// Moves the clock forward and wakes the sleepers.
     pub fn advance(&self, by: Duration) {
         let mut now = lock_recover(&self.now);
         *now = now.saturating_add(by);
+        drop(now);
+        self.moved.notify_all();
     }
 }
 
@@ -65,7 +83,20 @@ impl Timer for ManualTimer {
     }
 
     fn sleep(&self, duration: Duration) {
-        self.advance(duration);
+        if !self.stepped {
+            self.advance(duration);
+            return;
+        }
+        let mut now = lock_recover(&self.now);
+        let target = now.saturating_add(duration);
+        // A test that forgets to move the time on must fail, not hang for ever.
+        let give_up = std::time::Instant::now().checked_add(Duration::from_secs(30));
+        while *now < target && give_up.is_none_or(|limit| std::time::Instant::now() < limit) {
+            now = match self.moved.wait_timeout(now, Duration::from_millis(50)) {
+                Ok((guard, _)) => guard,
+                Err(poisoned) => poisoned.into_inner().0,
+            };
+        }
     }
 }
 
@@ -293,9 +324,19 @@ impl Default for RecordedUsb {
 }
 
 impl RecordedUsb {
-    /// An empty bus with a virtual clock at zero.
+    /// An empty bus with a free-running virtual clock at zero.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_timer(Arc::new(ManualTimer::new()))
+    }
+
+    /// An empty bus with a stepped clock: the driver's sleeps wait for the test to move the time.
+    #[must_use]
+    pub fn stepped() -> Self {
+        Self::with_timer(Arc::new(ManualTimer::stepped()))
+    }
+
+    fn with_timer(timer: Arc<ManualTimer>) -> Self {
         Self {
             shared: Arc::new(Shared {
                 world: Mutex::new(World {
@@ -304,7 +345,7 @@ impl RecordedUsb {
                 }),
                 released: Mutex::new(false),
                 gate: Condvar::new(),
-                timer: Arc::new(ManualTimer::new()),
+                timer,
             }),
         }
     }
@@ -955,6 +996,29 @@ mod tests {
         assert_eq!(usb.list().err().unwrap().code(), "device.transport");
         usb.fail_list(None);
         assert!(usb.list().is_ok());
+    }
+
+    #[test]
+    fn a_stepped_clock_makes_sleep_wait_until_the_test_moves_the_time() {
+        let timer = Arc::new(ManualTimer::stepped());
+        let sleeper = {
+            let timer = Arc::clone(&timer);
+            std::thread::spawn(move || {
+                timer.sleep(Duration::from_millis(300));
+                timer.now()
+            })
+        };
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(!sleeper.is_finished(), "still asleep: no time has passed");
+        timer.advance(Duration::from_millis(299));
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(!sleeper.is_finished(), "one millisecond short");
+        timer.advance(Duration::from_millis(1));
+        assert_eq!(sleeper.join().unwrap(), Duration::from_millis(300));
+        // A free-running clock does not wait.
+        let free = ManualTimer::new();
+        free.sleep(Duration::from_secs(5));
+        assert_eq!(free.now(), Duration::from_secs(5));
     }
 
     #[test]

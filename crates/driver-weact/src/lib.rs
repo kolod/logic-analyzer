@@ -15,8 +15,9 @@
 mod boards;
 mod device;
 pub mod error;
-mod firmware;
+pub mod firmware;
 mod nusb_backend;
+mod prepare;
 pub mod protocol;
 #[cfg(feature = "test-support")]
 pub mod testing;
@@ -25,34 +26,58 @@ pub mod usb;
 use std::sync::{Arc, Mutex};
 
 use la_core::Error;
-use la_devices::error as device_error;
 use la_devices::{Device, DeviceDescriptor, DeviceId, DeviceProvider};
 use la_diagnostics::lock_recover;
 
 use crate::boards::Table;
 use crate::device::{WeActDevice, check_firmware};
+use crate::firmware::Image;
 use crate::nusb_backend::NusbBackend;
-use crate::usb::{SystemTimer, Timer, UsbBackend};
+use crate::usb::{BoardKey, SystemTimer, Timer, UsbBackend};
 
 /// The name of the provider and the prefix of every device identity of this driver.
 pub const PROVIDER_NAME: &str = "weact";
 
+/// What the provider and its preparation workers share.
+pub(crate) struct Shared {
+    pub(crate) backend: Arc<dyn UsbBackend>,
+    pub(crate) timer: Arc<dyn Timer>,
+    pub(crate) table: Mutex<Table>,
+    pub(crate) image: Image,
+}
+
 /// The provider of the WeAct LogicAnalyzer V1 boards on the USB bus.
 pub struct WeActProvider {
-    backend: Arc<dyn UsbBackend>,
-    timer: Arc<dyn Timer>,
-    table: Mutex<Table>,
+    shared: Arc<Shared>,
 }
 
 impl WeActProvider {
-    /// A provider over the given USB access and clock (tests pass the scripted bus).
+    /// A provider over the given USB access and clock (tests pass the scripted bus), with the
+    /// firmware image that ships with the application.
     #[must_use]
     pub fn with_backend(backend: Arc<dyn UsbBackend>, timer: Arc<dyn Timer>) -> Self {
+        Self::with_image(backend, timer, Image::embedded())
+    }
+
+    /// A provider that loads `image` into blank boards (tests pass images of other sizes).
+    #[must_use]
+    pub fn with_image(backend: Arc<dyn UsbBackend>, timer: Arc<dyn Timer>, image: Image) -> Self {
         Self {
-            backend,
-            timer,
-            table: Mutex::new(Table::default()),
+            shared: Arc::new(Shared {
+                backend,
+                timer,
+                table: Mutex::new(Table::default()),
+                image,
+            }),
         }
+    }
+
+    /// Starts the worker that prepares the blank board at `key`.
+    fn start_preparation(&self, key: BoardKey) {
+        let shared = Arc::clone(&self.shared);
+        let name = format!("weact-prepare-{key}");
+        // The worker reports to the table itself; its handle is not needed.
+        let _worker = la_diagnostics::spawn_worker(&name, move || prepare::run(shared, key));
     }
 }
 
@@ -71,11 +96,11 @@ impl DeviceProvider for WeActProvider {
     }
 
     fn scan(&self) -> Result<Vec<DeviceDescriptor>, Error> {
-        let seen = match self.backend.list() {
+        let seen = match self.shared.backend.list() {
             Ok(seen) => seen,
             Err(error) => {
                 // The boards already known stay listed; with none known the error is the answer.
-                let table = lock_recover(&self.table);
+                let table = lock_recover(&self.shared.table);
                 if table.is_empty() {
                     return Err(error);
                 }
@@ -88,29 +113,26 @@ impl DeviceProvider for WeActProvider {
                 return Ok(table.descriptors());
             }
         };
-        let now = self.timer.now();
-        let mut table = lock_recover(&self.table);
-        table.reconcile(&seen, now);
-        Ok(table.descriptors())
+        let now = self.shared.timer.now();
+        let (descriptors, to_prepare) = {
+            let mut table = lock_recover(&self.shared.table);
+            let to_prepare = table.reconcile(&seen, now);
+            (table.descriptors(), to_prepare)
+        };
+        for key in to_prepare {
+            self.start_preparation(key);
+        }
+        Ok(descriptors)
     }
 
     fn open(&self, id: &DeviceId) -> Result<Box<dyn Device>, Error> {
-        let (key, descriptor) = {
-            let table = lock_recover(&self.table);
-            let Some(key) = table.key_of(id) else {
-                return Err(device_error::not_found(id.as_str()));
-            };
-            let Some(descriptor) = table.descriptors().into_iter().find(|d| d.id == *id) else {
-                return Err(device_error::not_found(id.as_str()));
-            };
-            (key, descriptor)
-        };
-        let mut link = self.backend.open(&key)?;
+        let (key, descriptor) = lock_recover(&self.shared.table).take_open(id)?;
+        let mut link = self.shared.backend.open(&key)?;
         check_firmware(&mut *link)?;
         Ok(Box::new(WeActDevice::new(
             descriptor,
             link,
-            Arc::clone(&self.timer),
+            Arc::clone(&self.shared.timer),
         )))
     }
 }

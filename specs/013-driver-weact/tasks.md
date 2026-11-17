@@ -223,7 +223,7 @@ access, no WinUSB, a busy board, a wrong firmware: each gives its outcome.
 
 ### Tests for User Story 2 (write first; they must fail)
 
-- [ ] T016 [P] [US2] `crates/driver-weact/tests/preparation.rs` with `RecordedUsb`: a blank board is prepared and becomes
+- [X] T016 [P] [US2] `crates/driver-weact/tests/preparation.rs` with `RecordedUsb`: a blank board is prepared and becomes
   ready: the log shows, in order, the write of `0x01` to CPUCS `0xE600` (`0xA0`, `wValue 0xE600`), the image
   written from address 0 in chunks of at most 4,096 bytes whose concatenation equals the image (compare with
   the file in the repository, bytes written by the test's own copy of the expected chunk boundaries), the write
@@ -243,14 +243,14 @@ access, no WinUSB, a busy board, a wrong firmware: each gives its outcome.
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] `crates/driver-weact/src/firmware.rs`: the embedded image (`include_bytes!` of the file of T003), the
+- [X] T017 [US2] `crates/driver-weact/src/firmware.rs`: the embedded image (`include_bytes!` of the file of T003), the
   run-time check (non-empty, at most 16,384 bytes) as `Image::checked() -> Result<Image>` with
   `weact.firmware_invalid`, a constructor for a test image, `upload(link, &Image)` per the USB contract (hold,
   chunks, release), tests of the chunking in the file (an image of 0, 1, 4,096, 4,097, 8,120 and 16,384 bytes).
   `crates/driver-weact/tests/firmware.rs` (written in this task, first): the SHA-256 of the embedded image
   equals the value in `firmware/SOURCE.md` (the test reads the file, so the record cannot drift) and its size is
   within 16,384 bytes.
-- [ ] T018 [US2] `crates/driver-weact/src/boards.rs` (full): the states and transitions of the data model (`Blank`,
+- [X] T018 [US2] `crates/driver-weact/src/boards.rs` (full): the states and transitions of the data model (`Blank`,
   `Preparing`, `Ready`, `Failed`, `Absent`), the preparation worker (a contained worker of `la-diagnostics`,
   one board at a time, a `Clock` seam for the allowed times), the listing rules (a preparing board stays listed
   while off the bus up to 5 s; a failed board stays listed while on the bus and for 30 s after it vanished
