@@ -36,7 +36,7 @@ arduino-cli compile --fqbn arduino:avr:nano:cpu=atmega328old rig/arduino-nano/la
 arduino-cli upload  --fqbn arduino:avr:nano:cpu=atmega328old -p COM7 rig/arduino-nano/la_rig
 ```
 
-(Use `cpu=atmega328` for a Nano with the new bootloader.)
+(Use `cpu=atmega328` for a Nano with the new bootloader; the maintainer's clone needs this one. If an upload fails with `not in sync`, try the other bootloader.) Close the Arduino IDE (or its Serial Monitor) before running the tests: it keeps the serial port open.
 
 ## Serial protocol
 
@@ -55,6 +55,6 @@ prints `LA-RIG 1` once. Every line you send is answered with one line.
 
 `step_us` is a decimal number from 20 to 1,000,000; outside that range the answer is `ERR`. A pattern
 starts on the answer and runs until the next command. The sketch reads the serial port between steps,
-so a command takes effect within one step. The Nano's clock is independent of the analyzer's, so a
+so a command takes effect within one step. A step of 100 µs or less runs with interrupts off; longer steps keep them on, because the receiver of the serial port holds only two bytes. The Nano's clock is independent of the analyzer's, so a
 capture is compared with a pattern by its structure (run lengths within a tolerance), never sample for
 sample.

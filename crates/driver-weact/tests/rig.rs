@@ -130,6 +130,15 @@ impl Fixture {
             .wait_timeout(Duration::from_secs(60))
             .ok_or("the capture did not end in 60 s")?;
         if result.end != EndReason::Completed {
+            // The board may still be preparing when the capture opens it: try again.
+            let preparing = result
+                .error
+                .as_ref()
+                .is_some_and(|e| e.detail().contains("weact.preparing"));
+            if preparing && started.elapsed() < Duration::from_secs(20) {
+                std::thread::sleep(Duration::from_millis(200));
+                return self.capture(rate, length);
+            }
             return Err(format!("the capture ended with {result:?}"));
         }
         let snapshot = acquisition.capture().snapshot();

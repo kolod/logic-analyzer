@@ -17,8 +17,8 @@
 //   SQUARE <step_us>   -> OK     all eight pins toggle together every step_us
 //   anything else      -> ERR    (also a step outside 20..1000000)
 //
-// The serial port is polled by its registers between steps, so a command takes effect within one
-// step. A step shorter than 1 ms runs with interrupts off to keep its length steady.
+// The serial port is polled between steps, so a command takes effect within one
+// step. A step of 100 us or less runs with interrupts off to keep its length steady.
 
 #include <Arduino.h>
 
@@ -43,7 +43,9 @@ static inline void write_pins(uint8_t v) {
 }
 
 static void wait_us(uint32_t us) {
-  if (us <= 1000) {
+  // A byte of the serial port takes 87 us and the receiver holds two: interrupts may be off for
+  // at most about 100 us at a time, or a command is lost.
+  if (us <= 100) {
     noInterrupts();
     delayMicroseconds((unsigned int)us);
     interrupts();
@@ -108,10 +110,11 @@ static void handle_line(char* text) {
   }
 }
 
-// Reads the received bytes by the register of the serial port, without waiting.
+// Reads the received bytes without waiting. (The Arduino serial library owns the receive
+// interrupt, so the bytes must be taken from its buffer, not straight from the register.)
 static void poll_serial() {
-  while (UCSR0A & (1 << RXC0)) {
-    char c = (char)UDR0;
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
     if (c == '\r') continue;
     if (c == '\n') {
       if (line_overflow) {

@@ -18,6 +18,25 @@ pub fn runs(bytes: &[u8]) -> Vec<(u8, usize)> {
     out
 }
 
+/// The runs without the skew of the Nano: its eight pins are on two ports written one after the
+/// other, so for about 0.1 µs a pattern that changes bits on both ports shows an in-between value,
+/// which a fast sampler sometimes catches as a run of one or two samples. Such a run, much shorter
+/// than a step, is not a defect of the capture and is dropped; neighbours that become equal merge.
+pub fn clean_runs(bytes: &[u8], rate: u64, step_us: u64) -> Vec<(u8, usize)> {
+    let expected = expected_run(rate, step_us);
+    let mut out: Vec<(u8, usize)> = Vec::new();
+    for (value, length) in runs(bytes) {
+        if length <= 2 && (length as f64) < expected * 0.25 {
+            continue;
+        }
+        match out.last_mut() {
+            Some((last, total)) if *last == value => *total += length,
+            _ => out.push((value, length)),
+        }
+    }
+    out
+}
+
 /// The run length a step should give, in samples.
 fn expected_run(rate: u64, step_us: u64) -> f64 {
     rate as f64 * step_us as f64 / 1_000_000.0
@@ -67,7 +86,7 @@ pub fn check_walk(bytes: &[u8], rate: u64, step_us: u64) -> Result<(), String> {
     if bytes.is_empty() {
         return Err("the capture is empty".to_owned());
     }
-    let runs = runs(bytes);
+    let runs = clean_runs(bytes, rate, step_us);
     let mut seen = 0_u8;
     for (index, (value, _)) in runs.iter().enumerate() {
         if value.count_ones() != 1 {
@@ -102,7 +121,7 @@ pub fn check_counter(bytes: &[u8], rate: u64, step_us: u64) -> Result<(), String
     if bytes.is_empty() {
         return Err("the capture is empty".to_owned());
     }
-    let runs = runs(bytes);
+    let runs = clean_runs(bytes, rate, step_us);
     for (index, pair) in runs.windows(2).enumerate() {
         let expected = pair[0].0.wrapping_add(1);
         if pair[1].0 != expected {
@@ -126,7 +145,7 @@ pub fn check_square(bytes: &[u8], rate: u64, step_us: u64) -> Result<(), String>
     if bytes.is_empty() {
         return Err("the capture is empty".to_owned());
     }
-    let runs = runs(bytes);
+    let runs = clean_runs(bytes, rate, step_us);
     for (index, (value, _)) in runs.iter().enumerate() {
         if *value != 0x00 && *value != 0xFF {
             return Err(format!(
@@ -255,6 +274,20 @@ mod tests {
             .flat_map(|i| std::iter::repeat_n(1_u8 << (i % 8), 70))
             .collect();
         assert!(check_walk(&short, RATE, STEP).is_err());
+    }
+
+    #[test]
+    fn the_skew_of_two_ports_is_not_a_defect_but_a_real_short_run_is() {
+        // A one-sample in-between value at the step from 0x20 to 0x40.
+        let mut bytes = steps([0x10, 0x20]);
+        bytes.push(0x00);
+        bytes.extend(steps([0x40, 0x80, 0x01, 0x02, 0x04, 0x08]));
+        check_walk(&bytes, RATE, STEP).unwrap();
+        // Forty samples is a run, not skew.
+        let mut bytes = steps([0x10, 0x20]);
+        bytes.extend(std::iter::repeat_n(0x00, 40));
+        bytes.extend(steps([0x40, 0x80, 0x01, 0x02, 0x04, 0x08]));
+        assert!(check_walk(&bytes, RATE, STEP).is_err());
     }
 
     #[test]
