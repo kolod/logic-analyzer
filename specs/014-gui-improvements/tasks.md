@@ -503,3 +503,8 @@ implementation"). They are not tasks of the plan: Start and Stop in the Capture 
 "Reset" instead of "Reset channels", the comma and the point in the length, the lifted and sliding lanes,
 the number of the analyzer input in the legend, the decoder panel by name, the remembered answer to the
 unsaved-capture question, the cog, and the splitter of the panel.
+
+Four more were asked for on 2026-11-17 and are only specified so far (FR-030 to FR-033, User Story 8):
+the Start button as wide as the panel, a steady status line, the time attached to the pointer, and a hand
+while the view is moved with the mouse.
+

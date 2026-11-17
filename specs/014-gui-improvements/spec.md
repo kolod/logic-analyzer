@@ -69,6 +69,18 @@ the requirements they touch are marked "amended" below.
   stops the application from quitting or a window from closing (FR-028).
 - Q: Where are the Settings? -> A: Also under a cog at the foot of the icon strip (FR-029).
 
+Asked for on 2026-11-17 and **not built yet** (they are specified here first; see `verification.md`):
+
+- Q: How wide is the Start button? -> A: The width of the panel, like the other controls of the Capture
+  view (FR-030).
+- Q: The status line jumps while a capture runs. -> A: The numbers in it must have a fixed width, so the
+  text does not move as the digits change (FR-031).
+- Q: Where is the time under the pointer shown? -> A: Attached to the pointer, below and to the right
+  of the crosshair, or below and to the left when there is not enough room on the right; not in the top
+  right corner, where it merges with the time axis (FR-032).
+- Q: What does the pointer look like while the view is moved sideways with the mouse? -> A: A hand
+  (FR-033).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Edit a channel where it is shown (Priority: P1)
@@ -290,6 +302,37 @@ added; press D and do the same.
 
 ---
 
+### User Story 8 - A steadier Capture view, status line and signal view (Priority: P3)
+
+Four small defects of the first implementation, found by using it: the Start button is narrower than the
+panel it sits in; the status line shakes while a capture runs because the digits of a proportional font
+have different widths; the time under the pointer is drawn in the top right corner of the signal view,
+where it merges with the time axis and is far from what the user is looking at; and nothing tells the
+user that dragging moves the view.
+
+**Why this priority**: none of it blocks a task; each one makes the application feel unfinished.
+
+**Independent Test**: start a capture of the simulated device in real time and watch the status line; move
+the pointer over the signals near the right and the bottom edges and read the time; press and drag the
+view sideways.
+
+**Acceptance Scenarios**:
+
+1. **Given** the Capture view, **Then** the Start button (Stop while a capture runs) is as wide as the
+   panel's content, as the device chooser and the fields below it are, at every width of the panel.
+2. **Given** a capture is running, **When** the numbers in the status line change (samples, time, memory),
+   **Then** the text does not move sideways and the parts after the numbers stay where they are.
+3. **Given** the pointer is over the signals, **Then** the time of the sample under it is shown next to
+   the pointer, below and to the right of the crosshair; **When** there is not enough room to the right
+   of the pointer, **Then** it is shown below and to the left of the crosshair instead; it is not drawn
+   over the time axis.
+4. **Given** the pointer is not over the signals, **Then** no time is shown.
+5. **Given** the user presses a mouse button in the signal area and moves the pointer sideways to move
+   the view, **Then** the pointer is a hand while the button is held and is the crosshair again when it
+   is released.
+
+---
+
 ### Edge Cases
 
 - What happens when a name typed in the legend is empty, too long, or contains control or invisible
@@ -305,6 +348,9 @@ added; press D and do the same.
   scrolls if the panel is too short.
 - What happens when the language is changed? The panel, the views, the menu and the buttons follow it at
   once, and long German or Japanese texts do not clip (the rules of the constitution).
+- What happens when the pointer is near the bottom of the signal view, so there is no room for the time
+  below the crosshair? The time is drawn above it (the specification adds this; the request named only
+  the right and the left side).
 - What happens to a decoder lane or an overlay when the channels are reordered or resized? They follow
   their channel.
 - What happens when the length in seconds does not make a whole number of samples? It is rounded to the
@@ -421,6 +467,15 @@ added; press D and do the same.
   the capture has no file yet. The answer is kept in the settings.
 - **FR-029**: The Settings MUST be reachable from the cog at the foot of the icon strip as well as from
   the menu.
+- **FR-030**: The Start button (Stop while a capture runs) MUST be as wide as the content of the panel.
+- **FR-031**: The status line MUST NOT shift while a capture runs: every number in it MUST be shown in a
+  field of fixed width (digits of equal width), so that its text and what follows it stay in place as the
+  digits change.
+- **FR-032**: The time under the pointer MUST be drawn next to the pointer, below and to the right of the
+  crosshair, or below and to the left when there is not enough room on the right (and above when there is
+  not enough room below); it MUST NOT be drawn in a fixed corner or over the time axis.
+- **FR-033**: While the view is being moved sideways with the mouse (the button held), the pointer MUST be
+  a hand; when the button is released it MUST return to what it was.
 - **FR-026**: The behaviour of every control above MUST be covered by tests that run without a display
   where the interface allows it (the state and the commands of the host), and by the headless rendering
   tests of the interface for what is drawn.

@@ -128,3 +128,16 @@ record were brought up to date afterwards (the Clarifications of `spec.md`; the 
 
 The tests named here are the ones the commits added or changed; the table was written from the commit
 history, not from a new run of the whole suite.
+
+## Specified, not yet built
+
+Asked for on 2026-11-17 and added to `spec.md` (Clarifications and User Story 8); none of it is
+implemented or tested yet.
+
+| Change | Requirement | Where it will be |
+|--------|-------------|------------------|
+| The Start button as wide as the panel | FR-030 | `capture_panel` and `start_block` of `la-app` |
+| Fixed-width numbers in the status line | FR-031 | `status_bar` of `la-app` (a font with equal-width digits, or fixed fields) |
+| The time under the pointer next to the pointer | FR-032 | the overlay of `signal_view` of `la-app` |
+| A hand while the view is moved with the mouse | FR-033 | `mouse_interaction` of `signal_view` |
+
