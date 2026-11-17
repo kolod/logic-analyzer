@@ -415,7 +415,7 @@ machine; without it they are skipped with a reason.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T034 [P] Robustness against random input (Principle I): `crates/driver-weact/tests/random_scripts.rs`: 10,000 scripts
+- [X] T034 [P] Robustness against random input (Principle I): `crates/driver-weact/tests/random_scripts.rs`: 10,000 scripts
   from a fixed seed, each a random sequence of steps (appearing, disappearing, renumerating boards, answers of random
   lengths, chunks of random bytes and lengths, errors of every kind, hangs, panics) driven through `scan`, `open`,
   `start`, `read` and `stop`: nothing panics outside the contained workers, every capture's books balance (stored plus
