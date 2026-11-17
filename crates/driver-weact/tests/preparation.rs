@@ -74,7 +74,9 @@ fn wait_for(what: &str, mut condition: impl FnMut() -> bool) {
 }
 
 /// The `(address, bytes)` of every chunk of the download, in order, and the writes to CPUCS.
-fn download(log: &[Request]) -> (Vec<(u16, Vec<u8>)>, Vec<Vec<u8>>) {
+type Chunk = (u16, Vec<u8>);
+
+fn download(log: &[Request]) -> (Vec<Chunk>, Vec<Vec<u8>>) {
     let mut chunks = Vec::new();
     let mut cpucs = Vec::new();
     for request in log {
