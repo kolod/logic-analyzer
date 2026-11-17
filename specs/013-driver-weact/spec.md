@@ -22,7 +22,12 @@ plan and the contract that follow.
   a USB 2.0 connection. The vendor warns that a USB docking station can keep it from reaching
   24 MHz.
 - The board has **no memory for samples**: it streams every sample to the computer while the
-  capture runs, so a slow or busy computer or USB path loses samples (it does not queue them).
+  capture runs. Reading the firmware source during planning showed what happens when the computer
+  cannot keep up: the board's small buffer fills, and **the firmware stops the capture** (it resets
+  the buffer and waits for a new start command). It never skips ahead, it has no counter of lost
+  samples and it sends no sign that it stopped; the computer sees only that no more data comes.
+  So this board has **no gap in the middle of a capture**; its one failure of this kind is a
+  capture that ends early (Amendment of 2026-11-17, found while planning).
 - The controller **holds no firmware of its own**: the computer must load a firmware image into
   it each time the board is plugged in, after which the board disconnects from the bus and
   reappears under another identity ("renumeration"). The vendor's instructions use the open-source
@@ -144,9 +149,11 @@ application can start another capture.
 1. **Given** a running capture, **When** the device is unplugged, **Then** the capture ends with
    a typed error naming the disconnect, the samples captured so far stay available and are marked
    incomplete, and the device disappears from the list.
-2. **Given** a running capture, **When** the computer does not read the samples fast enough and a
-   block is lost, **Then** a gap of the lost length is recorded at the right position, the capture
-   is marked incomplete, and the capture goes on.
+2. **Given** a running capture, **When** the computer does not read the samples fast enough and the
+   board stops the capture, **Then** the capture ends with a typed error that says the stream
+   stopped and suggests a lower rate or another USB port, what was captured stays and is marked
+   incomplete, and, for a capture of a set length, the positions that were never captured are
+   recorded as one gap at the end so that the capture never claims samples it does not have.
 3. **Given** the device was unplugged during a capture, **When** it is plugged in again, **Then**
    it is listed again and a new capture works without restarting the application.
 4. **Given** the driver fails in any way (an error, a panic, a transfer that never returns),
@@ -222,8 +229,8 @@ from a capture.
   still be the selected one after it, and no "device disappeared" for the same physical board
   reaches the user as a failure.
 - A USB 1.1 port, a hub or a docking station that cannot carry the stream of the chosen rate: the
-  capture reports lost samples as gaps and is flagged incomplete; it never reports a clean
-  capture.
+  board stops the capture, which ends early with the typed error of FR-017, flagged incomplete;
+  it never reports a clean capture.
 - A rate that the board can only reach with a precision lower than asked (the sample clock is
   derived from a fixed oscillator): the configuration shows the rate actually used.
 - The firmware image missing, damaged or of a version the driver does not know: a typed error,
@@ -295,9 +302,11 @@ from a capture.
 - **FR-016**: The samples stored plus the positions recorded as lost MUST equal the positions the
   capture claims, for every capture and every failure, and a capture with any lost position MUST
   be marked incomplete.
-- **FR-017**: When the board loses samples (the computer or the USB path does not keep up), a gap
-  of the lost length MUST be recorded at the correct position and the capture MUST go on; a
-  capture with such a gap MUST never be presented as clean.
+- **FR-017**: When the stream of samples stops before the capture is complete (the computer or the
+  USB path did not keep up, so the board stopped the capture), the capture MUST end with a typed
+  error that says so; for a capture of a set length the positions never captured MUST be recorded
+  as one gap at the end; the capture MUST be marked incomplete and MUST never be presented as
+  clean.
 - **FR-018**: A capture whose first data does not arrive, or whose data stops, within a bounded
   time MUST end with a typed timeout error and keep what it has.
 - **FR-019**: A capture from this board MUST NOT be marked as simulated, and the session MUST
@@ -394,8 +403,9 @@ from a capture.
 - **SC-007**: With no hardware, the shared conformance suite and the driver's own tests pass on
   Windows and on Debian in the continuous integration.
 - **SC-008**: On a real board on a directly connected USB 2.0 port, a 60-second capture at 24 MHz
-  on 8 channels ends either with every sample or with every lost position recorded as a gap and
-  the capture flagged incomplete; there is no third outcome.
+  on 8 channels ends either with every sample, or early with the typed error of FR-017 and the
+  capture flagged incomplete with the never-captured positions recorded as a gap at the end; there
+  is no third outcome.
 - **SC-009**: A person who has not used the device follows the documentation on a clean Windows
   11 and a clean Debian 13 and gets a first capture in under 10 minutes on each.
 - **SC-010**: A hot-plug sequence of 100 rapid plug and unplug events leaves the list showing

@@ -49,3 +49,8 @@
   is used by the manual procedure and by opt-in automated hardware tests that control the Nano
   over its serial port (FR-030, FR-031, SC-011, User Story 4, "Assumptions"). All items still
   pass (16 of 16).
+- Amended on 2026-11-17 while planning: reading the firmware source showed that the board stops the
+  capture when the computer cannot keep up (no gap in the middle, no lost-sample counter), so FR-017,
+  User Story 3 scenario 2, the USB 1.1 edge case and SC-008 now describe a capture that ends early with
+  a typed error and, for a set length, one gap at the end. The study section of the specification says
+  so. All items still pass (16 of 16).
