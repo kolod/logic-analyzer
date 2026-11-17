@@ -45,3 +45,7 @@
   sources read; the vendor's README says the EEPROM is 2 Kbit while sigrok lists a 256 Kbit part
   (a difference that affects how the board identifies itself before the firmware is loaded);
   the vendor repository has no licence.
+- Clarified on 2026-11-17 (second session): the maintainer's rig (analyzer wired to an Arduino Nano)
+  is used by the manual procedure and by opt-in automated hardware tests that control the Nano
+  over its serial port (FR-030, FR-031, SC-011, User Story 4, "Assumptions"). All items still
+  pass (16 of 16).

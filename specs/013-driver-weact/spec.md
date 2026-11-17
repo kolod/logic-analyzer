@@ -42,6 +42,9 @@ plan and the contract that follow.
 - Q: Where does the firmware image the board needs come from? → A: The application ships the open-source firmware image with it, so that a board works on a clean system and offline; the image's licence (GPL version 2 or later) is compatible with the project's GPL-3.0, and its origin, version and licence are recorded in the plan. Nothing is read from folders of other software.
 - Q: Which USB identities does the driver accept? → A: Only the identity that sigrok lists for this board (`1d50:608c`, 8 channels), shown as the WeAct LogicAnalyzer. Other boards of the same firmware family (a blank Cypress FX2 board, the 16-channel variant) are not accepted and are not listed; they are outside this feature.
 
+- Q: What signal source do the maintainer's local tests with a real board use? → A: An Arduino Nano (on the serial port COM7 of the maintainer's machine) wired to the eight inputs of the analyzer: the first input of the analyzer (channel 0 in the application; the maintainer counts from 1) to pin D2 (PD2), the second to D3 (PD3) and so on in order up to the eighth input to D9 (PB1).
+- Q: What role does that rig play in the tests? → A: Both uses: the signal source of the manual verification procedure, and the source of automated tests with the real board that the test code controls over the Nano's serial port (to start and stop chosen patterns). These automated tests are opt-in: they never run by default, never run in continuous integration, and are skipped (not failed) when the rig is absent.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Capture from a WeAct LogicAnalyzer (Priority: P1)
@@ -176,6 +179,12 @@ device and record the result.
 3. **Given** a real board and a signal source of known content, **When** the tester follows the
    manual procedure, **Then** every step has an expected result, and the record of the run can be
    attached to the pull request.
+4. **Given** the maintainer's rig (the analyzer wired to the Arduino Nano) and the opt-in switch
+   set, **When** the hardware tests run, **Then** the test code starts a chosen pattern on the
+   Nano, captures it with the analyzer, and checks that the captured signal is the pattern, for
+   every one of the eight channels, and stops the Nano afterwards.
+5. **Given** no rig or no opt-in switch, **When** the test suite runs, **Then** the hardware tests
+   are skipped with a visible reason and the suite still passes.
 
 ---
 
@@ -335,6 +344,17 @@ from a capture.
   parsers of data coming from the device are covered by tests of malformed, truncated and
   boundary input.
 
+- **FR-030**: The repository MUST contain what the rig needs: the program for the Arduino Nano
+  that produces the chosen patterns on the pins wired to the analyzer's eight inputs, the wiring
+  table (analyzer input, application channel, Nano pin and port bit), and the way the test code
+  asks the Nano to start and stop a pattern; the documentation of the wiring and of loading the
+  program MUST be in English.
+- **FR-031**: The automated hardware tests MUST be opt-in: they MUST NOT run unless the maintainer
+  switches them on, MUST NOT run in continuous integration, MUST find the Nano's serial port from
+  a setting rather than a value fixed in the code, MUST be skipped with a visible reason (not
+  failed) when the rig is absent or the switch is off, and MUST leave the Nano and the analyzer
+  idle when they end, also when they fail.
+
 ### Key Entities
 
 - **WeAct device**: a physical board with an identity (its place on the USB bus), a state
@@ -345,6 +365,9 @@ from a capture.
   length, validated against the capabilities.
 - **Recorded exchange**: a file of what was said between the application and a real board during
   a capture, used to replay the board to the driver and to inject failures.
+- **Test rig**: the analyzer wired to an Arduino Nano whose pins D2 to D9 (PD2 to PD7, PB0, PB1)
+  go to the analyzer's eight inputs in order; the Nano produces known patterns on request and is
+  the signal source of the manual procedure and of the opt-in hardware tests.
 - **Verification record**: the filled-in result of the manual procedure for one device, one
   operating system and one run.
 
@@ -379,6 +402,11 @@ from a capture.
   exactly the boards that are present, with no board listed twice, and no application restart
   is needed.
 
+- **SC-011**: On the maintainer's rig with the hardware tests switched on, every one of the eight
+  channels is captured with a pattern that equals the one the Nano produced, in 100% of the
+  runs of the hardware tests; on every other machine, and in the continuous integration, the
+  same tests are skipped with a reason and the suite passes.
+
 ## Assumptions
 
 - This is the first driver for real hardware: the first to need access to a USB device on both
@@ -401,4 +429,18 @@ from a capture.
 - The vendor repository has no stated licence, so nothing from it is copied; only the facts of
   its README are used. The firmware's own licence (GPL version 2 or later) is compatible with the
   project's GPL-3.0, and its origin is recorded where the plan records every reused item.
+- The maintainer's rig is a local aid: the Nano is on the serial port COM7 of the maintainer's
+  machine and may be on another port elsewhere; only the maintainer is expected to have it. Tests
+  that need it are opt-in, and everything required by the constitution (tests without hardware,
+  a manual procedure) stands without it.
+- Talking to the Nano over a serial port is something only the opt-in tests need; if it needs a
+  library, that library is a dependency of the tests only and is chosen in the plan under
+  Principle V.
+- The patterns on the Nano are produced by the Nano's own clock, which is not synchronised with
+  the analyzer's: a test compares the captured signal with the pattern (its levels and the order
+  and relative spacing of its changes, within what the two clocks allow), not sample for sample
+  against a computed copy.
+- The Nano's pins can only be driven at a few MHz at most, so the rig exercises correctness on
+  all eight channels at modest rates; the highest rate of the analyzer (24 MHz) is verified in the
+  manual procedure with a source that can reach it, and is not claimed by the rig.
 - No capture data or telemetry leaves the computer (constitution, privacy).
