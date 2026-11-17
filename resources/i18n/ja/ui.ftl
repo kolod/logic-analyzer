@@ -69,7 +69,7 @@ menu-view-pan-right = 右へ移動
 menu-view-page-left = 前のページ
 menu-view-page-right = 次のページ
 menu-capture-follow = 最新データを追従
-channel-reset = チャンネルをリセット
+channel-reset = リセット
 
 ### メッセージ
 

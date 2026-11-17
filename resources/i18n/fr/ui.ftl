@@ -69,7 +69,7 @@ menu-view-pan-right = Défiler à droite
 menu-view-page-left = Page précédente
 menu-view-page-right = Page suivante
 menu-capture-follow = Suivre les dernières données
-channel-reset = Réinitialiser les canaux
+channel-reset = Réinitialiser
 
 ### Messages
 

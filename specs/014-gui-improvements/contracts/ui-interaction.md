@@ -45,7 +45,7 @@ For a lane with its top `y` and height `h`, after the vertical offset:
 - **Channel buttons**: 8 per row sharing the width of the panel (28 px high, 3 px gap), centred number, the number of the channel inside (the name is too long);
   off: border and number in the channel's colour on the panel background; on: border and background in the
   channel's colour and the number in black or white, whichever contrasts better. They send
-  `SetChannelVisible`; **All** and **None** beside **Reset channels** set the whole recording mask at once; they are inert while a capture runs; the tooltip is the channel's name.
+  `SetChannelVisible`; **All** and **None** beside **Reset** set the whole recording mask at once; they are inert while a capture runs; the tooltip is the channel's name.
 
 ## The edge buttons
 

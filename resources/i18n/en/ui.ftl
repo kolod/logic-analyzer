@@ -126,7 +126,7 @@ menu-view-page-right = Page right
 # Keep the view at the newest data of a running capture.
 menu-capture-follow = Follow latest data
 # Button: restore the default names, colours, order and visibility.
-channel-reset = Reset channels
+channel-reset = Reset
 
 ### Messages
 

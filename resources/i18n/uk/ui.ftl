@@ -69,7 +69,7 @@ menu-view-pan-right = Прокрутити праворуч
 menu-view-page-left = Сторінка назад
 menu-view-page-right = Сторінка вперед
 menu-capture-follow = Стежити за новими даними
-channel-reset = Скинути канали
+channel-reset = Скинути
 
 ### Повідомлення
 

@@ -67,7 +67,7 @@ panel narrower or wider (220 to 480 pixels). The view and the width are remember
 
 It holds **Start** (it becomes **Stop** while a capture runs), the device, the sample rate, the length
 in seconds, the settings of the simulated device and the **channels to record**: one button for each
-channel, eight to a row, with **All** and **None** beside **Reset channels** to switch them all at once. A button with only a frame
+channel, eight to a row, with **All** and **None** beside **Reset** to switch them all at once. A button with only a frame
 and a number in the channel's colour is **off**; a filled one is **on**. Click one to switch the
 channel. Any combination works (for example channels 0, 2 and 5 only); with none on, **Start** stays
 unavailable and the view says why. The buttons are locked while a capture runs, because what that
@@ -92,7 +92,7 @@ The legend is the strip at the left of the signals, one row for each channel:
 
 Names, colours, order and heights can be changed at any time, before the first capture included, and
 they stay for the next capture. They are saved with a capture and come back when you open it; a file
-written by an older version opens with automatic heights. **Reset channels** (in the Capture view)
+written by an older version opens with automatic heights. **Reset** (in the Capture view)
 brings back the default names, colours, order and heights.
 
 ### Jumping to the next edge

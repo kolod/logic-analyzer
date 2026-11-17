@@ -69,7 +69,7 @@ menu-view-pan-right = Nach rechts
 menu-view-page-left = Seite zurück
 menu-view-page-right = Seite vor
 menu-capture-follow = Neueste Daten folgen
-channel-reset = Kanäle zurücksetzen
+channel-reset = Zurücksetzen
 
 ### Meldungen
 
