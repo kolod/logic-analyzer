@@ -84,3 +84,15 @@ error-decoder-too_many_stuck = 複数のデコーダーが応答せず固まっ�
 error-decoder-section_invalid = このセッションファイルのデコーダー部分が破損しています。読み取れたデコーダーは復元されました。キャプチャとセッションの残りには影響しません。
 error-decoder-unknown_decoder = このセッションは、このバージョンのアプリケーションにないデコーダーを使っています。それを除外し、セッションの残りを復元しました。
 error-decoder-options_skipped = 保存されたデコーダーの一部のオプションを理解できず除外したため、それらには既定値が使われます。デコーダーの設定を確認してください。
+
+### WeAct LogicAnalyzer
+
+error-weact-access_denied = このプログラムには WeAct LogicAnalyzer を開く権限がありません。ドキュメントのアクセスルール（udev）がインストールされているか確認し、デバイスを抜き差ししてください。
+error-weact-driver_missing = WeAct LogicAnalyzer が WinUSB ドライバーを使用していないため、開けません。ドキュメントを参照して Zadig で WinUSB をインストールし、デバイスを接続し直してください。
+error-weact-in_use = WeAct LogicAnalyzer は別のプログラムが使用中です。そのプログラム（たとえば PulseView）を終了してから、もう一度お試しください。
+error-weact-firmware_rejected = WeAct LogicAnalyzer がファームウェアを受け付けなかったか、このプログラムが知らないバージョンを返しました。デバイスを抜いて接続し直し、もう一度お試しください。
+error-weact-not_renumerated = ファームウェアの読み込み後に WeAct LogicAnalyzer が戻ってきませんでした。デバイスを抜き、数秒待ってから接続し直してください。
+error-weact-preparing = WeAct LogicAnalyzer はまだ準備中です。しばらく待ってから、もう一度開始してください。
+error-weact-no_data = WeAct LogicAnalyzer からデータが送られてきませんでした。USB ケーブルを確認し、別の USB ポートをお試しのうえ、キャプチャをもう一度開始してください。
+error-weact-stream_stopped = コンピューターが WeAct LogicAnalyzer に追いつけなかったため、キャプチャが途中で終了しました。ここまでにキャプチャしたデータは保持されています。サンプルレートを下げ、USB ハブやドッキングステーションを避けてお試しください。
+error-weact-firmware_invalid = このプログラムに同梱されている WeAct LogicAnalyzer のファームウェアが破損しています。アプリケーションを再インストールしてください。

@@ -84,3 +84,15 @@ error-decoder-too_many_stuck = Plusieurs décodeurs ne répondent plus et sont t
 error-decoder-section_invalid = La partie décodeurs de ce fichier de session est endommagée. Les décodeurs lisibles ont été restaurés ; la capture et le reste de la session ne sont pas affectés.
 error-decoder-unknown_decoder = Cette session utilise un décodeur que cette version de l'application ne possède pas. Il a été ignoré et le reste de la session a été restauré.
 error-decoder-options_skipped = Certaines options enregistrées d'un décodeur n'ont pas été comprises et ont été ignorées ; les valeurs par défaut sont donc utilisées. Vérifiez les réglages du décodeur.
+
+### WeAct LogicAnalyzer
+
+error-weact-access_denied = Ce programme n'est pas autorisé à ouvrir le WeAct LogicAnalyzer. Vérifiez que la règle d'accès (udev) décrite dans la documentation est installée, puis débranchez et rebranchez l'appareil.
+error-weact-driver_missing = Le WeAct LogicAnalyzer n'utilise pas le pilote WinUSB et ne peut donc pas être ouvert. Consultez la documentation pour installer WinUSB avec Zadig, puis rebranchez l'appareil.
+error-weact-in_use = Le WeAct LogicAnalyzer est utilisé par un autre programme. Fermez cet autre programme (par exemple PulseView) et réessayez.
+error-weact-firmware_rejected = Le WeAct LogicAnalyzer n'a pas accepté le firmware ou signale une version que ce programme ne connaît pas. Débranchez l'appareil, rebranchez-le et réessayez.
+error-weact-not_renumerated = Le WeAct LogicAnalyzer n'est pas revenu après le chargement de son firmware. Débranchez-le, attendez quelques secondes et rebranchez-le.
+error-weact-preparing = Le WeAct LogicAnalyzer est encore en cours de préparation. Patientez un instant puis relancez.
+error-weact-no_data = Le WeAct LogicAnalyzer n'a envoyé aucune donnée. Vérifiez le câble USB, essayez un autre port USB puis relancez la capture.
+error-weact-stream_stopped = La capture s'est arrêtée prématurément car l'ordinateur n'a pas pu suivre le WeAct LogicAnalyzer. Tout ce qui a été capturé est conservé. Essayez une fréquence d'échantillonnage plus basse et évitez les concentrateurs et stations d'accueil USB.
+error-weact-firmware_invalid = Le firmware du WeAct LogicAnalyzer fourni avec ce programme est endommagé. Veuillez réinstaller l'application.

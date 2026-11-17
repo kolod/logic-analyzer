@@ -105,7 +105,7 @@ the repository with its licence.
   and reads `[major, minor]`, rejects lengths 0, 1, 3 and 64; the buffer plan (size a multiple of 512, at
   least 512, count 4 to 32) for every rate, with the hand-worked values of the USB contract (20 kHz → 512
   bytes × 19, 1 MHz → 10,240 × 32); the capability list is strictly increasing and has 16 entries.
-- [ ] T005 [P] Error codes (research R10): `crates/driver-weact/src/error.rs` with the nine codes as
+- [X] T005 [P] Error codes (research R10): `crates/driver-weact/src/error.rs` with the nine codes as
   `pub const` string literals (`weact.access_denied`, `weact.driver_missing`, `weact.in_use`,
   `weact.firmware_rejected`, `weact.not_renumerated`, `weact.preparing`, `weact.no_data`,
   `weact.stream_stopped`, `weact.firmware_invalid`) and one constructor each returning
