@@ -979,6 +979,12 @@ impl Shell {
                 let saved = self.persist_settings(state);
                 changed(Changes::SETTINGS | saved)
             }
+            Command::SetPanelWidth(width) => {
+                let (low, high) = crate::settings::PANEL_WIDTH_RANGE;
+                state.settings.panel_width = Some(width.clamp(low, high));
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | saved)
+            }
             Command::SetUnsavedChoice(choice) => {
                 if choice == Some(Decision::Cancel) {
                     return Err(Reject::Ignored(error::INVALID_COMMAND));

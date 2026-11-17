@@ -16,8 +16,8 @@ pub const STRIP_WIDTH: f32 = 36.0;
 pub const BUTTON: f32 = 28.0;
 /// Gap between the buttons and from the edges.
 const GAP: f32 = 4.0;
-/// Width of the panel.
-pub const PANEL_WIDTH: f32 = 280.0;
+/// Width of the splitter between the signals and the panel.
+pub const SPLITTER_WIDTH: f32 = 5.0;
 /// The views in the order of the strip, top to bottom.
 pub const VIEWS: [SidePanel; 3] = [SidePanel::Capture, SidePanel::Decoders, SidePanel::Markers];
 
@@ -87,13 +87,26 @@ pub fn strip<'a>(current: SidePanel, tips: [String; 3]) -> Element<'a, Message> 
         .into()
 }
 
-/// The frame of the panel around the content of the shown view.
-pub fn frame<'a>(content: Element<'a, Message>) -> Element<'a, Message> {
-    container(content)
-        .width(Length::Fixed(PANEL_WIDTH))
-        .max_width(PANEL_WIDTH)
-        .height(Length::Fill)
-        .into()
+/// The frame of the panel around the content of the shown view, `width` pixels wide, with the
+/// splitter at its left edge: a press on it starts changing the width.
+pub fn frame<'a>(content: Element<'a, Message>, width: f32) -> Element<'a, Message> {
+    let splitter = iced::widget::mouse_area(
+        container(Space::new().width(SPLITTER_WIDTH).height(Length::Fill)).style(
+            |theme: &Theme| container::Style {
+                background: Some(theme.extended_palette().background.weak.color.into()),
+                ..container::Style::default()
+            },
+        ),
+    )
+    .interaction(iced::mouse::Interaction::ResizingHorizontally)
+    .on_press(Message::SplitterPressed);
+    row![
+        splitter,
+        container(content)
+            .width(Length::Fixed(width))
+            .height(Length::Fill)
+    ]
+    .into()
 }
 
 #[cfg(test)]
@@ -118,7 +131,7 @@ mod tests {
         // 4 + 28 + 4 + 28 + 4 + 28 + 4: three buttons fit a strip 36 wide with room to spare.
         const { assert!((STRIP_WIDTH - BUTTON) / 2.0 >= GAP) };
         const { assert!(BUTTON == 28.0 && GAP == 4.0) };
-        const { assert!(PANEL_WIDTH >= 220.0) };
+        const { assert!(SPLITTER_WIDTH >= 3.0 && SPLITTER_WIDTH <= STRIP_WIDTH) };
     }
 
     #[test]

@@ -30,18 +30,19 @@ For a lane with its top `y` and height `h`, after the vertical offset:
 ## The side panel
 
 ```text
-| signals ........................ | panel (280 px) | icons (36 px) |
+| signals ...................... | splitter (5 px) | panel (220 to 480 px, 280 at first) | icons (36 px) |
 ```
 
 - The strip of icons is always at the right edge: Capture, Decoders, Markers, top to bottom, each a 28 px
   button with a 3 px bar on its left when it is the shown view.
 - Click on an icon: `SetSidePanel(that view)`; on the icon of the shown view: `SetSidePanel(Hidden)`.
-- The panel width is fixed (280 px) in this feature; the signals take the rest, also at the minimum
-  window width.
+- The width of the panel is changed by dragging the splitter at its left edge (`SetPanelWidth`, kept in
+  the settings, limited to 220 to 480 px); the signals take the rest, also at the minimum window width.
+  The pointer is followed over the whole window while the button is held.
 - The Capture view, top to bottom: Start (Stop while a capture runs) and what keeps it from working, device, sample rate, length in seconds (with the samples beside it),
   seed, density, real time (the last three only for the simulated device), the channels to record, the
   explanations of problems.
-- **Channel buttons**: 8 per row, 28 px square with a 3 px gap (eight fit the 280 px panel), centred number, the number of the channel inside (the name is too long);
+- **Channel buttons**: 8 per row sharing the width of the panel (28 px high, 3 px gap), centred number, the number of the channel inside (the name is too long);
   off: border and number in the channel's colour on the panel background; on: border and background in the
   channel's colour and the number in black or white, whichever contrasts better. They send
   `SetChannelVisible`; **All** and **None** beside **Reset channels** set the whole recording mask at once; they are inert while a capture runs; the tooltip is the channel's name.

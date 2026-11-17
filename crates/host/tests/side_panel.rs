@@ -96,3 +96,43 @@ fn a_field_of_a_newer_version_is_kept_when_the_choice_is_saved() {
     assert!(text.contains("future_field"), "{text}");
     assert!(text.contains("\"decoders\""), "{text}");
 }
+
+#[test]
+fn the_width_of_the_panel_is_kept_within_its_range_and_saved() {
+    use la_host::settings::{DEFAULT_PANEL_WIDTH, PANEL_WIDTH_RANGE};
+    let dir = TempDir::new("panel-width");
+    let mut shell = start(&dir);
+    assert_eq!(shell.state().settings.panel_width, None);
+    assert!((PANEL_WIDTH_RANGE.0..=PANEL_WIDTH_RANGE.1).contains(&DEFAULT_PANEL_WIDTH));
+    for (asked, kept) in [
+        (300, 300),
+        (0, PANEL_WIDTH_RANGE.0),
+        (PANEL_WIDTH_RANGE.0 - 1, PANEL_WIDTH_RANGE.0),
+        (PANEL_WIDTH_RANGE.1 + 1, PANEL_WIDTH_RANGE.1),
+        (u32::MAX, PANEL_WIDTH_RANGE.1),
+    ] {
+        let outcome = shell.apply(Command::SetPanelWidth(asked));
+        assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+        assert_eq!(shell.state().settings.panel_width, Some(kept), "{asked}");
+        assert_eq!(stored(&dir).panel_width, Some(kept));
+    }
+    // It is there at the next start.
+    shell.apply(Command::SetPanelWidth(333));
+    drop(shell);
+    assert_eq!(start(&dir).state().settings.panel_width, Some(333));
+}
+
+#[test]
+fn a_width_in_the_settings_file_that_is_out_of_range_is_cut_to_it() {
+    use la_host::settings::PANEL_WIDTH_RANGE;
+    let dir = TempDir::new("panel-width-file");
+    std::fs::write(
+        dir.path().join("settings.json"),
+        br#"{"version":1,"panel_width":5000}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        start(&dir).state().settings.panel_width,
+        Some(PANEL_WIDTH_RANGE.1)
+    );
+}

@@ -81,6 +81,12 @@ pub enum Message {
     ChannelVisible(u8, bool),
     /// All the channels (`true`) or none (`false`) are recorded.
     ChannelsAll(bool),
+    /// A press on the splitter between the signals and the panel.
+    SplitterPressed,
+    /// The pointer moved, at this x in the window, while the splitter is held.
+    SplitterMoved(f32),
+    /// The button was released: the width is kept.
+    SplitterReleased,
     /// The box of the question about an unsaved capture.
     RememberToggled(bool),
     /// An answer to the question about an unsaved capture, remembered if the box is ticked.
@@ -354,6 +360,8 @@ pub struct App {
     settings_open: bool,
     /// The box "Remember my choice" of the question about an unsaved capture is ticked.
     remember_choice: bool,
+    /// The splitter of the panel is being dragged.
+    splitter: Option<SplitterDrag>,
     about_open: bool,
     memory_text: String,
     decoder_memory_text: String,
@@ -374,9 +382,20 @@ struct ChannelEdit {
 /// The identity of the in-place editor, for focusing it.
 const NAME_EDITOR: &str = "channel-name-editor";
 
-/// The side of a channel button, and the gap between two: eight of them fit the 280 px panel.
+/// The height of a channel button and the gap between two; the buttons share the width of the panel.
 const CHANNEL_BUTTON: f32 = 28.0;
 const CHANNEL_GAP: f32 = 3.0;
+
+/// A drag of the splitter between the signals and the panel.
+#[derive(Debug, Clone, Copy)]
+struct SplitterDrag {
+    /// Where the pointer was when the first move came; the width follows the distance from it.
+    origin: Option<f32>,
+    /// The width now, while it is dragged.
+    width: f32,
+    /// The width when the drag began.
+    start_width: f32,
+}
 
 /// The index `SubmenuToggled` carries for the recent files of the File menu (not a table entry).
 const RECENT_SUBMENU: usize = usize::MAX;
@@ -419,6 +438,7 @@ impl App {
             messages_open: false,
             settings_open: false,
             remember_choice: false,
+            splitter: None,
             about_open: false,
             memory_text: String::new(),
             decoder_memory_text: String::new(),
@@ -844,7 +864,22 @@ impl App {
             Tick::Fast => Duration::from_millis(50),
             Tick::Slow => Duration::from_millis(500),
         };
+        // While the splitter is held, the pointer is followed over the whole window.
+        let splitter = if self.splitter.is_some() {
+            iced::event::listen_with(|event, _status, _window| match event {
+                iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
+                    Some(Message::SplitterMoved(position.x))
+                }
+                iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+                    iced::mouse::Button::Left,
+                )) => Some(Message::SplitterReleased),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
+            splitter,
             keyboard::listen().map(Message::Key),
             iced::time::every(period).map(Message::Tick),
             window::close_requests().map(|_| Message::CloseRequested),
@@ -1133,6 +1168,27 @@ impl App {
                 let follow = !self.shell.state().follow_latest;
                 self.run(Command::SetFollowLatest(follow))
             }
+            Message::SplitterPressed => {
+                self.splitter = Some(SplitterDrag {
+                    origin: None,
+                    width: self.panel_width(),
+                    start_width: self.panel_width(),
+                });
+                Task::none()
+            }
+            Message::SplitterMoved(x) => {
+                if let Some(drag) = &mut self.splitter {
+                    // The pointer moving left makes the panel wider.
+                    let origin = *drag.origin.get_or_insert(x);
+                    let (low, high) = la_host::settings::PANEL_WIDTH_RANGE;
+                    drag.width = (drag.start_width + (origin - x)).clamp(low as f32, high as f32);
+                }
+                Task::none()
+            }
+            Message::SplitterReleased => match self.splitter.take() {
+                Some(drag) => self.run(Command::SetPanelWidth(drag.width.round() as u32)),
+                None => Task::none(),
+            },
             Message::RememberToggled(on) => {
                 self.remember_choice = on;
                 Task::none()
@@ -1574,6 +1630,22 @@ impl App {
             .enabled_when
             .is_enabled(self.shell.state())
             .then_some(table_index);
+    }
+
+    /// The width of the panel: the one being dragged, else the saved one, else the default.
+    fn panel_width(&self) -> f32 {
+        let (low, high) = la_host::settings::PANEL_WIDTH_RANGE;
+        self.splitter.map_or_else(
+            || {
+                self.shell
+                    .state()
+                    .settings
+                    .panel_width
+                    .unwrap_or(la_host::settings::DEFAULT_PANEL_WIDTH)
+                    .clamp(low, high) as f32
+            },
+            |drag| drag.width,
+        )
     }
 
     /// Start (or Stop while capturing) and what keeps Start from working, at the top of the
@@ -2215,22 +2287,29 @@ impl App {
                         .center_x(Fill)
                         .center_y(Fill),
                 )
-                .width(CHANNEL_BUTTON)
+                .width(Fill)
                 .height(CHANNEL_BUTTON)
                 .padding(0)
                 .style(move |theme: &Theme, status| {
                     crate::theme::channel_button_style(variant, colour, on, theme, status)
                 })
                 .on_press_maybe(can_flag.then_some(Message::ChannelVisible(index, !on)));
-                line = line.push(tooltip(
-                    press,
-                    container(text(name).size(12))
-                        .padding(4)
-                        .style(container::bordered_box),
-                    tooltip::Position::Bottom,
-                ));
+                line = line.push(
+                    tooltip(
+                        press,
+                        container(text(name).size(12))
+                            .padding(4)
+                            .style(container::bordered_box),
+                        tooltip::Position::Bottom,
+                    )
+                    .style(|_: &Theme| container::Style::default()),
+                );
             }
-            rows = rows.push(line);
+            // A short last row keeps the widths of the full ones.
+            for _ in chunk.len()..8 {
+                line = line.push(Space::new().width(Fill));
+            }
+            rows = rows.push(line.width(Fill));
         }
         let mut block = column![text(self.t("capture-channels")).size(13), rows].spacing(4);
         if state.config.enabled_channels == 0 {
@@ -2241,9 +2320,15 @@ impl App {
             );
         }
         let small = |label: String, message: Message| {
-            button(text(label).size(13))
-                .style(button::secondary)
-                .on_press_maybe(can_flag.then_some(message))
+            button(
+                text(label)
+                    .size(13)
+                    .width(Fill)
+                    .align_x(iced::alignment::Horizontal::Center),
+            )
+            .width(Fill)
+            .style(button::secondary)
+            .on_press_maybe(can_flag.then_some(message))
         };
         block = block.push(
             row![
@@ -2254,7 +2339,8 @@ impl App {
                 small(self.t("capture-channels-all"), Message::ChannelsAll(true)),
                 small(self.t("capture-channels-none"), Message::ChannelsAll(false)),
             ]
-            .spacing(4),
+            .spacing(4)
+            .width(Fill),
         );
         block.into()
     }
@@ -2477,7 +2563,7 @@ impl App {
             la_host::SidePanel::Hidden => None,
         };
         if let Some(panel) = panel {
-            body = body.push(crate::side_panel::frame(panel));
+            body = body.push(crate::side_panel::frame(panel, self.panel_width()));
         }
         body = body.push(crate::side_panel::strip(
             side,
@@ -2830,11 +2916,15 @@ mod tests {
     }
 
     #[test]
-    fn eight_channel_buttons_fit_a_row_of_the_panel() {
-        // The panel is 280 px, with 6 px on the left and 18 px on the right of its content.
-        let row = 8.0 * CHANNEL_BUTTON + 7.0 * CHANNEL_GAP;
-        let room = crate::side_panel::PANEL_WIDTH - 6.0 - 18.0;
-        assert!(row <= room, "{row} against {room}");
+    fn eight_channel_buttons_fit_a_row_of_the_narrowest_panel() {
+        // The content has 6 px on the left and 18 px on the right; the buttons share what is left.
+        let (narrowest, _) = la_host::settings::PANEL_WIDTH_RANGE;
+        let room = narrowest as f32 - 6.0 - 18.0 - 7.0 * CHANNEL_GAP;
+        assert!(
+            room / 8.0 >= 20.0,
+            "a button would be {} px wide",
+            room / 8.0
+        );
     }
 
     #[test]
@@ -3101,6 +3191,74 @@ mod tests {
             let _ = app.update(Message::Run(Command::SetLanguage(language)));
             let label = app.t("settings-remember-choice");
             assert!(has(&app, &label), "{language:?}");
+        }
+    }
+
+    #[test]
+    fn the_splitter_changes_the_width_of_the_panel_within_its_range_and_keeps_it() {
+        use la_host::settings::{DEFAULT_PANEL_WIDTH, PANEL_WIDTH_RANGE};
+        let _turn = render_turn();
+        let mut app = app_with_capture("splitter");
+        assert!((app.panel_width() - DEFAULT_PANEL_WIDTH as f32).abs() < f32::EPSILON);
+        // Dragging to the left widens the panel; the first move only sets where the drag began.
+        let _ = app.update(Message::SplitterPressed);
+        let _ = app.update(Message::SplitterMoved(900.0));
+        assert!((app.panel_width() - DEFAULT_PANEL_WIDTH as f32).abs() < f32::EPSILON);
+        let _ = app.update(Message::SplitterMoved(850.0));
+        assert!((app.panel_width() - (DEFAULT_PANEL_WIDTH as f32 + 50.0)).abs() < f32::EPSILON);
+        // Never beyond the range, either way.
+        let _ = app.update(Message::SplitterMoved(-5000.0));
+        assert!((app.panel_width() - PANEL_WIDTH_RANGE.1 as f32).abs() < f32::EPSILON);
+        let _ = app.update(Message::SplitterMoved(5000.0));
+        assert!((app.panel_width() - PANEL_WIDTH_RANGE.0 as f32).abs() < f32::EPSILON);
+        // The width is kept only when the button is released.
+        assert_eq!(app.shell.state().settings.panel_width, None);
+        let _ = app.update(Message::SplitterMoved(860.0));
+        let _ = app.update(Message::SplitterReleased);
+        assert!(app.splitter.is_none());
+        assert_eq!(
+            app.shell.state().settings.panel_width,
+            Some(DEFAULT_PANEL_WIDTH + 40)
+        );
+        assert!((app.panel_width() - (DEFAULT_PANEL_WIDTH + 40) as f32).abs() < f32::EPSILON);
+        // Moves and a release without a press change nothing.
+        let _ = app.update(Message::SplitterMoved(10.0));
+        let _ = app.update(Message::SplitterReleased);
+        assert_eq!(
+            app.shell.state().settings.panel_width,
+            Some(DEFAULT_PANEL_WIDTH + 40)
+        );
+    }
+
+    #[test]
+    fn the_panel_and_its_buttons_render_at_the_narrowest_and_the_widest_width() {
+        use la_host::settings::PANEL_WIDTH_RANGE;
+        let _turn = render_turn();
+        let mut app = app_with_capture("splitter-render");
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        for width in [PANEL_WIDTH_RANGE.0, PANEL_WIDTH_RANGE.1] {
+            let _ = app.update(Message::Run(Command::SetPanelWidth(width)));
+            for language in [la_i18n::Language::En, la_i18n::Language::De] {
+                let _ = app.update(Message::Run(Command::SetLanguage(language)));
+                let mut ui = iced_test::Simulator::with_size(
+                    crate::fonts::settings(),
+                    iced::Size::new(800.0, 600.0),
+                    app.view(),
+                );
+                for key in [
+                    "capture-channels-all",
+                    "capture-channels-none",
+                    "channel-reset",
+                ] {
+                    let label = app.t(key);
+                    let found = ui.find(label.as_str()).unwrap();
+                    let bounds = found.bounds();
+                    assert!(
+                        bounds.x >= 0.0 && bounds.x + bounds.width <= 800.0,
+                        "{width} {language:?} {key}: {bounds:?}"
+                    );
+                }
+            }
         }
     }
 

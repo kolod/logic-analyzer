@@ -229,6 +229,9 @@ pub enum Command {
     ResetPresentation,
     /// Chooses the view of the panel at the right edge (or hides it).
     SetSidePanel(crate::state::SidePanel),
+    /// Sets the width of the panel at the right edge in logical pixels, kept within
+    /// `settings::PANEL_WIDTH_RANGE`. Saved in the settings.
+    SetPanelWidth(u32),
     /// Remembers the answer to the question about an unsaved capture (`Some(Save)` or
     /// `Some(Discard)`: the question is not asked again and the answer is applied) or goes back to
     /// asking (`None`). `Cancel` cannot be remembered and is ignored. Saved in the settings.
@@ -460,6 +463,7 @@ impl Command {
             Command::SetChannelHeight { .. } => "set_channel_height",
             Command::SetSidePanel(_) => "set_side_panel",
             Command::SetUnsavedChoice(_) => "set_unsaved_choice",
+            Command::SetPanelWidth(_) => "set_panel_width",
             Command::ScrollToEdge { .. } => "scroll_to_edge",
             Command::RemoveRecentFile(_) => "remove_recent_file",
             Command::ClearRecentFiles => "clear_recent_files",

@@ -79,8 +79,8 @@ reads those languages should look at:
 
 ## Deviations from the plan
 
-- The panel is 280 px wide and fixed, not 220 px at the minimum window width: the signals give way and
-  the minimum window size still holds the panel (`ui-interaction.md` says 220; the code and tests use 280).
+- The panel is 280 px wide at first and its width is changed with a splitter (220 to 480 px, kept in the
+  settings); the signals give way and the minimum window size still holds the widest panel.
 - The contract said a resize "sends the command once, on release". The height is sent live while the
   border moves, so the lane follows the pointer; the value is the same.
 - The accessible text `edge-previous` / `edge-next` for the status line was not added: a canvas has no
