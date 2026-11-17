@@ -319,3 +319,23 @@ fn a_hang_during_a_read_is_reported_and_the_application_goes_on() {
     // The list still answers.
     assert!(registry.describe(&id).is_some());
 }
+
+#[test]
+fn a_pause_shorter_than_the_silence_limit_is_not_the_end_of_the_stream() {
+    let (usb, key, provider) = one_ready_board();
+    // 20 waits of 40 ms are 0.8 s of the virtual clock: before the first data (limit 2 s) and
+    // in the middle of the stream (limit the larger of 2 s and four transfer periods).
+    let mut steps = vec![StreamStep::Timeout; 20];
+    steps.push(StreamStep::Data(vec![0x11; 1_000]));
+    steps.extend(vec![StreamStep::Timeout; 20]);
+    steps.push(StreamStep::Data(vec![0x22; 1_000]));
+    usb.script_capture(&key, Capture::stream(steps));
+    let registry = registry_with(provider);
+    let id = key.device_id();
+    ready(&registry, &id);
+    let acquisition = run(&registry, &id, Some(2_000)).unwrap();
+    let result = outcome(&acquisition);
+    assert_eq!(result.end, EndReason::Completed, "{result:?}");
+    assert_eq!(result.delivered_samples, 2_000);
+    assert_eq!(result.lost_positions, 0);
+}
