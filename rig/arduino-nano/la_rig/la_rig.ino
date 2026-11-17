@@ -38,8 +38,13 @@ static bool line_overflow = false;
 
 // Writes v to D2..D9 with two port writes.
 static inline void write_pins(uint8_t v) {
+  // No interrupt may come between the two writes, or the pins would show a mixed value for as
+  // long as the interrupt takes.
+  uint8_t sreg = SREG;
+  cli();
   PORTD = (uint8_t)((PORTD & 0x03) | ((v & 0x3F) << 2));
   PORTB = (uint8_t)((PORTB & 0xFC) | ((v >> 6) & 0x03));
+  SREG = sreg;
 }
 
 static void wait_us(uint32_t us) {

@@ -89,14 +89,38 @@ Both are acceptable, but a native reader should look at them first.
 - The Windows timing tests of other features (storage, decoder sessions) are flaky under load and are
   re-run in CI; they are not part of this feature.
 
-## Left to a person (T038 and the criteria that need the board)
+## Verification on the real board (T038, 2026-11-17, Windows 11)
 
-- Install WinUSB for the board (it is on libusb-win32 now), wire the rig, flash the sketch, and run
-  `docs/drivers/weact-verification.md` and `cargo test -p la-driver-weact --test rig -- --ignored`.
-- Settle the **[verify]** items of the USB contract and the research: the download chunk size and the
-  registers, the meaning of the lowest delays, the bound-driver name of a blank and of a running board,
-  whether a blank board exposes interface 0 for control transfers on Windows, and the product string
-  Windows reports for a running board.
+Board: WeAct LogicAnalyzer V1 on WinUSB (installed with Zadig), wired to the Arduino Nano rig on COM7,
+the sketch of `rig/arduino-nano/`. What was found:
+
+- The blank board is listed with the driver `WinUSB`, no strings; the driver prepares it (hold, 4,096-byte
+  chunks from address 0, release) and it comes back running the firmware: the download chunk size and
+  the CPUCS values of the contract are right. It reports firmware version 1.5 with the shipped image.
+- `cargo test -p la-driver-weact --test rig -- --ignored` passed six of six in three consecutive runs:
+  `HOLD` on each of the eight channels, `WALK` at 1 MS/s, `COUNTER` for 300 ms (no value skipped),
+  `SQUARE` at 500 kS/s, every rate from 100 kS/s to 1 MS/s, and two captures in a row with the same
+  structure. A real recording of the walk is in `tests/recordings/rig-walk-1mhz.rec`.
+- **The stock firmware 1.4 hangs.** Sending `CMD_START` while a capture was being read (my experiments
+  with two STARTs in a row) left the board deaf to every request until it was unplugged: the
+  `while (!(GPIFTRIG & 0x80))` of `gpif_acquisition_prepare` never ends while the host reads. Before the
+  fix the first samples of a capture were also stale samples of the previous one, which looked like a
+  capture running at the previous capture's rate. Both are fixed by the patched firmware 1.5 (a bounded
+  START, a FIFO reset at START, a STOP command) and by the driver starting with nothing in flight; see
+  `crates/driver-weact/firmware/SOURCE.md`.
+- The rig itself needed fixes found here: the sketch read the serial port by the register while the
+  library owned the interrupt (no answers), kept interrupts off too long (lost bytes) and wrote the two
+  ports with an interrupt possible between them (a mixed value for a few microseconds); the pattern
+  checkers also ignore the 0.1 µs skew between the two ports.
+
+Not yet done on the board: the manual procedure of `docs/drivers/weact-verification.md` (steps 7 to 14:
+unplug during a capture, a hub or dock at 24 MHz, another program holding the board, a clean Windows 11
+and Debian 13) and the product string and manufacturer string Windows reports for a running board (the
+listing worked with the rule of the contract, so the board is recognised).
+
+## Left to a person
+
+- Run `docs/drivers/weact-verification.md` steps 7 to 14 and attach the record.
 - SC-001 (time from start to first capture), SC-008 (a 60-second capture at 24 MHz on a direct port),
-  SC-009 (a new user on clean Windows 11 and Debian 13) and SC-011 (the rig, all eight channels).
-- Add the recordings of the rig run (`LA_RIG_RECORD`) next to the hand-written ones after review.
+  SC-009 (a new user on clean Windows 11 and Debian 13); the rig covers SC-011 up to 1 MS/s (the Nano
+  cannot drive faster).

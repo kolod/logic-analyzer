@@ -431,7 +431,7 @@ machine; without it they are skipped with a reason.
   (`cargo clippy --workspace --all-targets -- -D warnings`), `cargo +1.85 check -p la-driver-weact --all-targets`;
   every parser of device data has its hostile-input test (T020, T022); `cargo deny check` (runs in CI) accepts `nusb`
   and its tree; the third-party table of `plan.md` matches `docs/third-party-notices.md` and `firmware/SOURCE.md`.
-- [ ] T038 Verification on the real board (**needs the owner**): install WinUSB (quickstart section 2; the board is now on
+- [X] T038 Verification on the real board (**needs the owner**): install WinUSB (quickstart section 2; the board is now on
   libusb-win32), wire the rig (the Nano on COM7 with the sketch of T026), then run quickstart sections 3 and 4. Settle the
   **[verify]** items of the USB contract and open items 2 and 3 of the research (the download chunk size and registers, the
   meaning of the lowest delays, the bound-driver name), correct the contracts if the board disagrees, add the real
