@@ -102,3 +102,29 @@ reads those languages should look at:
 - The icon in the Explorer and in a Debian file manager (the installer of a later feature registers
   the file type; `packaging/` holds what it must register).
 - The translations (above).
+
+## Changes after the first implementation
+
+The owner used the first implementation (2026-11-16 and 2026-11-17) and asked for the changes below.
+They were built in the same pull request after task T057 and the specification, the contract and this
+record were brought up to date afterwards (the Clarifications of `spec.md`; the requirements marked
+"amended" and FR-027 to FR-029).
+
+| Change | Commits | Requirement | Covered by |
+|--------|---------|-------------|------------|
+| Start and Stop in the Capture view, no toolbar; channel buttons 28 px with the number, All and None | `c9c6754` | FR-011, FR-013 | `start_is_in_the_capture_view_and_not_in_a_toolbar`, `eight_channel_buttons_fit_a_row_of_the_panel`, `all_and_none_switch_every_channel_at_once` |
+| Comma and point both separate the fraction of the length | `973c0ad` | FR-012 | `a_comma_and_a_point_both_separate_the_fraction_of_the_length_in_every_language` |
+| A lone dense column is no mark above or below the signal | `9edc319` | (drawing; no requirement) | `a_dense_band_spans_the_levels_of_the_waveform_and_never_more` |
+| The lane is lifted whole while dragged and the others slide aside | `dcfd0f9`, `e08e564` | FR-004 | `the_lanes_between_the_two_slots_make_room_by_the_height_of_the_carried_lane`, `easing_moves_toward_the_target_without_overshooting_and_arrives`, `the_lanes_slide_aside_while_a_lane_is_carried_and_settle_on_their_places` (the lifted lane itself is drawing and has no test) |
+| Legend row: the name, and under it the number of the analyzer input | `87d1069` | FR-027 | `a_lane_shows_the_name_above_the_number_of_its_analyzer_channel` |
+| Decoder panel: name only, a bin, a fold arrow, no tooltips on the header buttons | `220a726`, `ed6a6a8` | FR-009 | `a_decoder_is_shown_by_its_name_and_its_properties_fold_away`, `the_decoder_header_renders_in_every_language_at_the_minimum_size` (no test for the missing tooltips) |
+| The answer to the unsaved-capture question can be remembered (Save, Discard), in the question and in the Settings; Cancel never | `677e71e`, `0a633b2` | FR-028 | `the_question_about_an_unsaved_capture_can_remember_the_answer`, `a_remembered_discard_throws_the_capture_away_without_asking`, `cancel_cannot_be_remembered`, `a_cancel_written_in_the_settings_file_asks_as_before`, `the_settings_have_the_box_and_the_two_answers_that_can_be_remembered` |
+| A remembered Cancel never blocks quitting or closing | `bc394af` | FR-028 | `quit_and_close_work_with_a_remembered_discard_or_save`, `a_remembered_cancel_never_blocks_quit_or_close` |
+| A cog at the foot of the icon strip opens the Settings | `341f6fe` | FR-029, FR-007 | none (the cog is a button; its look is covered by the screen rendering tests only) |
+| A splitter changes the width of the panel (220 to 480 px) and the buttons share it | `166e8e1` | FR-010 | `the_splitter_changes_the_width_of_the_panel_within_its_range_and_keeps_it`, `the_width_of_the_panel_is_kept_within_its_range_and_saved`, `a_width_in_the_settings_file_that_is_out_of_range_is_cut_to_it`, `the_panel_and_its_buttons_render_at_the_narrowest_and_the_widest_width` |
+| "Reset channels" is called "Reset" | `c6e751a` | FR-005 | the language parity test (the key `channel-reset` and its translations) |
+| The same room on both sides of the content of the panel | `bf4c464` | (style) | none |
+| A finished capture never lacks its last samples (the outcome was read after the snapshot) | `21c0205` | (a fix in `la-host`, feature 004 and 006) | the random walk of `la-host` (`a_long_random_walk_keeps_every_invariant_and_loses_no_data`) |
+
+The tests named here are the ones the commits added or changed; the table was written from the commit
+history, not from a new run of the whole suite.

@@ -491,3 +491,15 @@ with a commit per task or logical group.
 - Expected values are by hand, from the contracts.
 - Never commit with failing clippy, fmt or tests.
 - The Channels panel is removed in T030 and not earlier: until then the flags have no other place.
+
+---
+
+## After T057: changes asked for by the owner
+
+Built in the same pull request after the tasks above were done; described in the Clarifications of
+`spec.md` and listed with their commits and tests in `verification.md` ("Changes after the first
+implementation"). They are not tasks of the plan: Start and Stop in the Capture view and no toolbar
+(T033 and T034 above said the toolbar kept them), the channel buttons with the number, All and None,
+"Reset" instead of "Reset channels", the comma and the point in the length, the lifted and sliding lanes,
+the number of the analyzer input in the legend, the decoder panel by name, the remembered answer to the
+unsaved-capture question, the cog, and the splitter of the panel.
