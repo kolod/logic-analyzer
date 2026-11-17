@@ -437,7 +437,7 @@ machine; without it they are skipped with a reason.
   meaning of the lowest delays, the bound-driver name), correct the contracts if the board disagrees, add the real
   recordings of the rig run (`LA_RIG_RECORD`) next to the hand-written ones, and run the manual procedure of T029 on both
   operating systems as far as the owner's machines allow; record every run with the template.
-- [ ] T039 `specs/013-driver-weact/verification.md`: traceability of every FR and SC to the tests that prove it; SC-001, SC-008,
+- [X] T039 `specs/013-driver-weact/verification.md`: traceability of every FR and SC to the tests that prove it; SC-001, SC-008,
   SC-009 and SC-011 measured or marked as left to a person with the record of T038; the mutation checks of T035;
   the deviations from the plan; the known issues (the flaky Windows timing tests of other features are not this
   feature's); what is left to a person.
