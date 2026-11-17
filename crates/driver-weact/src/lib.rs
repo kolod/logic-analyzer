@@ -15,9 +15,13 @@
 mod boards;
 mod device;
 pub mod error;
+
+/// The name of the provider and the prefix of every device identity of this driver.
+pub const PROVIDER_NAME: &str = "weact";
+
 mod firmware;
 mod nusb_backend;
 pub mod protocol;
 #[cfg(feature = "test-support")]
 pub mod testing;
-mod usb;
+pub mod usb;

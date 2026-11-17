@@ -124,7 +124,7 @@ the repository with its licence.
   of research R2 (integer arithmetic only, `checked_*`), `parse_version(&[u8]) -> Result<(u8, u8)>`,
   `buffer_plan(rate) -> BufferPlan { size, count }` and a pure function that turns a byte slice and the
   enabled mask into sample words (bit `i` of the byte is channel `i`, disabled channels zero). T004 passes.
-- [ ] T007 `crates/driver-weact/src/usb.rs`: the seam of research R11, documented: `BoardKey` (bus id, port
+- [X] T007 `crates/driver-weact/src/usb.rs`: the seam of research R11, documented: `BoardKey` (bus id, port
   chain; `Display` as `<bus>-<p1>.<p2>…`; `DeviceId` as `weact:<that>`; a parser for the id with tests for
   hostile text), `UsbInfo` (key, vendor, product, manufacturer, product string, address, driver name),
   `UsbBackend` (`list() -> Result<Vec<UsbInfo>>`, `open(&BoardKey) -> Result<Box<dyn UsbLink>>`), `UsbLink`
@@ -132,7 +132,7 @@ the repository with its licence.
   data, timeout) -> Result<()>`, `open_stream(buffers) -> Result<Box<dyn BulkStream>>`, `strings()`), and
   `BulkStream` (`submit_all()`, `wait(timeout) -> StreamEvent { Data(Vec<u8>), Empty, Timeout, Error(Error) }`,
   `cancel_all()`, `release()`). All methods are `Send`; none of them panics by contract.
-- [ ] T008 `crates/driver-weact/src/testing.rs` (feature `test-support`): `RecordedUsb`, a `UsbBackend`/`UsbLink`
+- [X] T008 `crates/driver-weact/src/testing.rs` (feature `test-support`): `RecordedUsb`, a `UsbBackend`/`UsbLink`
   double driven by a script of steps (a board appears, disappears, renumerates after a given number of
   calls, answers a control request with given bytes or an error kind, delivers a bulk chunk, delivers an
   empty or short chunk, times out, disconnects, fails with a given typed error, hangs until released, panics),
