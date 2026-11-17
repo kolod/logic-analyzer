@@ -48,6 +48,7 @@ Shell::recent_files(&self) -> Vec<RecentFile>               // up to 15, newest 
 Shell::operation_running(&self) -> bool                     // a save or load
 Shell::save_settings(&mut self)                             // before exit: writes what is only in memory
 Shell::log_location(&self) -> Option<&Path>
+Shell::add_provider(&self, provider: Arc<dyn DeviceProvider>)  // registers a driver; the application does this at start-up
 ```
 
 `ViewSize { pixels, scale }` is the width of the signal area in physical pixels (the host keeps it

@@ -34,3 +34,21 @@ of the CI keeps it within the licences the project allows).
 
 The application icon and the session-file icon (`crates/app/assets/icon/`) are original works of the project,
 drawn for it, and are under the same licence as the code (GPL-3.0). They contain no third-party artwork or font.
+
+## Firmware of the WeAct LogicAnalyzer
+
+The WeAct LogicAnalyzer V1 has no firmware of its own, so the application ships the open-source firmware
+`fx2lafw` of the sigrok project and loads it into the board when it is plugged in
+(`crates/driver-weact/firmware/`). The image is built from the release
+sigrok-firmware-fx2lafw 0.1.7 with a small patch of this project (`fx2lafw-stop.patch`: a bounded START, a
+FIFO reset and a STOP command; firmware version 1.5), licensed under the GNU GPL version 2 or later (the helper library inside it
+under the GNU LGPL version 2.1 or later). The licence texts, the checksum of the image, the exact release
+and tag, and the source are recorded in `crates/driver-weact/firmware/SOURCE.md`. The image is loaded into
+another processor and is shipped as data; it is not linked into the program.
+
+| Library | Used for | Licence |
+|---------|----------|---------|
+| nusb | access to the board over USB (pure Rust) | Apache-2.0 or MIT |
+| serialport (tests only) | the rig tests talk to an Arduino Nano | MPL-2.0 |
+| sha2 (tests only) | a test checks the checksum of the firmware image | MIT or Apache-2.0 |
+

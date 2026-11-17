@@ -34,6 +34,7 @@ menu-capture-stop = Detener
 
 toolbar-device = Dispositivo
 toolbar-rate = Frecuencia de muestreo (Hz)
+toolbar-rate-choice = Frecuencia de muestreo
 toolbar-seed = Semilla
 toolbar-seed-random = aleatoria
 toolbar-profile = Señal

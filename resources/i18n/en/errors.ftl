@@ -139,3 +139,24 @@ error-decoder-too_many_stuck = Several decoders stopped responding and are still
 error-decoder-section_invalid = The decoder part of this session file is damaged. The decoders that could be read are restored; the capture and the rest of the session are not affected. Check the decoders and set up any that are missing again.
 error-decoder-unknown_decoder = This session uses a decoder that this version of the application does not have. It was skipped and the rest of the session is restored. Update the application if you need that decoder.
 error-decoder-options_skipped = Some saved decoder options were not understood and were skipped, so the defaults are used for them. Check the decoder settings.
+
+### WeAct LogicAnalyzer
+
+# The system does not let this program open the board.
+error-weact-access_denied = This program is not allowed to open the WeAct LogicAnalyzer. Check that the access rule (udev) from the documentation is installed, then unplug and reconnect the device.
+# Windows: the board is not bound to the WinUSB driver.
+error-weact-driver_missing = The WeAct LogicAnalyzer is not using the WinUSB driver, so it cannot be opened. Check the documentation for how to install WinUSB with Zadig, then reconnect the device.
+# Another program holds the board.
+error-weact-in_use = The WeAct LogicAnalyzer is in use by another program. Stop the other program (for example PulseView) and try again.
+# The board refused the firmware or reports a version this program does not know.
+error-weact-firmware_rejected = The WeAct LogicAnalyzer did not accept the firmware, or it reports a version this program does not know. Unplug the device, reconnect it and try again.
+# The board did not come back after the firmware was loaded.
+error-weact-not_renumerated = The WeAct LogicAnalyzer did not come back after its firmware was loaded. Unplug it, wait a few seconds and plug it in again.
+# The board is still being prepared (start was asked too early).
+error-weact-preparing = The WeAct LogicAnalyzer is still being prepared. Wait a moment and start again.
+# Nothing arrived after the capture was started.
+error-weact-no_data = The WeAct LogicAnalyzer did not send any data. Check the USB cable and try another USB port, then start the capture again.
+# The board stopped the capture because the computer could not keep up.
+error-weact-stream_stopped = The capture ended early because the computer could not keep up with the WeAct LogicAnalyzer. Everything captured so far is kept. Try a lower sample rate and avoid USB hubs and docking stations.
+# The firmware image that ships with the application is unusable.
+error-weact-firmware_invalid = The firmware of the WeAct LogicAnalyzer that came with this program is damaged. Please reinstall the application.

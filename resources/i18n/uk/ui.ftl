@@ -34,6 +34,7 @@ menu-capture-stop = Зупинити
 
 toolbar-device = Пристрій
 toolbar-rate = Частота дискретизації (Гц)
+toolbar-rate-choice = Частота дискретизації
 toolbar-seed = Зерно
 toolbar-seed-random = випадкове
 toolbar-profile = Сигнал

@@ -1,0 +1,144 @@
+diff --git a/fx2lafw.c b/fx2lafw.c
+index 1035713..653da36 100644
+--- a/fx2lafw.c
++++ b/fx2lafw.c
+@@ -134,6 +134,10 @@ BOOL handle_vendorcommand(BYTE cmd)
+ 		EP0BCL = 0;
+ 		SYNCDELAY();
+ 		return TRUE;
++	case CMD_STOP:
++		/* Abort a running acquisition and empty the FIFO; no data stage. */
++		gpif_acquisition_stop();
++		return TRUE;
+ 	case CMD_GET_FW_VERSION:
+ 		send_fw_version();
+ 		return TRUE;
+diff --git a/gpif-acquisition.c b/gpif-acquisition.c
+index 96476cc..9e537ac 100644
+--- a/gpif-acquisition.c
++++ b/gpif-acquisition.c
+@@ -188,8 +188,16 @@ bool gpif_acquisition_prepare(const struct cmd_start_acquisition *cmd)
+ 	int i;
+ 	volatile BYTE *pSTATE = &GPIF_WAVE_DATA;
+ 
+-	/* Ensure GPIF is idle before reconfiguration. */
+-	while (!(GPIFTRIG & 0x80));
++	/*
++	 * Make sure the GPIF is idle before it is reconfigured. The original
++	 * firmware waited here for the waveform to end by itself, which it only
++	 * does once the host has stopped reading and the FIFO is full: a START
++	 * sent while a capture was still being read blocked the main loop for
++	 * good and the board stopped answering the host. Abort the waveform and
++	 * empty the FIFO instead; this also drops stale samples of an earlier
++	 * capture.
++	 */
++	gpif_acquisition_stop();
+ 
+ 	/* Configure the EP2 FIFO. */
+ 	if (cmd->flags & CMD_START_FLAGS_SAMPLE_16BIT)
+@@ -255,29 +263,50 @@ void gpif_acquisition_start(void)
+ 	gpif_acquiring = RUNNING;
+ }
+ 
+-void gpif_poll(void)
++static void gpif_reset_fifo(void)
+ {
+-	/* Detect if acquisition has completed. */
+-	if ((gpif_acquiring == RUNNING) && (GPIFTRIG & 0x80)) {
+-		/* Activate NAK-ALL to avoid race conditions. */
+-		FIFORESET = 0x80;
+-		SYNCDELAY();
++	/* Activate NAK-ALL to avoid race conditions. */
++	FIFORESET = 0x80;
++	SYNCDELAY();
+ 
+-		/* Switch to manual mode. */
+-		EP2FIFOCFG = 0;
+-		SYNCDELAY();
++	/* Switch to manual mode. */
++	EP2FIFOCFG = 0;
++	SYNCDELAY();
+ 
+-		/* Reset EP2. */
+-		FIFORESET = 0x02;
+-		SYNCDELAY();
++	/* Reset EP2. */
++	FIFORESET = 0x02;
++	SYNCDELAY();
+ 
+-		/* Return to auto mode. */
+-		EP2FIFOCFG = bmAUTOIN;
+-		SYNCDELAY();
++	/* Return to auto mode. */
++	EP2FIFOCFG = bmAUTOIN;
++	SYNCDELAY();
++
++	/* Release NAK-ALL. */
++	FIFORESET = 0x00;
++	SYNCDELAY();
++}
+ 
+-		/* Release NAK-ALL. */
+-		FIFORESET = 0x00;
+-		SYNCDELAY();
++void gpif_acquisition_stop(void)
++{
++	uint16_t guard;
++
++	/* Abort the waveform if it is running, and wait for the GPIF to be idle. */
++	GPIFABORT = 0xff;
++	SYNCDELAY();
++	/* Bounded, so that this can never hang the main loop. */
++	for (guard = 0xffff; guard != 0 && !(GPIFTRIG & 0x80); guard--);
++
++	/* Nothing of an earlier capture may stay in the FIFO. */
++	gpif_reset_fifo();
++
++	gpif_acquiring = STOPPED;
++}
++
++void gpif_poll(void)
++{
++	/* Detect if acquisition has completed. */
++	if ((gpif_acquiring == RUNNING) && (GPIFTRIG & 0x80)) {
++		gpif_reset_fifo();
+ 
+ 		gpif_acquiring = STOPPED;
+ 	}
+diff --git a/include/command.h b/include/command.h
+index 686a743..b35e63f 100644
+--- a/include/command.h
++++ b/include/command.h
+@@ -26,6 +26,7 @@
+ #define CMD_GET_FW_VERSION		0xb0
+ #define CMD_START			0xb1
+ #define CMD_GET_REVID_VERSION		0xb2
++#define CMD_STOP			0xb3
+ 
+ #define CMD_START_FLAGS_CLK_CTL2_POS	4
+ #define CMD_START_FLAGS_WIDE_POS	5
+diff --git a/include/fx2lafw.h b/include/fx2lafw.h
+index c660661..ead9cae 100644
+--- a/include/fx2lafw.h
++++ b/include/fx2lafw.h
+@@ -37,7 +37,7 @@
+  * longer (properly) work with the new fx2lafw firmware.
+  */
+ #define FX2LAFW_VERSION_MAJOR	1
+-#define FX2LAFW_VERSION_MINOR	4
++#define FX2LAFW_VERSION_MINOR	5
+ 
+ #define LED_POLARITY		1 /* 1: active-high, 0: active-low */
+ 
+diff --git a/include/gpif-acquisition.h b/include/gpif-acquisition.h
+index a0c7af9..9bfb89e 100644
+--- a/include/gpif-acquisition.h
++++ b/include/gpif-acquisition.h
+@@ -33,6 +33,7 @@ extern enum gpif_status gpif_acquiring;
+ void gpif_init_la(void);
+ bool gpif_acquisition_prepare(const struct cmd_start_acquisition *cmd);
+ void gpif_acquisition_start(void);
++void gpif_acquisition_stop(void);
+ void gpif_poll(void);
+ 
+ #endif

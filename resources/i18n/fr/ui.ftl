@@ -34,6 +34,7 @@ menu-capture-stop = Arrêter
 
 toolbar-device = Appareil
 toolbar-rate = Fréquence d'échantillonnage (Hz)
+toolbar-rate-choice = Fréquence d'échantillonnage
 toolbar-seed = Graine
 toolbar-seed-random = aléatoire
 toolbar-profile = Signal

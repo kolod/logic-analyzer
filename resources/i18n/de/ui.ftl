@@ -34,6 +34,7 @@ menu-capture-stop = Anhalten
 
 toolbar-device = Gerät
 toolbar-rate = Abtastrate (Hz)
+toolbar-rate-choice = Abtastrate
 toolbar-seed = Startwert
 toolbar-seed-random = zufällig
 toolbar-profile = Signal

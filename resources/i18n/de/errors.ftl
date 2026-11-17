@@ -84,3 +84,15 @@ error-decoder-too_many_stuck = Mehrere Decoder antworten nicht mehr und hängen 
 error-decoder-section_invalid = Der Decoder-Teil dieser Sitzungsdatei ist beschädigt. Die lesbaren Decoder wurden wiederhergestellt; die Aufnahme und der Rest der Sitzung sind nicht betroffen.
 error-decoder-unknown_decoder = Diese Sitzung verwendet einen Decoder, den diese Version der Anwendung nicht hat. Er wurde übersprungen und der Rest der Sitzung wurde wiederhergestellt.
 error-decoder-options_skipped = Einige gespeicherte Decoder-Optionen wurden nicht verstanden und übersprungen, deshalb gelten dafür die Standardwerte. Prüfen Sie die Decoder-Einstellungen.
+
+### WeAct LogicAnalyzer
+
+error-weact-access_denied = Dieses Programm darf den WeAct LogicAnalyzer nicht öffnen. Prüfen Sie, ob die Zugriffsregel (udev) aus der Dokumentation installiert ist, und stecken Sie das Gerät dann aus und wieder ein.
+error-weact-driver_missing = Der WeAct LogicAnalyzer verwendet nicht den WinUSB-Treiber und kann deshalb nicht geöffnet werden. Lesen Sie in der Dokumentation nach, wie WinUSB mit Zadig installiert wird, und verbinden Sie das Gerät danach erneut.
+error-weact-in_use = Der WeAct LogicAnalyzer wird von einem anderen Programm verwendet. Beenden Sie das andere Programm (zum Beispiel PulseView) und versuchen Sie es erneut.
+error-weact-firmware_rejected = Der WeAct LogicAnalyzer hat die Firmware nicht angenommen oder meldet eine Version, die dieses Programm nicht kennt. Ziehen Sie das Gerät ab, verbinden Sie es erneut und versuchen Sie es noch einmal.
+error-weact-not_renumerated = Der WeAct LogicAnalyzer ist nach dem Laden der Firmware nicht zurückgekehrt. Ziehen Sie ihn ab, warten Sie einige Sekunden und stecken Sie ihn wieder ein.
+error-weact-preparing = Der WeAct LogicAnalyzer wird noch vorbereitet. Warten Sie einen Moment und starten Sie erneut.
+error-weact-no_data = Der WeAct LogicAnalyzer hat keine Daten gesendet. Prüfen Sie das USB-Kabel, versuchen Sie einen anderen USB-Anschluss und starten Sie die Aufnahme erneut.
+error-weact-stream_stopped = Die Aufnahme wurde vorzeitig beendet, weil der Computer mit dem WeAct LogicAnalyzer nicht Schritt halten konnte. Alles bisher Aufgenommene bleibt erhalten. Versuchen Sie eine niedrigere Abtastrate und vermeiden Sie USB-Hubs und Dockingstationen.
+error-weact-firmware_invalid = Die mit diesem Programm gelieferte Firmware für den WeAct LogicAnalyzer ist beschädigt. Bitte installieren Sie die Anwendung neu.
