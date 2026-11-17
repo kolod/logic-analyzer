@@ -1,0 +1,5 @@
+la-recording 1 hand-written from the protocol facts, not recorded from a board
+# Another program (PulseView, for example) holds the board: opening gives weact.in_use.
+expect open weact.in_use
+appear running winusb
+fail-open in_use

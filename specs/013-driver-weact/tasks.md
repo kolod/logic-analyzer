@@ -311,23 +311,23 @@ machine; without it they are skipped with a reason.
 
 ### Tests for User Story 4 (write first; they must fail)
 
-- [ ] T022 [P] [US4] `crates/driver-weact/tests/recordings.rs`: the text format of a recording (header line with a version and
+- [X] T022 [P] [US4] `crates/driver-weact/tests/recordings.rs`: the text format of a recording (header line with a version and
   an origin, one step per line: control answers, bulk chunks as hex, `short`, `empty`, `timeout`, `disconnect`,
   `error <code>`, `appear`, `disappear`, `renumerate`) round-trips (parse then write gives the same text); the
   parser returns typed errors, never panics, for an unknown step, bad hex, an odd number of hex digits, a missing
   header, a version it does not know, a line of 1 MB, 100,000 steps (a limit with a typed error), and files that
   are not UTF-8.
-- [ ] T023 [P] [US4] `crates/driver-weact/tests/replay.rs`: each file of `tests/recordings/` replays against the driver and
+- [X] T023 [P] [US4] `crates/driver-weact/tests/replay.rs`: each file of `tests/recordings/` replays against the driver and
   the outcome is the one named in its header (a ready 1 MHz capture of 100,000 samples equals the signal described
   in the header; a blank board is prepared; a stream that stops at 50 kHz ends with `weact.stream_stopped` and
   balanced books; an unplug in mid-stream; a board without WinUSB; a held board).
 
 ### Implementation for User Story 4
 
-- [ ] T024 [US4] `crates/driver-weact/src/testing.rs`: the recording format of T022 (parser and writer) and `RecordingLink`, a wrapper
+- [X] T024 [US4] `crates/driver-weact/src/testing.rs`: the recording format of T022 (parser and writer) and `RecordingLink`, a wrapper
   around any `UsbLink` that writes what passes through to a recording (used by the rig tests when
   `LA_RIG_RECORD=<directory>` is set); script construction from a recording. T022 passes.
-- [ ] T025 [US4] The recordings `crates/driver-weact/tests/recordings/*.rec` for the six scenarios of T023, **written by hand
+- [X] T025 [US4] The recordings `crates/driver-weact/tests/recordings/*.rec` for the six scenarios of T023, **written by hand
   from the USB contract**; each header says "hand-written from the protocol facts, not recorded from a board" and
   names the signal and the expected outcome in words. When the rig run of T038 produces real recordings they are
   added next to these after review, with their header saying where they came from. T023 passes.

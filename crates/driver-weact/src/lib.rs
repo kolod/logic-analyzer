@@ -20,6 +20,8 @@ mod nusb_backend;
 mod prepare;
 pub mod protocol;
 #[cfg(feature = "test-support")]
+pub mod recording;
+#[cfg(feature = "test-support")]
 pub mod testing;
 pub mod usb;
 
