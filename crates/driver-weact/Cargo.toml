@@ -1,0 +1,31 @@
+[package]
+name = "la-driver-weact"
+version = "0.1.0"
+description = "Driver for the WeAct LogicAnalyzer V1 (Cypress FX2, fx2lafw firmware)"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+la-core = { path = "../core" }
+la-devices = { path = "../devices" }
+la-diagnostics = { path = "../diagnostics" }
+nusb = "0.2"
+tracing = "0.1.44"
+
+[features]
+# Scripted USB double and recordings (`RecordedUsb`), for this crate's tests and for tests of
+# other crates that need a board without hardware. Not part of the stable API.
+test-support = []
+
+[dev-dependencies]
+la-devices = { path = "../devices", features = ["test-support"] }
+la-driver-weact = { path = ".", features = ["test-support"] }
+# Only the opt-in rig tests talk to the Arduino Nano. No libudev on Linux.
+serialport = { version = "4", default-features = false }
+# Only a test checks the checksum of the firmware image.
+sha2 = "0.10"
+
+[lints]
+workspace = true
