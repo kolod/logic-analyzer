@@ -228,6 +228,7 @@ fn read_presentation(r: &mut Reader<'_>, bounds: Bounds) -> Result<Option<Presen
             name: r.name()?,
             colour,
             visible: flags & FLAG_VISIBLE != 0,
+            height: 0,
         });
     }
     Ok(Some(Presentation { channels }))

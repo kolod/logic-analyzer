@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-logic-analyzer-session">
+    <comment>Logic analyzer session</comment>
+    <glob pattern="*.lasession"/>
+    <icon name="session"/>
+    <generic-icon name="session"/>
+  </mime-type>
+</mime-info>

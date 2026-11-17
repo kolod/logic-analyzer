@@ -58,8 +58,6 @@ menu-capture-stop = Stop
 toolbar-device = Device
 # Label of the sample rate field (the value is in hertz).
 toolbar-rate = Sample rate (Hz)
-# Label of the capture length field (the value is a number of samples).
-toolbar-length = Length (samples)
 # Label of the seed of the simulated signals.
 toolbar-seed = Seed
 # Placeholder of the seed field: a new seed is chosen at every start.
@@ -127,16 +125,8 @@ menu-view-page-left = Page left
 menu-view-page-right = Page right
 # Keep the view at the newest data of a running capture.
 menu-capture-follow = Follow latest data
-# Title of the panel that lists the channels.
-panel-channels = Channels
-# Tooltip of the button that moves a channel up in the order.
-channel-move-up = Move up
-# Tooltip of the button that moves a channel down in the order.
-channel-move-down = Move down
-# Tooltip of the button that changes the colour of a channel.
-channel-colour = Colour
 # Button: restore the default names, colours, order and visibility.
-channel-reset = Reset channels
+channel-reset = Reset
 
 ### Messages
 
@@ -171,6 +161,21 @@ menu-markers-remove-all = Remove all markers
 menu-markers-snap = Snap to transitions
 # Title of the panel that lists the markers.
 panel-markers = Markers
+panel-capture = Capture
+panel-view-capture = Capture settings
+panel-view-decoders = Decoders
+panel-view-markers = Markers and measuring
+capture-length-seconds = Length (seconds)
+capture-length-samples = Samples: { $count }
+capture-length-invalid = Enter the length as a number of seconds, such as 2.5.
+capture-length-decimals = Use at most nine digits after the point.
+capture-length-small = That is less than one sample at this sample rate.
+capture-length-large = That is longer than a capture can be.
+capture-length-no-rate = Set the sample rate first.
+capture-channels = Channels to record
+capture-channels-all = All
+capture-channels-none = None
+capture-no-channel = No channel is chosen: choose at least one to start.
 # The default name of a marker; the argument is its number.
 marker-default = Marker { $number }
 # Tooltip of the button that moves the view to a marker.
@@ -198,6 +203,10 @@ menu-file-save = Save
 menu-file-save-as = Save as…
 # Heading of the list of recently used session files in the File menu.
 menu-file-recent = Recent files
+menu-file-recent-empty = No recent files
+menu-file-recent-missing = (missing)
+menu-file-recent-remove-missing = Remove unavailable entries
+menu-file-recent-clear = Clear the list
 # Shown while a session file is being written.
 dialog-saving = Saving the session…
 # Shown while a session file is being read.
@@ -225,6 +234,8 @@ menu-view-scale-down = Smaller interface
 menu-help-about = About
 # Title of the settings dialog.
 settings-title = Settings
+settings-unsaved-title = Unsaved capture
+settings-remember-choice = Remember my choice
 # Label of the language choice.
 settings-language = Language
 # Label of the colour theme choice.
@@ -343,7 +354,6 @@ decoder-state-failed = Failed
 decoder-needs-channels = Choose the channels to start decoding.
 decoder-channel-none = (none)
 decoder-lane-show = Show the lane
-decoder-remove = Remove decoder
 decoder-annotations = Annotations: { $number }
 decoder-incomplete = Incomplete results
 decoder-selected = Selected annotation
@@ -370,5 +380,6 @@ dialog-remove-decoder-confirm = Remove them all
 
 ### Decoders: saving and opening
 notice-decoders-newer = This file has decoders from a newer version of the application. They are kept as they are and not shown; the capture opens normally.
+notice-layout-newer = This file holds signal heights saved by a newer version of the application. They are kept as they are and not shown; the capture opens with automatic heights.
 settings-save-decoder-results = Save decoded results with the session
 settings-save-decoder-results-note = Makes the file larger. Without it the decoders run again when the file is opened.

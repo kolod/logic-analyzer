@@ -307,6 +307,14 @@ fn check_invariants(shell: &Shell) -> Result<(), String> {
     if !(low..=high).contains(&state.settings.ui_scale_percent) {
         return Err("the scale is out of range".into());
     }
+    if let Some(style) = state
+        .presentation
+        .channels
+        .iter()
+        .find(|c| c.height != 0 && !(24..=240).contains(&c.height))
+    {
+        return Err(format!("the height {} is out of range", style.height));
+    }
     if state.settings.recent_files.len() > la_host::settings::MAX_RECENT_FILES {
         return Err("too many recent files".into());
     }
@@ -644,6 +652,34 @@ fn random_action(rng: &mut Lcg, files: &Files, shell: &Shell) -> Command {
         51 if rng.below(8) == 0 => Command::TestPanic,
         52 => Command::RequestClose,
         53 => Command::Quit,
+        // These write the settings file, so they are drawn rarely: a slow disk would otherwise
+        // dominate the time of the walk.
+        54 if rng.below(8) == 0 => Command::SetSidePanel(
+            [
+                la_host::SidePanel::Capture,
+                la_host::SidePanel::Decoders,
+                la_host::SidePanel::Markers,
+                la_host::SidePanel::Hidden,
+            ][rng.below(4) as usize],
+        ),
+        55..=57 => Command::ScrollToEdge {
+            channel,
+            direction: if rng.below(2) == 0 {
+                la_host::EdgeDirection::Next
+            } else {
+                la_host::EdgeDirection::Previous
+            },
+        },
+        58 if rng.below(8) == 0 => Command::RemoveRecentFile(match rng.below(3) {
+            0 => files.good.clone(),
+            1 => files.targets[rng.below(3) as usize].clone(),
+            _ => files.missing.clone(),
+        }),
+        59 if rng.below(8) == 0 => Command::ClearRecentFiles,
+        60..=61 => Command::SetChannelHeight {
+            channel,
+            height: [0, 1, 24, 100, 240, 241, u16::MAX][rng.below(7) as usize],
+        },
         _ => Command::StartCapture,
     }
 }
@@ -745,8 +781,15 @@ fn walk(seed: u64, steps: u64) {
                 command,
                 Command::SaveSession | Command::SaveSessionAs(_) | Command::Decide(Decision::Save)
             );
+            let scrolled = matches!(command, Command::ScrollToEdge { .. });
             history.push(format!("{step}: {command:?}"));
             let outcome = shell.apply(command);
+            if scrolled && matches!(outcome, la_host::Outcome::Done(_)) {
+                // A scroll to an edge turns following the newest data off and keeps the zoom valid.
+                if shell.state().follow_latest {
+                    fail("following is still on after a scroll".into(), &history);
+                }
+            }
             if let Some(last) = history.last_mut() {
                 last.push_str(&format!(" -> {outcome:?}"));
             }

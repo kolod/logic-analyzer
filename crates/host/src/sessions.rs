@@ -27,6 +27,15 @@ use crate::state::{Activity, OperationKind, OperationView, State, Unsaved};
 use crate::view_section::{self, Bounds, Decoded, ViewState};
 use crate::window::ViewWindow;
 
+/// One entry of the list of recent files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecentFile {
+    /// The path as it was remembered.
+    pub path: PathBuf,
+    /// Whether the file is there now.
+    pub exists: bool,
+}
+
 /// The save or load the shell is watching.
 pub(crate) enum Operation {
     /// Writing `path`; `then` is the command that waits for this save.
@@ -82,6 +91,10 @@ impl Operation {
     }
 }
 
+fn layout_tag() -> Option<SectionTag> {
+    SectionTag::new(crate::layout_section::TAG).ok()
+}
+
 fn view_tag() -> Option<SectionTag> {
     SectionTag::new(view_section::TAG).ok()
 }
@@ -118,6 +131,19 @@ fn session_data(shell: &Shell, state: &State) -> Result<SessionData, Error> {
     for section in shell.decoder_sections(state)? {
         if !state.session_extras.iter().any(|s| s.tag == section.tag) {
             data = data.with_section(section)?;
+        }
+    }
+    // The heights of the signals: a newer LAYT section of the opened file is kept as it is.
+    if let (Some(payload), Some(tag)) = (
+        crate::layout_section::encode(&state.presentation),
+        layout_tag(),
+    ) {
+        if !state.session_extras.iter().any(|s| s.tag == tag) {
+            data = data.with_section(Section {
+                tag,
+                critical: false,
+                payload,
+            })?;
         }
     }
     if let (Some(view), Some(tag)) = (view_state(state), view_tag()) {
@@ -316,7 +342,33 @@ impl Shell {
         let dann_tag = SectionTag::new(crate::decoder_sessions::DANN_TAG).ok();
         let mut deco_section: Option<&Section> = None;
         let mut dann_section: Option<&Section> = None;
+        let layout = layout_tag();
+        let mut heights: Vec<(u8, u16)> = Vec::new();
         for section in session.extras() {
+            if Some(&section.tag) == layout.as_ref() {
+                match crate::layout_section::decode(&section.payload, bounds.channels) {
+                    Ok(crate::layout_section::Decoded::Heights(list)) => heights = list,
+                    Ok(crate::layout_section::Decoded::Newer) => {
+                        // Kept untouched; the capture shows with automatic heights.
+                        extras.push(section.clone());
+                        state.notices.add(
+                            Severity::Info,
+                            NoticeContent::Info {
+                                key: "notice-layout-newer",
+                                text: None,
+                            },
+                            crate::shell::now_seconds(),
+                        );
+                        notices = true;
+                    }
+                    Err(e) => {
+                        // The invalid section is dropped: it is not written back.
+                        report_into(state, Severity::Warning, &e);
+                        notices = true;
+                    }
+                }
+                continue;
+            }
             if Some(&section.tag) == deco_tag.as_ref() {
                 deco_section = Some(section);
                 continue;
@@ -356,6 +408,9 @@ impl Shell {
                     notices = true;
                 }
             }
+        }
+        for (channel, height) in heights {
+            presentation.set_height(channel, height);
         }
         let limits = window_limits(bounds.length, state.view_size.pixels);
         state.decoders.reset();
@@ -401,6 +456,22 @@ impl Shell {
         changes
     }
 
+    /// Takes a file out of the list of recent files (the file itself stays); `None` when it is
+    /// not listed.
+    pub(crate) fn remove_recent(&mut self, state: &mut State, path: &Path) -> Option<Changes> {
+        let text = path.to_string_lossy();
+        let recent = &mut state.settings.recent_files;
+        let before = recent.len();
+        recent.retain(|r| r.as_str() != text);
+        (recent.len() != before).then(|| Changes::SETTINGS | self.persist_settings(state))
+    }
+
+    /// Empties the list of recent files.
+    pub(crate) fn clear_recent(&mut self, state: &mut State) -> Changes {
+        state.settings.recent_files.clear();
+        Changes::SETTINGS | self.persist_settings(state)
+    }
+
     /// Remembers a file in the list of recent files and saves the settings.
     fn add_recent(&mut self, state: &mut State, path: &Path) -> Changes {
         let text = path.to_string_lossy().into_owned();
@@ -426,15 +497,18 @@ impl Shell {
         }
     }
 
-    /// The recent files that still exist, newest first.
+    /// The recent files, newest first, each marked with whether it still exists.
     #[must_use]
-    pub fn recent_files(&self) -> Vec<PathBuf> {
+    pub fn recent_files(&self) -> Vec<RecentFile> {
         self.state
             .settings
             .recent_files
             .iter()
-            .map(PathBuf::from)
-            .filter(|p| p.exists())
+            .map(|text| {
+                let path = PathBuf::from(text);
+                let exists = path.is_file();
+                RecentFile { path, exists }
+            })
             .collect()
     }
 

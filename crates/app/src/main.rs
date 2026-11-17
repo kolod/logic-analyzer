@@ -8,6 +8,9 @@ mod decoder_view;
 mod dialogs;
 mod fonts;
 mod frame_log;
+mod icons;
+mod lane_layout;
+mod side_panel;
 mod signal_view;
 mod theme;
 
@@ -51,7 +54,21 @@ fn main() -> iced::Result {
             position,
             min_size: Some(minimum),
             exit_on_close_request: false,
+            icon: window_icon(),
             ..window::Settings::default()
         })
         .run()
+}
+
+/// The icon of the window: 64 x 64 raw pixels embedded in the executable. A failure to build it is
+/// logged and the window has the default icon; it never stops the application.
+fn window_icon() -> Option<window::Icon> {
+    const PIXELS: &[u8] = include_bytes!("../assets/icon/app-64.rgba");
+    match window::icon::from_rgba(PIXELS.to_vec(), 64, 64) {
+        Ok(icon) => Some(icon),
+        Err(error) => {
+            tracing::warn!(target: "la_app", %error, "the window icon could not be built");
+            None
+        }
+    }
 }

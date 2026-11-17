@@ -129,6 +129,77 @@ impl Variant {
     }
 }
 
+/// The relative luminance of a colour (WCAG 2).
+fn relative_luminance(c: Color) -> f32 {
+    let channel = |v: f32| {
+        if v <= 0.039_28 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+}
+
+/// The colour of the number on a channel button that is filled with `background`: black or white,
+/// whichever contrasts better.
+#[must_use]
+pub fn channel_button_text(background: Color) -> Color {
+    let luminance = relative_luminance(background);
+    // Contrast with white is 1.05 / (L + 0.05), with black (L + 0.05) / 0.05.
+    if 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.05 {
+        Color::WHITE
+    } else {
+        Color::BLACK
+    }
+}
+
+/// The style of the button that chooses whether a channel is recorded: off, the number and the
+/// border are in the colour of the channel on the colour of the panel; on, the border and the inside
+/// are in the colour of the channel and the number is readable on it.
+#[must_use]
+pub fn channel_button_style(
+    variant: Variant,
+    colour: Colour,
+    on: bool,
+    theme: &Theme,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Style {
+    use iced::widget::button::{Status, Style};
+    let channel = variant.channel(colour);
+    let panel = theme.palette().background;
+    let (background, text) = if on {
+        (channel, channel_button_text(channel))
+    } else {
+        (panel, channel)
+    };
+    let shade = match status {
+        Status::Hovered => 0.12,
+        Status::Pressed => 0.2,
+        Status::Active | Status::Disabled => 0.0,
+    };
+    let background = Color {
+        r: background.r + (text.r - background.r) * shade,
+        g: background.g + (text.g - background.g) * shade,
+        b: background.b + (text.b - background.b) * shade,
+        a: background.a,
+    };
+    Style {
+        background: Some(background.into()),
+        text_color: if status == Status::Disabled {
+            Color { a: 0.6, ..text }
+        } else {
+            text
+        },
+        border: iced::Border {
+            color: channel,
+            width: 1.5,
+            radius: 4.0.into(),
+        },
+        ..Style::default()
+    }
+}
+
 fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color::from_rgb8(r, g, b)
 }
@@ -232,6 +303,40 @@ mod tests {
 
     fn distance(a: Color, b: Color) -> f32 {
         ((a.r - b.r).powi(2) + (a.g - b.g).powi(2) + (a.b - b.b).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn the_number_on_a_filled_channel_button_can_be_read_on_every_palette_colour_in_every_variant()
+    {
+        for variant in [Variant::Dark, Variant::Light, Variant::HighContrast] {
+            for index in 0..PALETTE_SIZE {
+                let background = variant.channel(Colour::Palette(index));
+                let text = channel_button_text(background);
+                assert!(
+                    text == Color::BLACK || text == Color::WHITE,
+                    "{variant:?} {index}: {text:?}"
+                );
+                assert!(
+                    contrast(text, background) >= 3.0,
+                    "{variant:?} {index}: {}",
+                    contrast(text, background)
+                );
+            }
+            // A custom colour too.
+            for (r, g, b) in [
+                (0, 0, 0),
+                (255, 255, 255),
+                (128, 128, 128),
+                (255, 0, 0),
+                (0, 0, 255),
+            ] {
+                let background = Color::from_rgb8(r, g, b);
+                let text = channel_button_text(background);
+                assert!(contrast(text, background) >= 3.0, "{r} {g} {b}");
+            }
+        }
+        assert_eq!(channel_button_text(Color::BLACK), Color::WHITE);
+        assert_eq!(channel_button_text(Color::WHITE), Color::BLACK);
     }
 
     #[test]

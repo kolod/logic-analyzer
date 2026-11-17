@@ -25,6 +25,12 @@ their own and the licence and copyright notices travel with them.
 | serde, serde_json | settings and structured data | MIT or Apache-2.0 |
 | directories | where the per-user settings live | MIT or Apache-2.0 |
 | tracing, tracing-subscriber | the log | MIT |
+| winresource (Windows builds only) | puts the icon into the executable | MIT |
 
 The complete list, with exact versions and licences, comes from `cargo deny list` (the `deny` job
 of the CI keeps it within the licences the project allows).
+
+## Icons
+
+The application icon and the session-file icon (`crates/app/assets/icon/`) are original works of the project,
+drawn for it, and are under the same licence as the code (GPL-3.0). They contain no third-party artwork or font.

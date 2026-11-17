@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Logic Analyzer
+Comment=Capture, view and decode digital signals
+Exec=logic-analyzer %f
+Icon=logic-analyzer
+Terminal=false
+Categories=Development;Electronics;
+MimeType=application/x-logic-analyzer-session;

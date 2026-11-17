@@ -26,6 +26,8 @@ pub struct ChannelView {
     pub name: String,
     /// The colour of the waveform.
     pub colour: Colour,
+    /// The height of its signal in logical pixels (0: automatic).
+    pub height: u16,
 }
 
 /// What the view can show.
@@ -109,8 +111,51 @@ pub struct ChannelPlan {
     pub name: String,
     /// The colour of the waveform.
     pub colour: Colour,
+    /// The height of its signal in logical pixels (0: automatic).
+    pub height: u16,
+    /// A real edge of this channel lies before the window.
+    pub edge_before: bool,
+    /// A real edge of this channel lies after the window.
+    pub edge_after: bool,
     /// Contiguous, sorted segments that cover every column.
     pub segments: Vec<Segment>,
+}
+
+/// Whether the change at `edge` (between `edge - 1` and `edge`) has data on both sides.
+fn is_real(snapshot: &Snapshot, channel: u8, edge: u64) -> bool {
+    let known = |position: u64| {
+        snapshot
+            .level_at(channel, position)
+            .is_ok_and(|level| level != LevelState::Missing)
+    };
+    edge > 0 && known(edge.saturating_sub(1)) && known(edge)
+}
+
+/// The position of the first real transition of `channel` after `from`; edges next to a gap are
+/// skipped (at most two for each gap, which bounds the search).
+pub(crate) fn real_edge_after(snapshot: &Snapshot, channel: u8, from: u64) -> Option<u64> {
+    let mut at = from;
+    for _ in 0..=snapshot.gaps().len().saturating_mul(2) {
+        let edge = snapshot.next_transition(channel, at).ok().flatten()?;
+        if is_real(snapshot, channel, edge.position) {
+            return Some(edge.position);
+        }
+        at = edge.position;
+    }
+    None
+}
+
+/// The position of the last real transition of `channel` before `before`.
+pub(crate) fn real_edge_before(snapshot: &Snapshot, channel: u8, before: u64) -> Option<u64> {
+    let mut at = before;
+    for _ in 0..=snapshot.gaps().len().saturating_mul(2) {
+        let edge = snapshot.previous_transition(channel, at).ok().flatten()?;
+        if is_real(snapshot, channel, edge.position) {
+            return Some(edge.position);
+        }
+        at = edge.position;
+    }
+    None
 }
 
 /// A marker inside the visible window.
@@ -269,6 +314,9 @@ fn build_inner(
                 channel: view.channel,
                 name: view.name.clone(),
                 colour: view.colour,
+                height: view.height,
+                edge_before: false,
+                edge_after: false,
                 segments: vec![Segment::Beyond {
                     from: 0,
                     to: pixels,
@@ -290,6 +338,9 @@ fn build_inner(
             channel: view.channel,
             name: view.name.clone(),
             colour: view.colour,
+            height: view.height,
+            edge_before: real_edge_before(snapshot, view.channel, window.start).is_some(),
+            edge_after: real_edge_after(snapshot, view.channel, end.saturating_sub(1)).is_some(),
             segments,
         });
     }

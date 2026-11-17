@@ -22,12 +22,14 @@ use crate::devices::{ConfigDraft, fresh_seed, problems};
 use crate::error;
 use crate::markers::{Markers, MeasurementText, measurement, measurement_text, nearest_transition};
 use crate::notices::{Notice, NoticeContent, NoticeId, NoticeList, Severity, notice_text};
-use crate::plan::{ChannelView, FramePlan, MarkerPlan, build_plan};
+use crate::plan::{
+    ChannelView, FramePlan, MarkerPlan, build_plan, real_edge_after, real_edge_before,
+};
 use crate::presentation::Presentation;
 use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
 use crate::sessions::Operation;
 use crate::settings::{RealSettingsFs, Settings, SettingsFs};
-use crate::state::{Activity, State, Unsaved, Versions};
+use crate::state::{Activity, EdgeDirection, State, Unsaved, Versions};
 use crate::status::{StatusLine, status_line};
 use crate::window::{ViewSize, ViewWindow, WindowLimits};
 
@@ -193,7 +195,11 @@ impl Shell {
             language: localizer.language(),
             settings: loaded.settings,
             decoders: decoder_state,
+            side_panel: crate::state::SidePanel::default(),
         };
+        if let Some(text) = state.settings.side_panel.as_deref() {
+            state.side_panel = crate::state::SidePanel::from_setting(text);
+        }
         revalidate(&mut state);
         sync_presentation(&mut state);
         if let Some(problem) = loaded.problem {
@@ -326,6 +332,7 @@ impl Shell {
                     channel: style.index,
                     name: style.name.clone(),
                     colour: style.colour,
+                    height: style.height,
                 })
                 .collect()
         } else {
@@ -441,8 +448,11 @@ impl Shell {
         let acquisition = &run.acquisition;
         let _ = acquisition.drain_events();
         let progress = acquisition.progress();
-        let snapshot = acquisition.capture().snapshot();
+        // The outcome first, the snapshot after it: once there is an outcome the capture is closed,
+        // so a snapshot taken afterwards holds every sample. The other way round, a capture that
+        // ends in between would be shown (and saved) as finished with the last samples missing.
         let outcome = acquisition.outcome();
+        let snapshot = acquisition.capture().snapshot();
         let elapsed_ms = u64::try_from(now.saturating_duration_since(run.started).as_millis())
             .unwrap_or(u64::MAX);
         let view = ProgressView {
@@ -535,11 +545,29 @@ impl Shell {
                 Outcome::Done(changes)
             }
             Ok(Ok(Executed::Needs(guarded))) => {
+                // The answer to a question about unsaved data may be remembered: it is applied at
+                // once, as if it had been given (a question about removing a decoder is not about
+                // unsaved data and is always asked).
+                let remembered = working
+                    .settings
+                    .unsaved_choice
+                    .as_deref()
+                    .and_then(Decision::from_setting)
+                    .filter(|_| !matches!(guarded, Guarded::RemoveDecoder(_)))
+                    // Only Save and Discard can be remembered: a remembered Cancel would silently
+                    // stop quitting, closing and opening. A stale word in the file asks instead.
+                    .filter(|decision| *decision != Decision::Cancel);
                 working.pending_decision = Some(guarded.clone());
                 working.version = working.version.saturating_add(1);
                 working.versions.bump(Changes::DECISION);
                 self.state = working;
-                Outcome::NeedsDecision(guarded)
+                match remembered {
+                    Some(decision) => {
+                        tracing::info!(target: "la_host", answer = decision.as_setting(), "remembered answer");
+                        self.apply(Command::Decide(decision))
+                    }
+                    None => Outcome::NeedsDecision(guarded),
+                }
             }
             Ok(Err(Reject::Ignored(code))) => {
                 tracing::debug!(target: "la_host", command = name, code, "command ignored");
@@ -945,6 +973,73 @@ impl Shell {
             Command::MoveChannel { from, to } => {
                 edit_presentation(state, |p| p.move_channel(from, to))
             }
+            Command::SetChannelHeight { channel, height } => {
+                edit_presentation(state, |p| p.set_height(channel, height))
+            }
+            Command::SetSidePanel(view) => {
+                state.side_panel = view;
+                state.settings.side_panel = Some(view.as_setting().to_owned());
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | saved)
+            }
+            Command::SetPanelWidth(width) => {
+                let (low, high) = crate::settings::PANEL_WIDTH_RANGE;
+                state.settings.panel_width = Some(width.clamp(low, high));
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | saved)
+            }
+            Command::SetUnsavedChoice(choice) => {
+                if choice == Some(Decision::Cancel) {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                state.settings.unsaved_choice = choice.map(|c| c.as_setting().to_owned());
+                let saved = self.persist_settings(state);
+                changed(Changes::SETTINGS | saved)
+            }
+            Command::ScrollToEdge { channel, direction } => {
+                let limits =
+                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                let capture = state
+                    .capture
+                    .as_ref()
+                    .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                let shown = capture.description.enabled_mask() >> u32::from(channel).min(31) & 1
+                    == 1
+                    && state
+                        .presentation
+                        .channels
+                        .iter()
+                        .any(|style| style.index == channel && style.visible);
+                if !shown {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                let current = current_window(state, &limits);
+                let window = match direction {
+                    EdgeDirection::Next => {
+                        let edge = real_edge_after(
+                            &capture.snapshot,
+                            channel,
+                            current.end().saturating_sub(1),
+                        )
+                        .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                        current.with_edge_at(&limits, edge, current.length / 4)
+                    }
+                    EdgeDirection::Previous => {
+                        let edge = real_edge_before(&capture.snapshot, channel, current.start)
+                            .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
+                        current.with_edge_at(&limits, edge, current.length.saturating_mul(3) / 4)
+                    }
+                };
+                state.window = window;
+                state.auto_fit = false;
+                state.follow_latest = false;
+                changed(Changes::WINDOW)
+            }
+            Command::RemoveRecentFile(path) => self
+                .remove_recent(state, &path)
+                .map(Executed::Changed)
+                .ok_or(Reject::Ignored(error::INVALID_COMMAND)),
+            Command::ClearRecentFiles => Ok(Executed::Changed(self.clear_recent(state))),
             Command::ResetPresentation => {
                 state.presentation = Presentation::defaults(
                     presentation_channels(state),

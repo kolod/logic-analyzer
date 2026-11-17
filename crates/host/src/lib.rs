@@ -14,10 +14,12 @@
 pub mod axis;
 pub mod capture;
 mod command;
+pub mod config;
 mod decoder_sessions;
 pub mod decoders;
 pub mod devices;
 pub mod error;
+pub mod layout_section;
 pub mod markers;
 pub mod notices;
 pub mod plan;
@@ -37,9 +39,12 @@ pub use command::{
     PanStep, Tick, ZoomAnchor, ZoomDirection, ZoomFactor,
 };
 pub use devices::SignalProfile;
+pub use sessions::RecentFile;
 pub use shell::{Shell, ShellConfig};
-pub use state::{Activity, OperationKind, OperationView, State, Unsaved, Versions};
+pub use state::{
+    Activity, EdgeDirection, OperationKind, OperationView, SidePanel, State, Unsaved, Versions,
+};
 
 /// Version of the host API contract (`docs/host-api.md`). A change to commands, state fields,
 /// events or their meaning changes this value together with the document.
-pub const HOST_API_VERSION: &str = "1.1";
+pub const HOST_API_VERSION: &str = "1.2";

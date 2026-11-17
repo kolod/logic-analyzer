@@ -91,6 +91,29 @@ pub enum Decision {
     Cancel,
 }
 
+impl Decision {
+    /// The word the settings file keeps for a remembered answer.
+    #[must_use]
+    pub fn as_setting(self) -> &'static str {
+        match self {
+            Decision::Save => "save",
+            Decision::Discard => "discard",
+            Decision::Cancel => "cancel",
+        }
+    }
+
+    /// The answer a settings word stands for; `None` for a word that is none of the three.
+    #[must_use]
+    pub fn from_setting(word: &str) -> Option<Self> {
+        match word {
+            "save" => Some(Decision::Save),
+            "discard" => Some(Decision::Discard),
+            "cancel" => Some(Decision::Cancel),
+            _ => None,
+        }
+    }
+}
+
 /// A command that waits for a [`Decision`] because unsaved data would be lost.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Guarded {
@@ -195,8 +218,36 @@ pub enum Command {
         /// New position in the order.
         to: usize,
     },
-    /// Restores the default names, colours, order and visibility.
+    /// Sets the height of the signal of a channel (0: automatic, otherwise 24 to 240 pixels).
+    SetChannelHeight {
+        /// The channel.
+        channel: u8,
+        /// The height in logical pixels.
+        height: u16,
+    },
+    /// Restores the default names, colours, order, heights and visibility.
     ResetPresentation,
+    /// Chooses the view of the panel at the right edge (or hides it).
+    SetSidePanel(crate::state::SidePanel),
+    /// Sets the width of the panel at the right edge in logical pixels, kept within
+    /// `settings::PANEL_WIDTH_RANGE`. Saved in the settings.
+    SetPanelWidth(u32),
+    /// Remembers the answer to the question about an unsaved capture (`Some(Save)` or
+    /// `Some(Discard)`: the question is not asked again and the answer is applied) or goes back to
+    /// asking (`None`). `Cancel` cannot be remembered and is ignored. Saved in the settings.
+    SetUnsavedChoice(Option<Decision>),
+    /// Scrolls to the next edge of a channel beyond the visible window, a quarter of the view from
+    /// the side it came from; the zoom does not change.
+    ScrollToEdge {
+        /// The channel.
+        channel: u8,
+        /// The side to look on.
+        direction: crate::state::EdgeDirection,
+    },
+    /// Removes a file from the list of recent files.
+    RemoveRecentFile(PathBuf),
+    /// Empties the list of recent files.
+    ClearRecentFiles,
     /// Places a marker.
     PlaceMarker {
         /// Sample position.
@@ -364,6 +415,7 @@ impl Command {
                 | Command::SetChannelColour { .. }
                 | Command::SetChannelVisible { .. }
                 | Command::MoveChannel { .. }
+                | Command::SetChannelHeight { .. }
                 | Command::ResetPresentation
                 | Command::PlaceMarker { .. }
                 | Command::MoveMarker { .. }
@@ -408,6 +460,13 @@ impl Command {
             Command::SetChannelVisible { .. } => "set_channel_visible",
             Command::MoveChannel { .. } => "move_channel",
             Command::ResetPresentation => "reset_presentation",
+            Command::SetChannelHeight { .. } => "set_channel_height",
+            Command::SetSidePanel(_) => "set_side_panel",
+            Command::SetUnsavedChoice(_) => "set_unsaved_choice",
+            Command::SetPanelWidth(_) => "set_panel_width",
+            Command::ScrollToEdge { .. } => "scroll_to_edge",
+            Command::RemoveRecentFile(_) => "remove_recent_file",
+            Command::ClearRecentFiles => "clear_recent_files",
             Command::PlaceMarker { .. } => "place_marker",
             Command::MoveMarker { .. } => "move_marker",
             Command::RenameMarker { .. } => "rename_marker",

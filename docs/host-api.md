@@ -1,6 +1,6 @@
 # Host API
 
-Version: 1.1
+Version: 1.2
 
 This is the authoritative description of the API between a user interface and the core. The crate
 is `la-host`; its constant `la_host::HOST_API_VERSION` and the version line above must agree (a test
@@ -44,7 +44,7 @@ Shell::status_line(&self) -> StatusLine
 Shell::measurement_text(&self) -> Option<MeasurementText>   // distance and frequency of two markers
 Shell::shortcut_table(&self) -> Vec<ShortcutEntry>          // data: menu path, accelerator, action
 Shell::wants_ticks(&self) -> Tick                           // Fast (50 ms) while something runs, else Slow (500 ms)
-Shell::recent_files(&self) -> Vec<PathBuf>                  // the ones that still exist
+Shell::recent_files(&self) -> Vec<RecentFile>               // up to 15, newest first; RecentFile { path, exists }
 Shell::operation_running(&self) -> bool                     // a save or load
 Shell::save_settings(&mut self)                             // before exit: writes what is only in memory
 Shell::log_location(&self) -> Option<&Path>
@@ -89,7 +89,13 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetChannelColour { channel, colour }` | a palette entry or a chosen colour |
 | | `SetChannelVisible { channel, visible }` | the one flag of a channel: shows it (a lane is drawn when the capture on screen has data for it) and makes the next capture record it, so it also changes `EditConfig(Channels)`; ignored while a capture runs |
 | | `MoveChannel { from, to }` | changes the order |
-| | `ResetPresentation` | defaults for names, colours, order and visibility |
+| | `SetChannelHeight { channel, height }` | the height of the signal of a channel in logical pixels: 0 is automatic, anything else is clamped into 24 to 240; allowed at any time; saved with the session in the optional `LAYT` section |
+| | `ResetPresentation` | defaults for names, colours, order, heights and visibility |
+| Side panel | `SetSidePanel(SidePanel)` | the view of the panel at the right edge: `Capture` (the default), `Decoders`, `Markers` or `Hidden`; kept in the settings |
+| | `ScrollToEdge { channel, direction }` | the window moves, zoom unchanged, so that the first real edge of the channel beyond the window on that side (`Next`: at or after its end; `Previous`: before its start) is a quarter of the window from the side it came from; follow-latest turns off; ignored when there is no such edge |
+| | `SetPanelWidth(u32)` | the width of the panel in logical pixels, kept within 220 to 480 (the default is 280); kept in the settings (`panel_width`) |
+| Unsaved data | `SetUnsavedChoice(Option<Decision>)` | remembers the answer to the question about an unsaved capture (`Some(Save)` or `Some(Discard)`: the question is no longer asked and the answer is applied as if it had been given; `None`: ask every time; `Some(Cancel)` is ignored, since a remembered Cancel would silently stop quitting and opening); kept in the settings (`unsaved_choice`: `save` or `discard`; any other word asks). A remembered Save of a capture that has no file yet still asks for a name (`needs_path`); the question about removing a decoder is always asked |
+| Recent files | `RemoveRecentFile(path)` / `ClearRecentFiles` | edit the list of the 15 most recent files |
 | Markers | `PlaceMarker { position, channel }` | at most 64; snaps to the nearest transition of `channel` when snapping is on |
 | | `MoveMarker { id, position, channel }` | snaps like a new marker |
 | | `RenameMarker { id, name }` | sanitized like a channel name |
@@ -175,12 +181,48 @@ every zoom level (a test sweeps the zoom). A failure returns a plan whose `state
 `CannotDraw(host.render_failed)` instead of panicking. The plan includes the markers inside the
 window.
 
+Since 1.2 every shown channel's plan has `height` (the height the user set, 0 for automatic),
+`edge_before` and `edge_after`: whether a real edge of that channel lies before the window or after it.
+They come from the storage's `previous_transition` and `next_transition` (O(log N) each, a few more
+for each gap that is skipped), computed once per plan for the shown channels only. An edge is *real*
+when the samples on both sides of it exist: the change next to a gap is not an edge.
+
 Since 1.1 it also carries `lanes` (one lane plan per visible decoder instance: rows of spans and marks
 and a row of dense cells, at most `4·W` cells) and `overlays` (per shown channel and instance, the marks,
 edges and dense cells that instance draws on the channel, at most `2·W`), built with one window query per
 store (`la_decoders::lanes`). Every annotation intersecting the window is represented exactly once; an
 error is never hidden in a dense cell without its error count. The plan never reads samples and never
 fails.
+
+### `ScrollToEdge`, exactly
+
+Let the window be `[start, start + length)` over a capture of `capture_length` samples; an edge at
+position `p` is the change between `p - 1` and `p`.
+
+- `Next`: the edge is the first real transition of the channel at a position `>= start + length`; the
+  new start is `edge - length / 4`.
+- `Previous`: the edge is the last real transition at a position `< start`; the new start is
+  `edge - (3 * length) / 4` (integer division).
+- The start is clamped to `[0, capture_length - length]` (0 when the window is longer than the
+  capture); the length never changes; following the newest data is turned off.
+- No capture, an unknown or hidden channel, or no edge on that side: `Ignored(host.invalid_command)`
+  and nothing changes.
+
+## Seconds and samples
+
+`la_host::config::samples_for_seconds(rate_hz, text)` turns what the user typed as the length of a
+capture into a number of samples, and `seconds_for_samples(rate_hz, samples)` writes the length back.
+Both are exact integer arithmetic: the text is a decimal number with at most nine digits after the
+point (no sign, no exponent, no separator but the point), the result is rounded half up, and a text
+with less than half a sample, more than `u64::MAX` samples or a zero rate is refused with a
+`SecondsError`. The configuration of a capture still counts samples; seconds are how it is entered.
+
+## Storage queries
+
+`Snapshot::next_transition(channel, from)` is the first transition with a position greater than
+`from`, and `Snapshot::previous_transition(channel, before)` the last one with a position smaller than
+`before`; both return `Option<Edge>` in O(log N) and `storage.channel_out_of_range` for a channel that
+does not exist.
 
 ## Decoders
 
@@ -230,6 +272,22 @@ The presentation, markers and window are stored in the optional `VIEW` section o
 the look differs from the defaults. An invalid section opens the capture with defaults and a
 `host.view_invalid` warning and is dropped on the next save; a newer one is kept untouched.
 
+## The `LAYT` section of a session file
+
+The heights of the channels the user set are stored in the optional `LAYT` section
+(`specs/014-gui-improvements/contracts/layt-section.md`): a version, a count and (channel, height)
+pairs. It is written only when at least one height differs from automatic, so a file of an earlier
+version stays byte-compatible. A reader that does not know the section keeps it as an extra and
+writes it back unchanged; an invalid payload opens the capture with automatic heights and a
+`host.layout_invalid` warning, a newer one is kept untouched with a notice.
+
+## Recent files
+
+The list holds at most 15 paths, newest first, in the settings. `recent_files()` reports each with
+whether the file exists, so a shell can show a missing one disabled; the host never drops an entry
+because the file is gone. `RemoveRecentFile(path)` removes one entry (the file stays; an entry that is
+not listed is ignored) and `ClearRecentFiles` empties the list; both save the settings.
+
 ## Logging
 
 The host logs, through `tracing`: each command at `info` (its name, never signal data or user
@@ -239,6 +297,8 @@ signal data, channel names or marker names.
 
 ## Compatibility
 
-Version 1.0 is the first; 1.1 adds the decoder commands, state and plan parts. Additions of commands or `State` fields that existing shells can ignore
+Version 1.0 is the first; 1.1 adds the decoder commands, state and plan parts; 1.2 adds the channel
+height, the side panel, the scroll to an edge and the recent files commands, the `LAYT` section and
+the edge flags of the plan. Additions of commands or `State` fields that existing shells can ignore
 are minor versions. Removing or changing the meaning of a command, a state field or an invariant is
 a major version and requires every shell in the repository to be updated in the same merge.

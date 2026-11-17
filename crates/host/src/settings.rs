@@ -19,8 +19,13 @@ use crate::error;
 pub const SETTINGS_VERSION: u32 = 1;
 /// The largest settings file that is read (a larger one is treated as damaged).
 pub const MAX_SETTINGS_BYTES: u64 = 1024 * 1024;
+/// The narrowest and the widest the panel at the right edge may be, in logical pixels.
+pub const PANEL_WIDTH_RANGE: (u32, u32) = (220, 480);
+/// The width of the panel until the user changes it.
+pub const DEFAULT_PANEL_WIDTH: u32 = 280;
+
 /// The most recent files that are remembered.
-pub const MAX_RECENT_FILES: usize = 10;
+pub const MAX_RECENT_FILES: usize = 15;
 /// The range of the interface scale, in percent.
 pub const UI_SCALE_RANGE: (u16, u16) = (75, 200);
 /// The largest memory limit that is accepted (1 TiB); a larger value falls back to the default.
@@ -96,6 +101,14 @@ pub struct Settings {
     pub last_device: Option<String>,
     /// The device configuration used last time (validated again before use).
     pub last_config: Option<serde_json::Value>,
+    /// The view of the panel at the right edge: `capture`, `decoders`, `markers` or `hidden`.
+    pub side_panel: Option<String>,
+    /// What to do, without asking, when a command would lose an unsaved capture: `save`, `discard`
+    /// or `cancel`; absent means ask every time.
+    pub unsaved_choice: Option<String>,
+    /// The width of the panel at the right edge in logical pixels (kept within
+    /// [`PANEL_WIDTH_RANGE`]); absent means [`DEFAULT_PANEL_WIDTH`].
+    pub panel_width: Option<u32>,
     /// Fields written by a newer version, kept as they are.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, serde_json::Value>,
@@ -117,6 +130,9 @@ impl Default for Settings {
             window: None,
             last_device: None,
             last_config: None,
+            side_panel: None,
+            unsaved_choice: None,
+            panel_width: None,
             unknown: BTreeMap::new(),
         }
     }
@@ -171,6 +187,9 @@ impl Settings {
             self.decoder_memory_limit_bytes = la_decoders::store::DEFAULT_MEMORY_LIMIT;
         }
         self.recent_files.truncate(MAX_RECENT_FILES);
+        self.panel_width = self
+            .panel_width
+            .map(|w| w.clamp(PANEL_WIDTH_RANGE.0, PANEL_WIDTH_RANGE.1));
         if self.window.is_some_and(|w| !w.is_usable()) {
             self.window = None;
         }

@@ -63,6 +63,7 @@ error-host-settings_unreadable = No se pudo leer el archivo de configuración, p
 error-host-settings_invalid = El archivo de configuración está dañado o es de otra versión, por lo que se usa la configuración predeterminada. Vuelva a elegir sus opciones; se guardarán cuando las cambie.
 error-host-settings_write = No se pudo guardar su configuración y se perderá al cerrar el programa. Compruebe que la carpeta de configuración existe y que puede escribir en ella.
 error-host-view_invalid = No se pudo restaurar la vista guardada de esta sesión (nombres de canales, colores y marcadores), por lo que se muestran los valores predeterminados. Las señales capturadas no se ven afectadas. Vuelva a elegir los nombres y los colores si los necesita.
+error-host-layout_invalid = No se pudieron restaurar las alturas guardadas de las señales de esta sesión, así que se muestran las alturas automáticas. Las señales capturadas no se ven afectadas. Elija de nuevo las alturas si lo desea.
 error-host-render_failed = No se pudieron dibujar las señales. La captura no se ve afectada y aún puede guardarse. Cambie el zoom o el tamaño de la ventana; si sigue ocurriendo, infórmelo adjuntando el archivo de registro.
 error-host-internal = Ocurrió un problema inesperado al ejecutar su orden, que no se ejecutó. Su captura no se ve afectada. Inténtelo de nuevo; si sigue ocurriendo, infórmelo adjuntando el archivo de registro.
 error-host-invalid_command = Esa acción no es posible en este momento. Espere a que termine la operación en curso y pruebe de nuevo.
