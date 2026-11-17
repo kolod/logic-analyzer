@@ -448,8 +448,11 @@ impl Shell {
         let acquisition = &run.acquisition;
         let _ = acquisition.drain_events();
         let progress = acquisition.progress();
-        let snapshot = acquisition.capture().snapshot();
+        // The outcome first, the snapshot after it: once there is an outcome the capture is closed,
+        // so a snapshot taken afterwards holds every sample. The other way round, a capture that
+        // ends in between would be shown (and saved) as finished with the last samples missing.
         let outcome = acquisition.outcome();
+        let snapshot = acquisition.capture().snapshot();
         let elapsed_ms = u64::try_from(now.saturating_duration_since(run.started).as_millis())
             .unwrap_or(u64::MAX);
         let view = ProgressView {
