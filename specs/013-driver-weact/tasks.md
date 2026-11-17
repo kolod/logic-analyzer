@@ -163,7 +163,7 @@ other device, with a stored capture equal to the signal.
 
 ### Tests for User Story 1 (write first; they must fail)
 
-- [ ] T010 [P] [US1] `crates/driver-weact/tests/provider.rs`: with `RecordedUsb` and a running board: it is listed once
+- [X] T010 [P] [US1] `crates/driver-weact/tests/provider.rs`: with `RecordedUsb` and a running board: it is listed once
   with the identity `weact:<bus>-<chain>` written by hand for the scripted position, the name "WeAct
   LogicAnalyzer V1", `simulated = false` and the capabilities of the data model (8 channels, the 16 rates as a
   list, no triggers, no buffer depth) and `DeviceDescriptor::validate` passes; two boards on two ports have two
@@ -172,7 +172,7 @@ other device, with a stored capture equal to the signal.
   `04b4:8613` is ignored; a bus that cannot be read gives `Ok` with the boards already known, and a typed
   `device.transport` error when none is known; `scan` completes with the script in under 200 ms of wall time;
   `open` of an unknown id is `device.not_found`.
-- [ ] T011 [P] [US1] `crates/driver-weact/tests/acquisition.rs`, through `DeviceRegistry` and the real acquisition engine
+- [X] T011 [P] [US1] `crates/driver-weact/tests/acquisition.rs`, through `DeviceRegistry` and the real acquisition engine
   of `la-devices` with the scripted board: a capture of a known signal (a hand-built pattern of 100,000
   bytes, 8 channels, 1 MHz) is stored equal sample for sample; with channels 1 and 3 enabled all other bits
   are zero; a set length shorter than the data truncates the last chunk and ends with `Finished`; an
@@ -182,19 +182,19 @@ other device, with a stored capture equal to the signal.
   `0xB1` with the payload of the rate); a configuration the core rejects (rate not in the list such as 48 MHz,
   channel 8, no channel) is refused and the log shows nothing sent to the board; the capture is not marked
   simulated and its description records the device id, name and rate.
-- [ ] T012 [P] [US1] `crates/driver-weact/tests/conformance.rs`: `la_devices::harness::conformance::run_all` against the
+- [X] T012 [P] [US1] `crates/driver-weact/tests/conformance.rs`: `la_devices::harness::conformance::run_all` against the
   provider with a scripted ready board and `Expectations` with a finite capture of 10,000 samples; the
   deliberately broken devices of the harness still fail (the suite is the one of feature 004, not a copy).
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] `crates/driver-weact/src/boards.rs` (ready part) and `src/lib.rs`: the table of boards (key, state
+- [X] T013 [US1] `crates/driver-weact/src/boards.rs` (ready part) and `src/lib.rs`: the table of boards (key, state
   `Ready`, `last_seen`), reconciliation from `UsbBackend::list` (only `1d50:608c`; the strings `sigrok`/`fx2lafw`
   mean the firmware runs), the descriptors (names numbered when several), `WeActProvider` implementing
   `DeviceProvider` (`name` = `"weact"`, `scan`, `open` for a `Ready` board: open the link, check
   `CMD_GET_FW_VERSION` major 1, return the device), and `pub fn provider() -> Arc<WeActProvider>` over the
   `nusb` backend plus `WeActProvider::with_backend` for tests. T010 passes.
-- [ ] T014 [US1] `crates/driver-weact/src/device.rs`: `WeActDevice` implementing `Device`: `start` (drain stale data
+- [X] T014 [US1] `crates/driver-weact/src/device.rs`: `WeActDevice` implementing `Device`: `start` (drain stale data
   with short waits up to 500 ms, create the buffers by `buffer_plan`, submit them, send `CMD_START`, return
   `AppliedConfig::new(rate)`), `read` (wait up to 40 ms, bytes to words by the mask, count, truncate at the set
   length and return `Finished` after the last sample, `Idle` when nothing came), `stop` (cancel, wait up to

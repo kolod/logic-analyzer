@@ -123,10 +123,15 @@ pub fn steps_from_signal(signal: &[u8], chunk: usize) -> Vec<StreamStep> {
 /// What the board holds and delivers in one capture.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Capture {
-    /// Bytes from an earlier capture still in the buffer: served before the start command.
+    /// Bytes from an earlier capture still in the buffer: they come out first, whether or
+    /// not the start command has been sent, until the driver has read them all.
     pub stale: Vec<StreamStep>,
-    /// The stream after the start command. When it runs out the board is silent (timeouts).
+    /// The stream after the start command. When it runs out the board is silent (timeouts),
+    /// unless `endless` is set.
     pub stream: Vec<StreamStep>,
+    /// After the stream has run out, deliver this chunk again and again (a board that never
+    /// stops, for open-ended captures and the conformance suite).
+    pub endless: Option<Vec<u8>>,
 }
 
 impl Capture {
@@ -136,6 +141,16 @@ impl Capture {
         Self {
             stale: Vec::new(),
             stream,
+            endless: None,
+        }
+    }
+
+    /// A capture that delivers `chunk` forever.
+    #[must_use]
+    pub fn endless(chunk: Vec<u8>) -> Self {
+        Self {
+            endless: Some(chunk),
+            ..Self::default()
         }
     }
 }
@@ -245,6 +260,7 @@ struct Board {
     returns_at: Option<Duration>,
     image: Vec<u8>,
     captures: VecDeque<Capture>,
+    default_capture: Option<Capture>,
 }
 
 #[derive(Debug, Default)]
@@ -335,6 +351,7 @@ impl RecordedUsb {
                 returns_at: None,
                 image: Vec::new(),
                 captures: VecDeque::new(),
+                default_capture: None,
             });
         });
     }
@@ -380,6 +397,11 @@ impl RecordedUsb {
     /// Queues the data of the next capture the board will deliver.
     pub fn script_capture(&self, key: &BoardKey, capture: Capture) {
         self.with_board(key, |board| board.captures.push_back(capture));
+    }
+
+    /// The capture the board delivers when none is queued (for tests that open it many times).
+    pub fn set_default_capture(&self, key: &BoardKey, capture: Capture) {
+        self.with_board(key, |board| board.default_capture = Some(capture));
     }
 
     /// Injects a fault at a point; it fires once, at the next request of that kind.
@@ -600,7 +622,12 @@ impl UsbLink for RecordedLink {
         }
         let capture = self
             .usb
-            .with_board(&self.key, |board| board.captures.pop_front())
+            .with_board(&self.key, |board| {
+                board
+                    .captures
+                    .pop_front()
+                    .or_else(|| board.default_capture.clone())
+            })
             .flatten()
             .unwrap_or_default();
         Ok(Box::new(RecordedStream {
@@ -608,6 +635,7 @@ impl UsbLink for RecordedLink {
             key: self.key.clone(),
             stale: capture.stale.into(),
             stream: capture.stream.into(),
+            endless: capture.endless,
             started: false,
             closed: false,
         }))
@@ -619,6 +647,7 @@ struct RecordedStream {
     key: BoardKey,
     stale: VecDeque<StreamStep>,
     stream: VecDeque<StreamStep>,
+    endless: Option<Vec<u8>>,
     started: bool,
     closed: bool,
 }
@@ -653,11 +682,17 @@ impl BulkStream for RecordedStream {
             return StreamEvent::Error(error);
         }
         self.started = self.started || self.start_seen();
-        let step = if self.started {
-            self.stream.pop_front()
-        } else {
-            self.stale.pop_front()
-        };
+        // What was left in the buffer by an earlier capture comes out first, before or after the
+        // start command, until the driver has read it all; only then does the new stream follow.
+        let step = self.stale.pop_front().or_else(|| {
+            if self.started {
+                self.stream
+                    .pop_front()
+                    .or_else(|| self.endless.clone().map(StreamStep::Data))
+            } else {
+                None
+            }
+        });
         match step {
             Some(StreamStep::Data(bytes)) => StreamEvent::Data(bytes),
             Some(StreamStep::Empty) => StreamEvent::Empty,
@@ -806,6 +841,7 @@ mod tests {
                     StreamStep::Empty,
                     StreamStep::Timeout,
                 ],
+                endless: None,
             },
         );
         let mut link = usb.open(&key).unwrap();
