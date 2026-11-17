@@ -38,12 +38,15 @@ static bool line_overflow = false;
 
 // Writes v to D2..D9 with two port writes.
 static inline void write_pins(uint8_t v) {
-  // No interrupt may come between the two writes, or the pins would show a mixed value for as
-  // long as the interrupt takes.
+  // Both port values are worked out first and written one right after the other with interrupts
+  // off: the two ports cannot change at the very same instant, but they change one AVR cycle
+  // (62 ns) apart, not a microsecond, and no interrupt can come between the writes.
+  uint8_t port_d = (uint8_t)((PORTD & 0x03) | ((v & 0x3F) << 2));
+  uint8_t port_b = (uint8_t)((PORTB & 0xFC) | ((v >> 6) & 0x03));
   uint8_t sreg = SREG;
   cli();
-  PORTD = (uint8_t)((PORTD & 0x03) | ((v & 0x3F) << 2));
-  PORTB = (uint8_t)((PORTB & 0xFC) | ((v >> 6) & 0x03));
+  PORTD = port_d;
+  PORTB = port_b;
   SREG = sreg;
 }
 

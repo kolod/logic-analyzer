@@ -120,14 +120,19 @@ the sketch of `rig/arduino-nano/`. What was found:
   ports with an interrupt possible between them (a mixed value for a few microseconds); the pattern
   checkers also ignore the 0.1 µs skew between the two ports.
 
-Not yet done on the board: the manual procedure of `docs/drivers/weact-verification.md` (steps 7 to 14:
-unplug during a capture, a hub or dock at 24 MHz, another program holding the board, a clean Windows 11
-and Debian 13) and the product string and manufacturer string Windows reports for a running board (the
+The manual procedure of `docs/drivers/weact-verification.md`, **steps 7 to 12** (stop of an open-ended
+capture, unplug during a capture, replug without restarting, a hub or dock at 24 MHz, another program
+holding the board, the board on another driver than WinUSB) were carried out by the maintainer on
+Windows 11 on 2026-11-17 and reported as passing without errors (reported by the maintainer; the filled
+record template is not attached).
+
+Not yet done on the board: steps 13 and 14 (a Debian session without the udev rule, a clean Windows 11
+and Debian 13 following only `docs/drivers/weact.md`) and the product string and manufacturer string Windows reports for a running board (the
 listing worked with the rule of the contract, so the board is recognised).
 
 ## Left to a person
 
-- Run `docs/drivers/weact-verification.md` steps 7 to 14 and attach the record.
+- Run steps 13 and 14 of `docs/drivers/weact-verification.md` (Debian) and attach the record.
 - SC-001 (time from start to first capture), SC-008 (a 60-second capture at 24 MHz on a direct port),
   SC-009 (a new user on clean Windows 11 and Debian 13); the rig covers SC-011 up to 1 MS/s (the Nano
   cannot drive faster).
