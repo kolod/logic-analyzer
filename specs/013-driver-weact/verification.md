@@ -108,6 +108,13 @@ the sketch of `rig/arduino-nano/`. What was found:
   capture running at the previous capture's rate. Both are fixed by the patched firmware 1.5 (a bounded
   START, a FIFO reset at START, a STOP command) and by the driver starting with nothing in flight; see
   `crates/driver-weact/firmware/SOURCE.md`.
+- **The sequences that hung the stock firmware were then tried on purpose** with the patched 1.5
+  (`firmware_survives_the_start_sequences_that_hung_the_stock_firmware`, through the raw link): START
+  while the previous capture is still being read; two STARTs in a row with nothing in flight; a 20 kHz
+  capture cancelled without STOP and restarted at once, three times; START followed at once by STOP,
+  three times; STOP with nothing running, twice. After each the board still answered the version
+  request, and a normal capture afterwards was still right. Passed in four consecutive runs together
+  with the six other rig tests.
 - The rig itself needed fixes found here: the sketch read the serial port by the register while the
   library owned the interrupt (no answers), kept interrupts off too long (lost bytes) and wrote the two
   ports with an interrupt possible between them (a mixed value for a few microseconds); the pattern

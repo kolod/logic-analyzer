@@ -279,3 +279,115 @@ fn two_captures_in_a_row_give_the_same_structure() {
     }
     fixture.finish();
 }
+
+/// Reads the firmware version: a board whose firmware is stuck does not answer.
+fn assert_answers(link: &mut dyn la_driver_weact::usb::UsbLink, after: &str) {
+    let answer = link
+        .control_in(
+            la_driver_weact::protocol::REQUEST_GET_FW_VERSION,
+            0,
+            0,
+            2,
+            Duration::from_millis(500),
+        )
+        .unwrap_or_else(|e| panic!("the board stopped answering after {after}: {e}"));
+    assert_eq!(answer, vec![1, 5], "after {after}");
+}
+
+/// Reads for about `ms` milliseconds and returns the bytes.
+fn read_for(stream: &mut dyn la_driver_weact::usb::BulkStream, ms: u64) -> usize {
+    let started = std::time::Instant::now();
+    let mut total = 0;
+    while started.elapsed() < Duration::from_millis(ms) {
+        if let la_driver_weact::usb::StreamEvent::Data(bytes) =
+            stream.wait(Duration::from_millis(20))
+        {
+            total += bytes.len();
+        }
+    }
+    total
+}
+
+#[test]
+#[ignore = "needs the rig: set LA_RIG_PORT and run with --ignored"]
+fn firmware_survives_the_start_sequences_that_hung_the_stock_firmware() {
+    use la_driver_weact::protocol::{REQUEST_START, REQUEST_STOP, buffer_plan, start_payload};
+    let Some(mut fixture) = Fixture::open("hostile_starts") else {
+        return;
+    };
+    fixture.command("WALK 100");
+    let backend = system_backend();
+    let key = backend
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|i| i.is_weact() && i.runs_firmware())
+        .expect("a running board")
+        .key;
+    let t = Duration::from_millis(1_000);
+    let fast = start_payload(1_000_000).unwrap();
+    let slow = start_payload(20_000).unwrap();
+    let plan_fast = buffer_plan(1_000_000).unwrap();
+    let plan_slow = buffer_plan(20_000).unwrap();
+    let mut link = backend.open(&key).unwrap();
+    assert_answers(&mut *link, "opening");
+
+    // 1. START while the previous capture is still being read.
+    let mut stream = link.open_stream(plan_fast).unwrap();
+    link.control_out(REQUEST_START, 0, 0, &fast, t).unwrap();
+    stream.submit_all().unwrap();
+    assert!(read_for(&mut *stream, 100) > 10_000, "no data");
+    link.control_out(REQUEST_START, 0, 0, &fast, t).unwrap();
+    assert!(
+        read_for(&mut *stream, 100) > 1_000,
+        "no data after the second START"
+    );
+    assert_answers(&mut *link, "START while reading");
+    stream.close(Duration::from_millis(500));
+    link.control_out(REQUEST_STOP, 0, 0, &[], t).unwrap();
+
+    // 2. Two STARTs in a row with nothing in flight.
+    link.control_out(REQUEST_START, 0, 0, &fast, t).unwrap();
+    link.control_out(REQUEST_START, 0, 0, &fast, t).unwrap();
+    assert_answers(&mut *link, "two STARTs in a row");
+    link.control_out(REQUEST_STOP, 0, 0, &[], t).unwrap();
+
+    // 3. A slow capture cancelled without STOP, then an immediate restart at the same rate.
+    for round in 0..3 {
+        let mut stream = link.open_stream(plan_slow).unwrap();
+        link.control_out(REQUEST_START, 0, 0, &slow, t).unwrap();
+        stream.submit_all().unwrap();
+        read_for(&mut *stream, 60);
+        stream.close(Duration::from_millis(500));
+        assert_answers(
+            &mut *link,
+            &format!("cancelling a 20 kHz capture, round {round}"),
+        );
+    }
+    let mut stream = link.open_stream(plan_fast).unwrap();
+    link.control_out(REQUEST_START, 0, 0, &fast, t).unwrap();
+    stream.submit_all().unwrap();
+    assert!(
+        read_for(&mut *stream, 150) > 10_000,
+        "no data after the restarts"
+    );
+    stream.close(Duration::from_millis(500));
+
+    // 4. START and STOP back to back, three times, then START again.
+    for _ in 0..3 {
+        link.control_out(REQUEST_START, 0, 0, &fast, t).unwrap();
+        link.control_out(REQUEST_STOP, 0, 0, &[], t).unwrap();
+    }
+    assert_answers(&mut *link, "START and STOP back to back");
+
+    // 5. A STOP with nothing running, twice.
+    link.control_out(REQUEST_STOP, 0, 0, &[], t).unwrap();
+    link.control_out(REQUEST_STOP, 0, 0, &[], t).unwrap();
+    assert_answers(&mut *link, "STOP with nothing running");
+    drop(link);
+
+    // After all that, a normal capture through the driver is still right.
+    let bytes = fixture.capture(1_000_000, 20_000).unwrap();
+    check_walk(&bytes, 1_000_000, 100).unwrap();
+    fixture.finish();
+}
