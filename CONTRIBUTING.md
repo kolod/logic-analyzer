@@ -32,6 +32,10 @@ cargo test --workspace
 cargo deny --all-features check      # install once: cargo install cargo-deny --locked
 ```
 
+`main` is protected and requires the branch to be up to date with it. When `main` has moved on
+and the merge button is disabled, merge or rebase `origin/main` into your branch, push, and wait
+for CI to pass again before merging. Do not bypass the protection with administrator rights.
+
 ### Minimum supported Rust version (MSRV)
 
 The MSRV is **1.85**, declared as `rust-version` in the workspace `Cargo.toml`. CI also
