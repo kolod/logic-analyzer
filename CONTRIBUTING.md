@@ -35,12 +35,12 @@ cargo deny --all-features check      # install once: cargo install cargo-deny --
 ### Minimum supported Rust version (MSRV)
 
 The MSRV is **1.85**, declared as `rust-version` in the workspace `Cargo.toml`. CI also
-builds and tests with exactly that toolchain, so the claim is verified. To check
-locally (the MSRV toolchain needs the `clippy` component because a test runs it):
+compiles every crate except `la-app` (tests included) with exactly that toolchain, so the claim is
+verified; the tests themselves run on the pinned toolchain. To check locally:
 
 ```text
-rustup toolchain install 1.85 --component clippy
-cargo +1.85 test --workspace
+rustup toolchain install 1.85
+cargo +1.85 check --workspace --exclude la-app --all-targets --all-features
 ```
 
 Raising the MSRV or the pinned toolchain is a deliberate change in its own commit.
