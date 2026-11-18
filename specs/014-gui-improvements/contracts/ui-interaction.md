@@ -16,9 +16,13 @@ For a lane with its top `y` and height `h`, after the vertical offset:
 
 - The lane of a decoder shows no colour bar, no editor and no border (its height is automatic); it can
   be neither dragged nor resized.
-- A dragged lane is drawn lifted (a translucent copy at the pointer) and a line shows where it will land;
-  release sends `MoveChannel { from, to }`; Escape or release outside the strip cancels. Dragging near the
-  top or the bottom of the area scrolls it.
+- A dragged lane is lifted with the pointer as a whole (background, bands and signal) and the other lanes
+  slide aside, smoothly, to open the place where it will land; release sends `MoveChannel { from, to }`;
+  Escape or release outside the strip cancels. Dragging near the top or the bottom of the area scrolls
+  it.
+- A legend row shows the name as its main text and, under it in small type, the number of the analyzer
+  input (`D0`, `D1`, ...), which stays with the channel when the row is moved; a very low row shows the
+  number at its right edge instead.
 - Resizing is limited to `24..=240` while dragging (the border stops at the limits); the height is sent
   with `SetChannelHeight` as the border moves, so the lane follows the pointer.
 - The legend scrolls vertically with the wheel while the pointer is over it, and has a thin bar at its
@@ -34,7 +38,8 @@ For a lane with its top `y` and height `h`, after the vertical offset:
 ```
 
 - The strip of icons is always at the right edge: Capture, Decoders, Markers, top to bottom, each a 28 px
-  button with a 3 px bar on its left when it is the shown view.
+  button with a 3 px bar on its left when it is the shown view, and a cog at the bottom that opens the
+  Settings (it is not a view: it opens the Settings dialog and changes nothing of the panel; it is a message of the application, not a host command).
 - Click on an icon: `SetSidePanel(that view)`; on the icon of the shown view: `SetSidePanel(Hidden)`.
 - The width of the panel is changed by dragging the splitter at its left edge (`SetPanelWidth`, kept in
   the settings, limited to 220 to 480 px); the signals take the rest, also at the minimum window width.

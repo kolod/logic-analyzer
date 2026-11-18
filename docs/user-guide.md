@@ -61,6 +61,8 @@ the view by hand turns it off.
 | Show everything | | Ctrl+0 |
 | Jump to the start or the end | | Home and End |
 
+While you drag to move the view the pointer is a hand. The time of the point under the pointer is shown in a small box next to it, below and to the right of the crosshair (below and to the left near the right edge, above it near the bottom). While a capture runs, the numbers in the status line keep their width, so the line does not jump.
+
 The time axis shows ticks with units that follow the zoom, from nanoseconds to minutes. Zoomed out,
 a stretch with many changes is drawn as a hatched band and a stretch with no data (a gap) as a
 dimmed one; neither is ever drawn as a level. A single glitch stays visible at every zoom: if you

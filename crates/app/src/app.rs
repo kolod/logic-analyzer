@@ -361,6 +361,31 @@ pub fn entry_for<'a>(
     })
 }
 
+/// The number of columns of a text in a monospaced font (a wide character counts twice).
+fn columns(text: &str) -> usize {
+    text.chars()
+        .map(|c| if c.len_utf8() >= 3 { 2 } else { 1 })
+        .sum()
+}
+
+/// Pads the changing parts of the status line to the widest each has been (`widths` remembers
+/// them), with no-break spaces that a layout keeps, so the line does not shift while the digits
+/// change. A part that is missing stays missing.
+fn steady_parts(widths: &mut [usize; 3], parts: [Option<String>; 3]) -> [Option<String>; 3] {
+    let mut out = [None, None, None];
+    for (index, part) in parts.into_iter().enumerate() {
+        let (Some(text), Some(width), Some(slot)) =
+            (part, widths.get_mut(index), out.get_mut(index))
+        else {
+            continue;
+        };
+        *width = (*width).max(columns(&text));
+        let pad = width.saturating_sub(columns(&text));
+        *slot = Some(format!("{text}{}", "\u{a0}".repeat(pad)));
+    }
+    out
+}
+
 /// The application.
 pub struct App {
     shell: Shell,
@@ -375,6 +400,9 @@ pub struct App {
     /// The entry of the open menu (its index in the table) whose submenu is open.
     open_submenu: Option<usize>,
     rate_text: String,
+    /// The widest the elapsed time, the samples and the memory of the status line have been in
+    /// this capture, in columns: they are padded to it so the line does not shift.
+    status_widths: std::cell::Cell<[usize; 3]>,
     length_text: String,
     length_error: Option<la_host::config::SecondsError>,
     seed_text: String,
@@ -474,6 +502,7 @@ impl App {
             open_menu: None,
             open_submenu: None,
             rate_text: String::new(),
+            status_widths: std::cell::Cell::new([0; 3]),
             length_text: String::new(),
             length_error: None,
             seed_text: String::new(),
@@ -973,6 +1002,18 @@ impl App {
 
     /// Handles one message.
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let stage = if matches!(message, Message::Tick(_)) {
+            crate::frame_log::Stage::UpdateTick
+        } else {
+            crate::frame_log::Stage::UpdateOther
+        };
+        let started = Instant::now();
+        let task = self.update_message(message);
+        crate::frame_log::record(stage, started.elapsed());
+        task
+    }
+
+    fn update_message(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick(now) => {
                 let changes = self.shell.poll(now);
@@ -1705,14 +1746,22 @@ impl App {
         let state = self.shell.state();
         let idle = state.activity == Activity::Idle;
         let localizer = self.shell.localizer();
+        // The button is as wide as the panel, like the fields below it; its text is centred.
+        let label = |key: &'static str| {
+            text(self.t(key))
+                .width(Fill)
+                .align_x(iced::alignment::Horizontal::Center)
+        };
         let start = if idle {
-            let mut b = button(text(self.t("toolbar-start")));
+            let mut b = button(label("toolbar-start")).width(Fill);
             if state.config_problems.is_empty() && state.selected_device.is_some() {
                 b = b.on_press(Message::Run(Command::StartCapture));
             }
             b
         } else {
-            button(text(self.t("toolbar-stop"))).on_press(Message::Run(Command::StopCapture))
+            button(label("toolbar-stop"))
+                .width(Fill)
+                .on_press(Message::Run(Command::StopCapture))
         };
         let mut toolbar = column![start].spacing(4);
         // "No channel is chosen" needs no message here: the channel buttons say it, and Start
@@ -2407,22 +2456,40 @@ impl App {
 
     fn status_bar(&self) -> Element<'_, Message> {
         let line = self.shell.status_line();
-        let mut parts: Vec<String> = vec![line.activity];
-        parts.extend(line.elapsed);
-        parts.extend(line.samples);
-        parts.extend(line.memory);
-        parts.extend(line.end_reason);
-        parts.extend(line.rate);
+        // The numbers that change while a capture runs are shown in a monospaced font and padded to
+        // the widest they have been, so the text does not shift as the digits change.
+        let capturing = self.shell.state().activity == Activity::Capturing;
+        let mut widths = if capturing {
+            self.status_widths.get()
+        } else {
+            [0; 3]
+        };
+        let steady = steady_parts(&mut widths, [line.elapsed, line.samples, line.memory]);
+        self.status_widths.set(widths);
+        let [elapsed, samples, memory] = steady;
+        let separator = || text("  \u{b7}  ").size(13);
+        let mut cells = row![text(line.activity).size(13)];
+        for part in [elapsed, samples, memory].into_iter().flatten() {
+            cells = cells
+                .push(separator())
+                .push(text(part).size(13).font(iced::Font::MONOSPACE));
+        }
+        let mut rest: Vec<String> = Vec::new();
+        rest.extend(line.end_reason);
+        rest.extend(line.rate);
         if line.simulated {
-            parts.push(self.t("status-simulated"));
+            rest.push(self.t("status-simulated"));
         }
         if line.incomplete {
-            parts.push(self.t("status-incomplete"));
+            rest.push(self.t("status-incomplete"));
         }
         if line.unsaved {
-            parts.push(self.t("status-unsaved"));
+            rest.push(self.t("status-unsaved"));
         }
-        container(text(parts.join("  \u{b7}  ")).size(13))
+        for part in rest {
+            cells = cells.push(separator()).push(text(part).size(13));
+        }
+        container(cells)
             .padding([4, 10])
             .width(Fill)
             .style(container::bordered_box)
@@ -2567,6 +2634,13 @@ impl App {
 
     /// The window content.
     pub fn view(&self) -> Element<'_, Message> {
+        let started = Instant::now();
+        let element = self.view_tree();
+        crate::frame_log::record(crate::frame_log::Stage::View, started.elapsed());
+        element
+    }
+
+    fn view_tree(&self) -> Element<'_, Message> {
         let signal = canvas(SignalView {
             plan: &self.plan,
             cache: &self.cache,
@@ -3394,6 +3468,64 @@ mod tests {
         let _ = ui.snapshot(&app.theme()).unwrap();
         drop(ui);
         let _ = app.shell.apply(Command::StopCapture);
+    }
+
+    #[test]
+    fn the_numbers_of_the_status_line_keep_their_width_while_the_digits_change() {
+        let mut widths = [0; 3];
+        let mut seen = Vec::new();
+        for (elapsed, samples) in [
+            ("0.9 s", "9 samples"),
+            ("1.0 s", "10 samples"),
+            ("1.1 s", "1,000 samples"),
+            ("2.0 s", "999 samples"),
+            ("10.0 s", "1,000,000 samples"),
+            ("10.1 s", "9 samples"),
+        ] {
+            let [e, s, m] = steady_parts(
+                &mut widths,
+                [Some(elapsed.to_owned()), Some(samples.to_owned()), None],
+            );
+            assert!(m.is_none(), "a part that is missing stays missing");
+            seen.push((columns(&e.unwrap()), columns(&s.unwrap())));
+        }
+        // The widths never shrink, and a value shorter than the widest is padded to it.
+        for pair in seen.windows(2) {
+            assert!(pair[1].0 >= pair[0].0 && pair[1].1 >= pair[0].1, "{seen:?}");
+        }
+        assert_eq!(
+            seen[5], seen[4],
+            "a shorter value after the longest changes nothing"
+        );
+        assert_eq!(widths, [columns("10.0 s"), columns("1,000,000 samples"), 0]);
+    }
+
+    #[test]
+    fn a_text_of_wide_characters_counts_two_columns_each() {
+        assert_eq!(columns("12 ms"), 5);
+        assert_eq!(columns("\u{30b5}\u{30f3}"), 4);
+    }
+
+    #[test]
+    fn the_start_button_is_as_wide_as_the_panel() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("start-width");
+        let start = app.t("toolbar-start");
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        for width in [220_u32, 280, 480] {
+            let _ = app.update(Message::Run(Command::SetPanelWidth(width)));
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(900.0, 600.0),
+                app.view(),
+            );
+            let bounds = ui.find(start.as_str()).unwrap().bounds();
+            // The text fills the button and the button fills the panel: far wider than the word.
+            assert!(
+                bounds.width > f32::from(u16::try_from(width).unwrap()) - 80.0,
+                "{width}: {bounds:?}"
+            );
+        }
     }
 
     #[test]
