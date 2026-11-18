@@ -13,7 +13,7 @@ running in a `debian:trixie` container).
 | `fmt (windows)` / `fmt (debian)` | both | `cargo fmt --all --check` | Any file is not formatted. |
 | `clippy (windows)` / `clippy (debian)` | both | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Any lint or warning, including the panic-safety lints. |
 | `test (windows)` / `test (debian)` | both | `cargo test --workspace --all-features` | Any test fails. This includes the localization parity check of `la-i18n` (`tests/parity.rs`): a key missing in a language, a changed placeholder, a missing plural form, an unused or undefined key and the other defects of `specs/005-i18n-foundation` fail the build with a report naming the file and key. The same run checks that `docs/host-api.md` (version line and command table) agrees with the host crate (`crates/host/tests/host_api_doc.rs`). |
-| `msrv (windows)` / `msrv (debian)` | both | Build and test with the toolchain named in `rust-version` (every crate except `la-app`, whose UI dependencies need a newer compiler and which declares its own `rust-version`) | Does not build or pass on the MSRV. |
+| `msrv (windows)` / `msrv (debian)` | both | Compile everything, tests included, with the toolchain named in `rust-version` (every crate except `la-app`, whose UI dependencies need a newer compiler and which declares its own `rust-version`) | Does not compile on the MSRV. |
 | `deny (windows)` / `deny (debian)` | both | `cargo deny --all-features check` | Known vulnerability, unmaintained/yanked crate, disallowed license (`BSL-1.0` is allowed for the Windows clipboard crates of the UI tree), banned or unknown source. Output names the crate and reason. |
 
 ## Non-blocking checks
