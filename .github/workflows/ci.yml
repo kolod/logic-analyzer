@@ -26,6 +26,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  # Line tables are enough for a backtrace; full debug information only makes the builds, the linking
+  # (slow on Windows) and the cache larger. The test profile inherits from dev.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   fmt:
