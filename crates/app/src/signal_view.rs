@@ -972,6 +972,8 @@ impl canvas::Program<Message> for SignalView<'_> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
+        crate::frame_log::frame_started();
+        let whole = Instant::now();
         let size = bounds.size();
         // While a lane is carried the others make room, so the layer is drawn afresh at their
         // moved places (the cache keeps the lanes at rest); the carried lane is left out of it and
@@ -1007,7 +1009,9 @@ impl canvas::Program<Message> for SignalView<'_> {
                 self.draw_edge_button(&mut overlay, theme, direction, rectangle);
             }
         }
-        vec![waveforms, overlay.into_geometry()]
+        let geometry = vec![waveforms, overlay.into_geometry()];
+        crate::frame_log::record(crate::frame_log::Stage::Overlay, whole.elapsed());
+        geometry
     }
 
     fn mouse_interaction(

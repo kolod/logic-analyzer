@@ -1002,6 +1002,18 @@ impl App {
 
     /// Handles one message.
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let stage = if matches!(message, Message::Tick(_)) {
+            crate::frame_log::Stage::UpdateTick
+        } else {
+            crate::frame_log::Stage::UpdateOther
+        };
+        let started = Instant::now();
+        let task = self.update_message(message);
+        crate::frame_log::record(stage, started.elapsed());
+        task
+    }
+
+    fn update_message(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick(now) => {
                 let changes = self.shell.poll(now);
@@ -2622,6 +2634,13 @@ impl App {
 
     /// The window content.
     pub fn view(&self) -> Element<'_, Message> {
+        let started = Instant::now();
+        let element = self.view_tree();
+        crate::frame_log::record(crate::frame_log::Stage::View, started.elapsed());
+        element
+    }
+
+    fn view_tree(&self) -> Element<'_, Message> {
         let signal = canvas(SignalView {
             plan: &self.plan,
             cache: &self.cache,

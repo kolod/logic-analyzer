@@ -43,6 +43,12 @@ fn main() -> iced::Result {
             window::Position::Specific(Point::new(g.x as f32, g.y as f32))
         });
     iced::application(App::new, App::update, App::view)
+        // Without waiting for the display's refresh the hover line follows the pointer closely; the
+        // frames are drawn only when something changes, so this costs no power at rest.
+        .settings(iced::Settings {
+            vsync: false,
+            ..iced::Settings::default()
+        })
         .title(App::title)
         .theme(App::theme)
         .scale_factor(App::scale_factor)
