@@ -41,7 +41,6 @@ toolbar-profile = 信号
 profile-sparse = まばら
 profile-normal = 標準
 profile-dense = 密
-toolbar-realtime = リアルタイム
 toolbar-start = 開始
 toolbar-stop = 停止
 status-simulated = シミュレーション

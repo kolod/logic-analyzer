@@ -94,7 +94,7 @@ scope.
 
 **Decision.** `toolbar()` keeps Start/Stop, the state and, below, the explanations of problems that are
 not about channels; the controls move into `capture_panel()`: device, sample rate, **length in seconds**,
-seed, density, real time, and the channel buttons.
+seed, density, and the channel buttons.
 
 **Seconds.** The configuration still counts samples (the device configuration and the session
 description are unchanged). `samples_for_seconds(rate_hz, text)` parses a decimal number (a dot or the

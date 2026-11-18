@@ -45,7 +45,7 @@ For a lane with its top `y` and height `h`, after the vertical offset:
   the settings, limited to 220 to 480 px); the signals take the rest, also at the minimum window width.
   The pointer is followed over the whole window while the button is held.
 - The Capture view, top to bottom: Start (Stop while a capture runs) and what keeps it from working, device, sample rate, length in seconds (with the samples beside it),
-  seed, density, real time (the last three only for the simulated device), the channels to record, the
+  seed, density (the last two only for the simulated device, which always runs in real time), the channels to record, the
   explanations of problems.
 - **Channel buttons**: 8 per row sharing the width of the panel (28 px high, 3 px gap), centred number, the number of the channel inside (the name is too long);
   off: border and number in the channel's colour on the panel background; on: border and background in the

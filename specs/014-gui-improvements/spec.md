@@ -159,7 +159,7 @@ clicking the active icon hides the panel, and that the choice returns after rest
 
 A user opens the Capture view and sets everything about the next capture in one place: Start (Stop while
 a capture runs), the device, the sample rate, the length **in seconds**, which channels to record, and
-the other settings (for the simulated device the seed, the density of the signal and real time). The
+the other settings (for the simulated device the seed and the density of the signal; it always runs in real time). The
 channels are buttons, eight in a row sharing the width of the panel, each in the colour of its channel:
 a channel that is off shows its number in the channel's colour inside a border of that colour; a channel
 that is on is filled with the channel's colour. **All** and **None** beside **Reset** switch every
@@ -404,7 +404,7 @@ view sideways.
 
 - **FR-011** *(amended)*: The Capture view MUST hold, from the top, Start (Stop while a capture runs) and
   what keeps it from working, the device, the sample rate, the length, the choice of channels to record
-  and the other settings of the capture (for the simulated device: the seed, the density and real time).
+  and the other settings of the capture (for the simulated device: the seed and the density; it always runs in real time).
   There is no toolbar; the status line keeps the state of the capture.
 - **FR-012** *(amended)*: The length MUST be entered in seconds, with the number of samples it makes shown
   beside it; a comma and a point MUST both separate the fraction, in every language, with at most nine

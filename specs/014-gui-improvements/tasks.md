@@ -199,7 +199,7 @@ panel, and that the choice returns after a restart.
 - [X] T022 [US2] `crates/app/src/app.rs`: `view()` becomes `row![signal, panel?, strip]`; the panel shows the content
   of the current view: the markers panel (`markers_panel()`), the decoders panel (`decoders_panel()`) or a new
   `capture_panel()` that for now **moves the controls out of `toolbar()` unchanged** (device, rate, length
-  in samples, seed, density, real time; the toolbar keeps Start, Stop and the explanations) ; the right-hand
+  in samples, seed, density; the toolbar keeps Start, Stop and the explanations) ; the right-hand
   column of the three stacked panels is removed from `view()` (the Channels panel is removed in US3, so for
   now it is shown at the bottom of the Capture view); `Message::SidePanel(SidePanel)` sends the command; add
   the six languages for the three tooltip keys and the heading of the Capture view. T018 passes.
