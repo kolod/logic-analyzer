@@ -501,6 +501,15 @@ impl Shell {
                 slot.state = InstanceState::Failed;
                 slot.fault = Some(error.code());
                 slot.incomplete = true;
+                // The old results were dropped above (when not kept), so nothing of them may still
+                // be claimed: not that they come from a file, nor how much they covered.
+                slot.loaded = false;
+                slot.outdated = kept;
+                if !kept {
+                    slot.covered = 0;
+                    slot.annotations = 0;
+                    slot.refused = 0;
+                }
             }
             return;
         }
