@@ -41,7 +41,6 @@ toolbar-profile = Señal
 profile-sparse = Escasa
 profile-normal = Normal
 profile-dense = Densa
-toolbar-realtime = Tiempo real
 toolbar-start = Iniciar
 toolbar-stop = Detener
 status-simulated = Simulado

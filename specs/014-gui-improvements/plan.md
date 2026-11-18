@@ -89,7 +89,7 @@ new host API minor version with five commands.
   height, not draggable) and the Add decoder entry works for any number of decoders.
 - [x] **X. Export**: not affected.
 - [x] **XI. Virtual device**: not affected; the Capture view keeps every setting of the simulated device
-  (seed, density, real time) and the simulated label.
+  (seed, density) and the simulated label.
 - [x] **XII. Original design & third-party code**: the icons are original artwork, recorded as ours in
   `docs/third-party-notices.md`; the layout follows general ideas (a side bar of views, an editable legend)
   re-implemented independently, with no Saleae asset, name or exact layout; nothing is taken from VS Code

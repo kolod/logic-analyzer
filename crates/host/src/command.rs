@@ -34,6 +34,7 @@ pub enum ConfigEdit {
     /// The signal profile of the virtual device.
     Profile(SignalProfile),
     /// Whether the virtual device is paced in real time (otherwise it runs as fast as it can).
+    /// The application always uses real time; the switch is kept for tests, which need fast captures.
     Realtime(bool),
     /// Whether to start a finite capture although its worst-case storage cost exceeds the
     /// memory limit (the capture then ends cleanly if the limit is really reached).

@@ -73,8 +73,6 @@ pub enum Message {
     SeedText(String),
     /// A signal profile was chosen.
     ProfilePicked(ProfileChoice),
-    /// The real-time checkbox changed.
-    RealtimeToggled(bool),
     /// The system theme changed.
     SystemTheme(theme::Mode),
     /// The window asked to close.
@@ -1483,7 +1481,6 @@ impl App {
             Message::ProfilePicked(choice) => {
                 self.run(Command::EditConfig(ConfigEdit::Profile(choice.profile)))
             }
-            Message::RealtimeToggled(on) => self.run(Command::EditConfig(ConfigEdit::Realtime(on))),
             Message::SystemTheme(mode) => {
                 self.system_mode = mode;
                 self.sync_after_command();
@@ -1821,13 +1818,11 @@ impl App {
         let mut rate = text_input("", &self.rate_text).width(Fill);
         let mut length = text_input("", &self.length_text).width(Fill);
         let mut seed = text_input(&self.t("toolbar-seed-random"), &self.seed_text).width(Fill);
-        let mut realtime = checkbox(state.config.realtime).label(self.t("toolbar-realtime"));
         if idle {
             device_picker = device_picker.on_open(Message::Noop);
             rate = rate.on_input(Message::RateText);
             length = length.on_input(Message::LengthText);
             seed = seed.on_input(Message::SeedText);
-            realtime = realtime.on_toggle(Message::RealtimeToggled);
         }
         let _ = &mut profile_picker;
         let localizer = self.shell.localizer();
@@ -1887,7 +1882,6 @@ impl App {
             length_block,
             labelled(self.t("toolbar-seed"), seed.into()),
             labelled(self.t("toolbar-profile"), profile_picker.width(Fill).into()),
-            realtime,
         ]
         .spacing(8)
         .padding(PANEL_PADDING);

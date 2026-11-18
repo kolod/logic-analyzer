@@ -71,8 +71,6 @@ profile-sparse = Sparse
 profile-normal = Normal
 # Simulated signals with a transition every few samples.
 profile-dense = Dense
-# Checkbox: the simulated device runs at the real sample rate.
-toolbar-realtime = Real time
 # Button: start a capture.
 toolbar-start = Start
 # Button: stop the running capture.

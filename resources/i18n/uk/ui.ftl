@@ -41,7 +41,6 @@ toolbar-profile = Сигнал
 profile-sparse = Рідкісний
 profile-normal = Звичайний
 profile-dense = Щільний
-toolbar-realtime = Реальний час
 toolbar-start = Почати
 toolbar-stop = Зупинити
 status-simulated = Симульовано
