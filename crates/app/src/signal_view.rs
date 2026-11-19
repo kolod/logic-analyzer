@@ -318,7 +318,7 @@ impl SignalView<'_> {
         None
     }
 
-    /// The fixed markers: a solid line and a mark for each end, the name beside the marks.
+    /// The fixed markers: a solid line and a mark for each end, with the number in the mark.
     fn draw_markers(&self, frame: &mut Frame, size: Size, scale: f32, outline: Color) {
         let inside = |x: f32| x > GUTTER - 40.0 && x < size.width + 40.0;
         for marker in &self.plan.markers {
@@ -330,7 +330,6 @@ impl SignalView<'_> {
                     (GUTTER + end_x as f32 * scale, End::End),
                 ],
             };
-            let mut label_at = None;
             for (x, end) in ends {
                 if !inside(x) {
                     continue;
@@ -352,22 +351,8 @@ impl SignalView<'_> {
                     colour,
                     outline,
                     marker.selected,
+                    marker.number,
                 );
-                label_at = Some(match end {
-                    End::Point => x + marker_marks::PENTAGON_WIDTH / 2.0 + marker_marks::GAP,
-                    End::Start => x + marker_marks::GAP,
-                    End::End => x + marker_marks::SQUARE + marker_marks::GAP,
-                });
-            }
-            if let Some(x) = label_at {
-                frame.fill_text(Text {
-                    content: marker.name.clone(),
-                    position: Point::new(x, AXIS_HEIGHT - 2.0),
-                    color: outline,
-                    size: Pixels(TEXT_SIZE),
-                    align_y: Vertical::Bottom,
-                    ..Text::default()
-                });
             }
         }
     }
@@ -1284,7 +1269,16 @@ impl SignalView<'_> {
         let pointer_x = x_of(preview.position);
         let draw_half = |frame: &mut Frame, x: f32, end: End, dotted: bool| {
             marker_marks::draw_line(frame, x, AXIS_HEIGHT, size.height, colour, false, dotted);
-            marker_marks::draw_mark(frame, x, AXIS_HEIGHT, end, colour, outline, false);
+            marker_marks::draw_mark(
+                frame,
+                x,
+                AXIS_HEIGHT,
+                end,
+                colour,
+                outline,
+                false,
+                placement.number,
+            );
         };
         // The transition the line has snapped to: a ring on its lane and a tick over the lane.
         if let Some(snapped) = preview.snapped {
@@ -2239,6 +2233,7 @@ mod tests {
             kind,
             first: None,
             colour: 0,
+            number: 1,
         })
     }
 
@@ -2344,6 +2339,7 @@ mod tests {
             MarkerPlan {
                 id: 1,
                 name: "T1".into(),
+                number: 1,
                 colour: 0,
                 comment: String::new(),
                 selected: false,
@@ -2352,6 +2348,7 @@ mod tests {
             MarkerPlan {
                 id: 2,
                 name: "P1".into(),
+                number: 1,
                 colour: 1,
                 comment: String::new(),
                 selected: false,

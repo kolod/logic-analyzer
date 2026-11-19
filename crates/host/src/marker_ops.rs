@@ -260,6 +260,7 @@ pub(crate) fn begin_placement(state: &mut State, kind: Kind) -> Done {
             kind,
             first: None,
             colour: 0,
+            number: state.markers.next_number(kind),
         }),
     };
     Ok(Changes::MARKERS)

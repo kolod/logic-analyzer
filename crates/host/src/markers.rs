@@ -15,8 +15,8 @@ use la_i18n::Localizer;
 /// The most markers a capture can hold (a pair counts as one).
 pub const MAX_MARKERS: usize = 64;
 /// How much room, in logical pixels, the marks of a pair need beside each end of its interval when
-/// the view is fitted to it: a square of 12 pixels and a gap of 4.
-pub const MARK_MARGIN_PX: u32 = 16;
+/// the view is fitted to it: a square as high as the ruler (28 pixels) and a gap of 4.
+pub const MARK_MARGIN_PX: u32 = 32;
 /// The longest comment, in characters.
 pub const MAX_COMMENT_CHARS: usize = 80;
 /// How many colours a marker can have (an index below this).
@@ -221,6 +221,12 @@ impl Markers {
     #[must_use]
     pub fn last_id(&self) -> u32 {
         self.next_id
+    }
+
+    /// The number the next marker of `kind` gets.
+    #[must_use]
+    pub fn next_number(&self, kind: Kind) -> u32 {
+        self.next_number.get(kind.index()).copied().unwrap_or(1)
     }
 
     /// The next number of each kind, `[single, pair]`.
@@ -574,6 +580,8 @@ pub struct Placement {
     pub first: Option<u64>,
     /// The colour the marker will have.
     pub colour: u8,
+    /// The number the marker will get (written in its mark while it is being placed).
+    pub number: u32,
 }
 
 /// Where the pointer is over the signal area.

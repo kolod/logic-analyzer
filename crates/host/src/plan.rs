@@ -181,8 +181,11 @@ pub enum PlanShape {
 pub struct MarkerPlan {
     /// The marker's identity.
     pub id: u32,
-    /// Its name (`T3`, `P1`): never translated.
+    /// Its name (`T3`, `P1`): never translated. The side panel shows it; the view shows only the
+    /// number.
     pub name: String,
+    /// Its number within its kind (what is written in its mark).
+    pub number: u32,
     /// Its colour index.
     pub colour: u8,
     /// Its comment (sanitized, possibly empty).

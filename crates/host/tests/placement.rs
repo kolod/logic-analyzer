@@ -79,7 +79,8 @@ fn starting_a_placement_adds_nothing_and_needs_a_capture() {
         Some(Placement {
             kind: Kind::Single,
             first: None,
-            colour: 0
+            colour: 0,
+            number: 1
         })
     );
     assert!(shell.state().markers.list.is_empty());
@@ -310,7 +311,8 @@ fn the_first_click_of_a_pair_fixes_a_half_and_adds_nothing() {
         Some(Placement {
             kind: Kind::Pair,
             first: Some(300),
-            colour: 0
+            colour: 0,
+            number: 1
         })
     );
     assert!(shell.state().markers.list.is_empty());
@@ -393,7 +395,8 @@ fn switching_kind_after_the_first_click_drops_the_half() {
         Some(Placement {
             kind: Kind::Single,
             first: None,
-            colour: 0
+            colour: 0,
+            number: 1
         })
     );
     done(&mut shell, Command::FixPlacement { pointer: over(500) });

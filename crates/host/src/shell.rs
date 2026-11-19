@@ -387,6 +387,7 @@ impl Shell {
                 .map(|m| MarkerPlan {
                     id: m.id,
                     name: m.name(),
+                    number: m.number,
                     colour: m.colour,
                     comment: m.comment.clone(),
                     selected: self.state.markers.selected == Some(m.id),

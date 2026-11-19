@@ -160,9 +160,9 @@ impl<'a> Panel<'a> {
                 .align_y(iced::Alignment::Center),
         )
         .style(if placing {
-            button::primary
+            button::success
         } else {
-            button::secondary
+            button::primary
         })
         .padding(4)
         .on_press_maybe(allowed.then_some(Message::Run(Command::BeginPlacement(kind))))
@@ -176,11 +176,14 @@ impl<'a> Panel<'a> {
         let name = self
             .text_of(id)
             .map_or_else(|| marker.name(), |t| t.name.clone());
-        let mut label = column![text(name).size(13)].spacing(1);
+        // The name and the comment share a line; the times are under them.
+        let mut title = row![text(name).size(13)]
+            .spacing(6)
+            .align_y(iced::Alignment::Center);
         if !marker.comment.is_empty() {
-            label = label.push(text(marker.comment.clone()).size(11));
+            title = title.push(text(marker.comment.clone()).size(11));
         }
-        label = label.push(text(self.summary(id)).size(11));
+        let label = column![title, text(self.summary(id)).size(11)].spacing(1);
         let leading: Element<'static, Message> = match marker.shape {
             Shape::Point(_) => checkbox(self.checked.contains(&id))
                 .size(14)
@@ -233,7 +236,7 @@ impl<'a> Panel<'a> {
         reason: Option<&str>,
     ) -> Element<'static, Message> {
         let b = button(text(label.to_owned()).size(12))
-            .style(button::secondary)
+            .style(button::primary)
             .width(Fill)
             .padding(4)
             .on_press_maybe(press);
@@ -398,7 +401,7 @@ impl<'a> Panel<'a> {
         if let [first, second] = singles.as_slice() {
             list = list.push(
                 button(text(self.strings.make_pair.clone()).size(12))
-                    .style(button::secondary)
+                    .style(button::primary)
                     .padding(4)
                     .on_press(Message::Run(Command::MakePair {
                         first: *first,

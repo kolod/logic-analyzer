@@ -9,10 +9,10 @@ against the lane background and distinct from its neighbours (the legibility che
 | Item | Shape |
 |------|-------|
 | Single marker line | a solid 1.5 px line from the ruler to the bottom of the lanes, in the marker's colour |
-| Single marker mark | a pentagon-arrow in the ruler strip: a 14 × 9 rectangle on a 5 px triangle pointing down, the tip on the line; filled with the colour, 1 px outline in the text colour |
+| Single marker mark | a pentagon-arrow filling the height of the ruler strip (28 px): a 26 × 18 rectangle on a 10 px triangle pointing down, the tip on the line; filled with the colour, 1 px outline in the text colour, the **number** of the marker written in it |
 | Pair marker lines | two solid lines as above |
-| Pair marker marks | a 12 × 12 square filled with the colour, 1 px outline; for the **start** it touches its line from the **left**, for the **end** from the **right** |
-| Name | `T3` / `P1` in the text colour next to the mark, on the side away from the other end of a pair; staggered one text line higher when it would overlap another marker's name |
+| Pair marker marks | a 28 × 28 square (as high as the ruler) filled with the colour, 1 px outline, the **number** written in it; for the **start** it touches its line from the **left**, for the **end** from the **right** |
+| Name | the number only is written in the mark (no `T`/`P`, no text beside it); the prefix with the number (`T3`, `P1`) is used in the Markers view only |
 | Selected marker | the lines 2.5 px and the outline 2 px |
 | Tooltip on a mark | the name, the time (a pair: both times, the duration and the frequency) and the comment, from `marker_texts()` |
 

@@ -455,10 +455,10 @@ fn the_view_is_fitted_to_a_pair_with_room_for_its_marks() {
     let pair = place_pair(&mut shell, 1_000, 2_000);
     done(&mut shell, Command::SetFollowLatest(true));
     done(&mut shell, Command::FitToPair(pair));
-    // 1,000 samples between the marks and 16 pixels beside each at 800 pixels: the window is
-    // ceil(1000 * 800 / 768) = 1,042 samples with 21 of them on each side.
+    // 1,000 samples between the marks and 32 pixels beside each at 800 pixels: the window is
+    // ceil(1000 * 800 / 736) = 1,087 samples with 43 of them on each side.
     let state = shell.state();
-    assert_eq!((state.window.start, state.window.length), (979, 1_042));
+    assert_eq!((state.window.start, state.window.length), (957, 1_087));
     assert!(!state.auto_fit);
     assert!(!state.follow_latest);
     // At the start of the capture the left margin is what the capture has.
@@ -469,7 +469,7 @@ fn the_view_is_fitted_to_a_pair_with_room_for_its_marks() {
     done(&mut shell, Command::FitToPair(near_start));
     assert_eq!(
         (shell.state().window.start, shell.state().window.length),
-        (0, 1_042)
+        (0, 1_087)
     );
     // A pair of zero length is shown at the closest zoom the view allows.
     done(&mut shell, Command::FitAll);
