@@ -319,7 +319,8 @@ impl SignalView<'_> {
     }
 
     /// The fixed markers: a solid line and a mark for each end, with the number in the mark.
-    fn draw_markers(&self, frame: &mut Frame, size: Size, scale: f32, outline: Color) {
+    fn draw_markers(&self, frame: &mut Frame, size: Size) {
+        let scale = (size.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
         let inside = |x: f32| x > GUTTER - 40.0 && x < size.width + 40.0;
         for marker in &self.plan.markers {
             let colour = self.variant.marker(marker.colour);
@@ -343,16 +344,7 @@ impl SignalView<'_> {
                     marker.selected,
                     false,
                 );
-                marker_marks::draw_mark(
-                    frame,
-                    x,
-                    AXIS_HEIGHT,
-                    end,
-                    colour,
-                    outline,
-                    marker.selected,
-                    marker.number,
-                );
+                marker_marks::draw_mark(frame, x, AXIS_HEIGHT, end, colour, marker.number);
             }
         }
     }
@@ -501,7 +493,6 @@ impl SignalView<'_> {
             ),
             Stroke::default().with_color(hairline).with_width(1.0),
         );
-        self.draw_markers(frame, size, scale, text_colour);
         // A thin bar at the right edge of the legend when the lanes are taller than the area.
         if layout.max_offset() > 0.0 {
             let visible = (size.height - AXIS_HEIGHT).max(1.0);
@@ -1089,8 +1080,11 @@ impl canvas::Program<Message> for SignalView<'_> {
             })
         };
         let mut overlay = Frame::new(renderer, size);
+        // The marks are drawn in the layer above the waveforms and the axis, because the text of
+        // a layer is drawn over its shapes: the labels of the axis must not be over the marks.
+        self.draw_markers(&mut overlay, size);
         if self.placement.is_some() {
-            self.draw_placement(&mut overlay, size, theme, state.scroll);
+            self.draw_placement(&mut overlay, size, state.scroll);
         } else if let Some(position) = cursor.position_in(bounds) {
             self.draw_hover(&mut overlay, size, position, theme, state.scroll);
         }
@@ -1252,12 +1246,11 @@ impl SignalView<'_> {
     /// The marker being placed: its line, dotted, at the sample the pointer means, and its mark;
     /// for a pair the half that is already fixed is drawn solid, and each half has the mark of the
     /// role it would have (the start's square left of its line, the end's right of its line).
-    fn draw_placement(&self, frame: &mut Frame, size: Size, theme: &Theme, scroll: f32) {
+    fn draw_placement(&self, frame: &mut Frame, size: Size, scroll: f32) {
         let (Some(placement), Some(preview)) = (self.placement, self.preview) else {
             return;
         };
         let plan = self.plan;
-        let outline = theme.palette().text;
         let colour = self.variant.marker(placement.colour);
         let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
         let x_of = |sample: u64| {
@@ -1269,16 +1262,7 @@ impl SignalView<'_> {
         let pointer_x = x_of(preview.position);
         let draw_half = |frame: &mut Frame, x: f32, end: End, dotted: bool| {
             marker_marks::draw_line(frame, x, AXIS_HEIGHT, size.height, colour, false, dotted);
-            marker_marks::draw_mark(
-                frame,
-                x,
-                AXIS_HEIGHT,
-                end,
-                colour,
-                outline,
-                false,
-                placement.number,
-            );
+            marker_marks::draw_mark(frame, x, AXIS_HEIGHT, end, colour, placement.number);
         };
         // The transition the line has snapped to: a ring on its lane and a tick over the lane.
         if let Some(snapped) = preview.snapped {

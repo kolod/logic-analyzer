@@ -126,22 +126,8 @@ pub fn number_centre(x: f32, bottom: f32, end: End) -> Point {
 }
 
 /// The mark of one end: the pentagon of a single marker or the square of a start or an end, filled
-/// with `colour` and outlined with `outline` (so it stays visible on any background), with the
-/// `number` of the marker written in it.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "a drawing routine: where, what, how"
-)]
-pub fn draw_mark(
-    frame: &mut Frame,
-    x: f32,
-    bottom: f32,
-    end: End,
-    colour: Color,
-    outline: Color,
-    selected: bool,
-    number: u32,
-) {
+/// with `colour` (no outline), with the `number` of the marker written in it.
+pub fn draw_mark(frame: &mut Frame, x: f32, bottom: f32, end: End, colour: Color, number: u32) {
     let path = match end {
         End::Point => pentagon_path(x, bottom),
         End::Start | End::End => Path::rectangle(
@@ -150,11 +136,6 @@ pub fn draw_mark(
         ),
     };
     frame.fill(&path, colour);
-    let width = if selected { 2.0 } else { 1.0 };
-    frame.stroke(
-        &path,
-        Stroke::default().with_color(outline).with_width(width),
-    );
     let text = number.to_string();
     // The digits are made smaller when there are many, so they stay inside the mark.
     let size = match text.len() {
