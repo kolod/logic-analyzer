@@ -111,6 +111,14 @@ impl Variant {
         Color::from_rgb8(r, g, b)
     }
 
+    /// The colour of a marker (an index below 8): the eight colours of the annotations, which
+    /// are chosen against the background of the variant and are told apart by the shape of the
+    /// mark and the name beside it as well.
+    #[must_use]
+    pub fn marker(self, index: u8) -> Color {
+        self.annotation(index)
+    }
+
     /// The colour of a channel.
     #[must_use]
     pub fn channel(self, colour: Colour) -> Color {

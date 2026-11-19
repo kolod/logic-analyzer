@@ -158,17 +158,39 @@ pub(crate) fn real_edge_before(snapshot: &Snapshot, channel: u8, before: u64) ->
     None
 }
 
-/// A marker inside the visible window.
+/// Where a marker is, in pixels from the left of the signal area. A value below 0 or beyond the
+/// width means that end is outside the window.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlanShape {
+    /// A single marker.
+    Point {
+        /// Its horizontal position.
+        x: f64,
+    },
+    /// A pair marker.
+    Interval {
+        /// The horizontal position of its start.
+        start_x: f64,
+        /// The horizontal position of its end.
+        end_x: f64,
+    },
+}
+
+/// A marker that is at least partly inside the visible window.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MarkerPlan {
     /// The marker's identity.
     pub id: u32,
-    /// Its sample position.
-    pub position: u64,
-    /// Its horizontal position in pixels from the left of the signal area.
-    pub x: f64,
-    /// Its (sanitized) name.
+    /// Its name (`T3`, `P1`): never translated.
     pub name: String,
+    /// Its colour index.
+    pub colour: u8,
+    /// Its comment (sanitized, possibly empty).
+    pub comment: String,
+    /// Whether it is the selected one.
+    pub selected: bool,
+    /// Where it is.
+    pub shape: PlanShape,
 }
 
 /// The lane of one decoder instance: what to draw in it.
@@ -293,7 +315,7 @@ fn build_inner(
     };
     let length = snapshot.length();
     let sample_rate_hz = snapshot.sample_rate_hz();
-    let axis = build_ticks(window, pixels, sample_rate_hz);
+    let axis = build_ticks(window, pixels, sample_rate_hz, 0);
     let mut plan = FramePlan {
         state: FrameState::Ok,
         window: *window,

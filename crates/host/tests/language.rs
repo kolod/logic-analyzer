@@ -9,7 +9,7 @@
 
 mod common;
 
-use common::{TempDir, finished_shell, wait_operation};
+use common::{TempDir, finished_shell, place_pair, place_single, wait_operation};
 use la_host::notices::NoticeContent;
 use la_host::{Changes, Command, Outcome, Shell, ShellConfig};
 use la_i18n::{Args, Key, Language};
@@ -56,13 +56,7 @@ fn the_change_is_immediate_everywhere_and_flags_the_language() {
     let mut shell = finished_shell(&dir, 0b11, 20_000, 41);
     // A failure notice and two markers, so that every kind of text exists.
     shell.apply(Command::TestError("session.damaged"));
-    for position in [100, 15_000] {
-        shell.apply(Command::SetSnap(false));
-        shell.apply(Command::PlaceMarker {
-            position,
-            channel: 0,
-        });
-    }
+    place_pair(&mut shell, 100, 15_000);
     let key = Key::from_static("menu-file");
     let mut seen = Vec::new();
     for language in Language::ALL {
@@ -82,14 +76,15 @@ fn the_change_is_immediate_everywhere_and_flags_the_language() {
             }
         );
         let notice_text = shell.notice_text(&notice);
-        let measurement = shell.measurement_text().unwrap();
-        for text in [&menu, &notice_text, &measurement.distance] {
+        let texts = shell.marker_texts();
+        let distance = texts[0].duration.clone().unwrap();
+        for text in [&menu, &notice_text, &distance] {
             assert!(
                 !text.is_empty() && !text.contains('\u{27E6}'),
                 "{language:?}: {text}"
             );
         }
-        seen.push((menu, notice_text, measurement.distance));
+        seen.push((menu, notice_text, distance));
     }
     // Six languages give six different menu words and six different notices.
     for column in 0..2 {
@@ -111,15 +106,10 @@ fn the_language_never_changes_what_the_user_typed_or_the_description() {
         channel: 0,
         name: "Сигнал SDA".into(),
     });
-    shell.apply(Command::SetSnap(false));
-    shell.apply(Command::PlaceMarker {
-        position: 500,
-        channel: 0,
-    });
-    let id = shell.state().markers.list[0].id;
-    shell.apply(Command::RenameMarker {
+    let id = place_single(&mut shell, 500);
+    shell.apply(Command::SetMarkerComment {
         id,
-        name: "Ёлка".into(),
+        comment: "Ёлка".into(),
     });
     let before = (
         shell.state().presentation.clone(),

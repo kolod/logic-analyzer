@@ -148,6 +148,51 @@ pub fn finished_shell(dir: &TempDir, mask: u32, length: u64, seed: u64) -> Shell
     shell
 }
 
+/// A pointer over the signal area (no lane) that resolves to `sample` in the window now shown.
+/// The pointer is in the middle of the pixel column that shows the sample, so that, at a zoom
+/// where one column shows several samples, it is the first of them.
+#[allow(dead_code)]
+pub fn pointer_at(shell: &Shell, sample: u64) -> la_host::markers::Pointer {
+    let state = shell.state();
+    let window = state.window;
+    let capture_length = state.capture.as_ref().map_or(0, |c| c.snapshot.length());
+    let window = if state.auto_fit {
+        (0, capture_length.max(1))
+    } else {
+        (window.start, window.length.max(1))
+    };
+    let pixels = f64::from(state.view_size.pixels);
+    let offset = sample.saturating_sub(window.0) as f64;
+    la_host::markers::Pointer {
+        x: ((offset + 0.5) * pixels / window.1 as f64) as f32,
+        lane: None,
+    }
+}
+
+/// Places a single marker at `sample` with the commands a user's clicks send; the id.
+#[allow(dead_code)]
+pub fn place_single(shell: &mut Shell, sample: u64) -> u32 {
+    let outcome = shell.apply(Command::BeginPlacement(la_host::markers::Kind::Single));
+    assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+    let pointer = pointer_at(shell, sample);
+    let outcome = shell.apply(Command::FixPlacement { pointer });
+    assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+    shell.state().markers.selected.unwrap()
+}
+
+/// Places a pair marker between two samples with two clicks; the id.
+#[allow(dead_code)]
+pub fn place_pair(shell: &mut Shell, a: u64, b: u64) -> u32 {
+    let outcome = shell.apply(Command::BeginPlacement(la_host::markers::Kind::Pair));
+    assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+    for sample in [a, b] {
+        let pointer = pointer_at(shell, sample);
+        let outcome = shell.apply(Command::FixPlacement { pointer });
+        assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+    }
+    shell.state().markers.selected.unwrap()
+}
+
 /// Every stable error code of the product: constants of the form
 /// `pub const NAME: &str = "domain.code";` in the `error.rs` files under `crates/*/src`.
 pub fn all_error_codes() -> Vec<String> {
@@ -189,4 +234,70 @@ pub fn read_logs(dir: &std::path::Path) -> String {
         }
     }
     text
+}
+
+/// A capture of `length` positions, 1 MHz, on the 32 channels of the virtual device, whose channel
+/// `c` starts at `initial[c]` and flips at every position of `flips[c]` (sorted, below `length`,
+/// above 0): the transitions are exactly those positions. The channels after the ones given are
+/// low and never change.
+pub fn snapshot_with_edges(initial: &[bool], flips: &[Vec<u64>], length: u64) -> Snapshot {
+    let mut capture = Capture::new(CaptureConfig {
+        channels: 32,
+        sample_rate_hz: 1_000_000,
+        limits: Limits::default(),
+    })
+    .unwrap();
+    let mut levels = initial.to_vec();
+    let mut next = vec![0_usize; initial.len()];
+    let mut words: Vec<u32> = Vec::new();
+    for position in 0..length {
+        for c in 0..initial.len() {
+            while flips[c].get(next[c]).is_some_and(|f| *f == position) {
+                levels[c] = !levels[c];
+                next[c] += 1;
+            }
+        }
+        let mut word = 0_u32;
+        for (c, high) in levels.iter().enumerate() {
+            if *high {
+                word |= 1 << c;
+            }
+        }
+        words.push(word);
+        if words.len() == 60_000 {
+            capture.append(capture.length(), &words).unwrap();
+            words.clear();
+        }
+    }
+    if !words.is_empty() {
+        capture.append(capture.length(), &words).unwrap();
+    }
+    capture.close().unwrap();
+    capture.reader().snapshot()
+}
+
+/// A shell that shows `snapshot` (made by `snapshot_with_edges`; opened from a session file made
+/// for it) on 800 pixels, whole, with the first `shown` channels recorded and shown.
+pub fn shell_showing(dir: &TempDir, snapshot: Snapshot, shown: u8) -> Shell {
+    let mask = (1_u32 << shown) - 1;
+    let shell = finished_shell(dir, mask, snapshot.length(), 1);
+    let description = shell.state().capture.as_ref().unwrap().description.clone();
+    let data = la_session::SessionData::new(description, snapshot);
+    let path = dir.path().join("shown.lasession");
+    la_session::save_blocking(&path, &data, &la_session::Control::new()).unwrap();
+    let other = dir.path().join("shown-shell");
+    std::fs::create_dir_all(&other).unwrap();
+    let mut shell = Shell::new(ShellConfig::for_tests(&other));
+    shell.apply(Command::SetViewSize(ViewSize {
+        pixels: 800,
+        scale: 1.0,
+    }));
+    let outcome = shell.apply(Command::OpenSession(path));
+    assert!(matches!(outcome, Outcome::Done(_)), "{outcome:?}");
+    wait_operation(&mut shell);
+    shell.apply(Command::SetViewSize(ViewSize {
+        pixels: 800,
+        scale: 1.0,
+    }));
+    shell
 }

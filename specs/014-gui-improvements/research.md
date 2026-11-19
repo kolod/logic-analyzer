@@ -170,7 +170,7 @@ The panel's list of decoders stays as a second way.
 - **Windows executable icon**: the icon shown by Explorer and the task bar for the file itself is a
   resource in the executable. It is added by a build script with the `winresource` crate (MIT, a build
   dependency only on Windows, small, maintained; justified in the plan). If `cargo deny` or the MSRV job
-  objects, the fallback is to leave the resource to packaging (015+) and keep the runtime window icon.
+  objects, the fallback is to leave the resource to packaging (016+) and keep the runtime window icon.
 - **Declarations** in `packaging/`: `linux/logic-analyzer.desktop`, `linux/logic-analyzer-session.xml`
   (the MIME type for the session file, with its glob and the icon name) and `windows/README.md` saying
   what the installer must register (the extension, the icon from the `.ico`). A test checks that the

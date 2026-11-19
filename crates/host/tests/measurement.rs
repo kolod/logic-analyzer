@@ -108,3 +108,58 @@ fn long_distances_use_minutes_and_seconds() {
     let (d, _) = texts(Language::En, 1_000, 0, 1_000_000);
     assert_eq!(d, format!("16{NBSP}min 40{NBSP}s"));
 }
+
+mod common;
+
+/// The texts of a pair marker as the shell gives them: the duration and the frequency of the
+/// pair in the language in use, and the times of its ends counted from the origin of time.
+#[test]
+fn a_pair_marker_gives_its_duration_and_frequency_in_the_language_in_use() {
+    let dir = common::TempDir::new("measure-shell");
+    let mut shell = common::finished_shell(&dir, 0b1, 2_000, 1);
+    common::place_pair(&mut shell, 100, 1_600);
+    for (language, duration, frequency) in [
+        (
+            Language::En,
+            format!("1.5{NBSP}ms"),
+            format!("666.7{NBSP}Hz"),
+        ),
+        (
+            Language::De,
+            format!("1,5{NBSP}ms"),
+            format!("666,7{NBSP}Hz"),
+        ),
+        (
+            Language::Fr,
+            format!("1,5{NARROW}ms"),
+            format!("666,7{NARROW}Hz"),
+        ),
+        (Language::Ja, "1.5ミリ秒".to_owned(), "666.7Hz".to_owned()),
+        (
+            Language::Uk,
+            format!("1,5{NBSP}мс"),
+            format!("666,7{NBSP}Гц"),
+        ),
+        (
+            Language::Es,
+            format!("1,5{NBSP}ms"),
+            format!("666,7{NBSP}Hz"),
+        ),
+    ] {
+        shell.apply(la_host::Command::SetLanguage(language));
+        let texts = shell.marker_texts();
+        assert_eq!(texts.len(), 1);
+        assert_eq!(texts[0].name, "P1");
+        assert_eq!(
+            texts[0].duration.as_deref(),
+            Some(duration.as_str()),
+            "{language:?}"
+        );
+        assert_eq!(
+            texts[0].frequency.as_deref(),
+            Some(frequency.as_str()),
+            "{language:?}"
+        );
+        assert!(texts[0].time_b.is_some());
+    }
+}

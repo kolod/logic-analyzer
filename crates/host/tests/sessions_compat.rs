@@ -1,8 +1,10 @@
-//! Session files written before feature 014 open with nothing lost, and the optional `LAYT`
-//! section travels through code that does not know it (spec 014, task T050).
+//! Session files written before feature 014 open, and the optional `LAYT` section travels through
+//! code that does not know it (spec 014, task T050).
 //!
-//! The two fixtures in `tests/fixtures/` were written by the code before the feature
-//! (`make_compat_fixtures.rs`).
+//! The two fixtures in `tests/fixtures/` were written by the code before feature 014
+//! (`make_compat_fixtures.rs`). The `VIEW` section of the first is of payload version 1, which
+//! feature 015 no longer reads: the capture opens with the default look, without markers, and
+//! with the `host.view_invalid` warning (there has been no release, so nothing reads such files).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -18,7 +20,6 @@ use std::time::{Duration, Instant};
 
 use common::{TempDir, finished_shell, wait_operation};
 use la_decoders::decoders::i2c::ID;
-use la_host::presentation::Colour;
 use la_host::{Command, Outcome, Shell, ShellConfig};
 use la_session::{Control, LoadLimits, SessionData};
 
@@ -63,59 +64,59 @@ fn extras(path: &Path) -> Vec<(String, Vec<u8>)> {
         .collect()
 }
 
-/// What the fixture of feature 006 holds, checked on a shell that opened it.
-fn assert_view_fixture(shell: &Shell) {
+/// What the fixture of feature 006 gives now, checked on a shell that opened it: the capture, with
+/// the default look, no markers and the warning about the section that is not read.
+fn assert_old_view_fixture(shell: &Shell) {
     let state = shell.state();
     assert!(state.capture.is_some());
-    let order: Vec<u8> = state
-        .presentation
-        .channels
-        .iter()
-        .map(|c| c.index)
-        .collect();
-    assert_eq!(&order[..4], &[3, 0, 1, 2], "the order");
-    let style = |index: u8| {
+    assert!(state.markers.list.is_empty());
+    assert_eq!(state.markers.origin, 0);
+    assert!(state.auto_fit, "no remembered window");
+    assert!(
         state
             .presentation
             .channels
             .iter()
-            .find(|c| c.index == index)
-            .unwrap()
-            .clone()
-    };
-    assert_eq!(style(1).name, "Clock");
-    assert_eq!(style(2).colour, Colour::Rgb(10, 200, 30));
-    assert!(
-        state.presentation.channels.iter().all(|c| c.height == 0),
-        "automatic heights"
+            .all(|c| c.name.is_empty() && c.height == 0),
+        "the default look"
     );
-    assert_eq!(state.markers.list.len(), 1);
-    // Placed at 1,234 and snapped to the nearest edge (1,207) when the fixture was written.
-    assert_eq!(state.markers.list[0].position, 1_207);
-    assert!(!state.auto_fit);
-    assert_eq!((state.window.start, state.window.length), (1_000, 4_000));
-    assert!(state.notices.is_empty(), "{:?}", state.notices);
+    let codes: Vec<&str> = state
+        .notices
+        .iter()
+        .filter_map(|n| match &n.content {
+            la_host::notices::NoticeContent::Error { code } => Some(code.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(codes, [la_host::error::VIEW_INVALID]);
 }
 
 #[test]
-fn a_file_of_feature_006_opens_with_nothing_lost_and_no_warning() {
+fn a_file_of_feature_006_opens_with_the_default_look_no_markers_and_a_warning() {
     let dir = TempDir::new("compat-006");
     let shell = open(&dir, &fixture("feature_006_view.lasession"));
-    assert_view_fixture(&shell);
+    assert_old_view_fixture(&shell);
 }
 
 #[test]
-fn saving_such_a_file_keeps_everything_and_writes_no_layout_section() {
+fn saving_such_a_file_drops_the_section_that_is_not_read() {
     let dir = TempDir::new("compat-006-save");
     let mut shell = open(&dir, &fixture("feature_006_view.lasession"));
     let copy = dir.path().join("copy.lasession");
     save(&mut shell, &copy);
     assert!(
-        extras(&copy).iter().all(|(tag, _)| tag != "LAYT"),
-        "no custom height, no section"
+        extras(&copy)
+            .iter()
+            .all(|(tag, _)| tag != "LAYT" && tag != "VIEW"),
+        "no custom height, no old view section"
     );
     let reopened = open(&dir, &copy);
-    assert_view_fixture(&reopened);
+    assert!(
+        reopened.state().notices.is_empty(),
+        "{:?}",
+        reopened.state().notices
+    );
+    assert!(reopened.state().markers.list.is_empty());
 }
 
 #[test]
@@ -180,4 +181,31 @@ fn heights_come_back_and_the_section_survives_a_reader_that_does_not_know_it() {
     };
     assert_eq!(height_of(1), 90);
     assert_eq!(height_of(0), 0);
+}
+
+/// What the file written by feature 015 holds, written out by hand: a single marker `T1` at 1,000
+/// (comment "start"), a pair `P1` at 5,000..9,000 (colour 4, comment "bit 3"), time counted from `T1`.
+#[test]
+fn a_file_with_markers_of_both_kinds_opens_with_all_of_them() {
+    use la_host::markers::Shape;
+    let dir = TempDir::new("compat-015");
+    let shell = open(&dir, &fixture("markers_v2.lasession"));
+    let state = shell.state();
+    assert!(state.notices.is_empty(), "{:?}", state.notices);
+    let list = &state.markers.list;
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0].name(), "T1");
+    assert_eq!(list[0].shape, Shape::Point(1_000));
+    assert_eq!((list[0].colour, list[0].comment.as_str()), (0, "start"));
+    assert_eq!(list[1].name(), "P1");
+    assert_eq!(
+        list[1].shape,
+        Shape::Interval {
+            start: 5_000,
+            end: 9_000
+        }
+    );
+    assert_eq!((list[1].colour, list[1].comment.as_str()), (4, "bit 3"));
+    assert_eq!(state.markers.origin, 1_000);
+    assert_eq!(state.markers.next_numbers(), [2, 2]);
 }

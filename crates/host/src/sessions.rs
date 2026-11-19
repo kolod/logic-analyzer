@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use la_core::Error;
 use la_session::{
-    LoadLimits, LoadOperation, Progress, SaveOperation, Section, SectionTag, Session, SessionData,
+    LoadLimits, LoadOperation, SaveOperation, Section, SectionTag, Session, SessionData,
 };
 
 use crate::capture::{CaptureOrigin, CaptureView};
@@ -46,12 +46,18 @@ pub(crate) enum Operation {
     },
     /// Reading `path`.
     Load { op: LoadOperation, path: PathBuf },
+    /// Building the cropped copy of the capture on screen.
+    Crop {
+        op: crate::marker_ops::CropOperation,
+        plan: crate::command::CropPlan,
+    },
 }
 
 /// How an operation ended.
 enum Done {
     Saved,
     Loaded(Arc<Session>),
+    Cropped(la_storage::Snapshot),
     Failed(Arc<Error>),
 }
 
@@ -60,6 +66,7 @@ impl Operation {
         match self {
             Operation::Save { op, .. } => op.cancel(),
             Operation::Load { op, .. } => op.cancel(),
+            Operation::Crop { op, .. } => op.cancel(),
         }
     }
 
@@ -67,13 +74,22 @@ impl Operation {
         match self {
             Operation::Save { .. } => OperationKind::Save,
             Operation::Load { .. } => OperationKind::Load,
+            Operation::Crop { .. } => OperationKind::Crop,
         }
     }
 
-    fn progress(&self) -> Progress {
+    /// How far it has come, as `(done, total)`: bytes of the file, or steps of the copy.
+    fn progress(&self) -> (u64, u64) {
         match self {
-            Operation::Save { op, .. } => op.progress(),
-            Operation::Load { op, .. } => op.progress(),
+            Operation::Save { op, .. } => {
+                let p = op.progress();
+                (p.done_bytes, p.total_bytes)
+            }
+            Operation::Load { op, .. } => {
+                let p = op.progress();
+                (p.done_bytes, p.total_bytes)
+            }
+            Operation::Crop { op, .. } => op.progress(),
         }
     }
 
@@ -85,6 +101,10 @@ impl Operation {
             }),
             Operation::Load { op, .. } => op.outcome().map(|r| match r {
                 Ok(session) => Done::Loaded(session),
+                Err(e) => Done::Failed(e),
+            }),
+            Operation::Crop { op, .. } => op.outcome().map(|r| match r {
+                Ok(snapshot) => Done::Cropped(snapshot),
                 Err(e) => Done::Failed(e),
             }),
         }
@@ -106,7 +126,11 @@ fn view_state(state: &State) -> Option<ViewState> {
     let defaults = default_presentation(capture);
     let presentation = (state.presentation != defaults).then(|| state.presentation.clone());
     let window = (!state.auto_fit).then_some((state.window.start, state.window.length));
-    if presentation.is_none() && state.markers.list.is_empty() && window.is_none() {
+    if presentation.is_none()
+        && state.markers.list.is_empty()
+        && state.markers.origin == 0
+        && window.is_none()
+    {
         return None;
     }
     Some(ViewState {
@@ -246,6 +270,8 @@ impl Shell {
                     changes.insert(removed);
                 }
             }
+            // A cut is confirmed by `Decide(Discard)` and never waits for a save.
+            Guarded::Crop(_) => {}
             Guarded::Close | Guarded::Quit => changes.insert(Changes::QUIT),
             Guarded::OpenSession(path) => {
                 if let Executed::Changed(started) = self.begin_load(state, path)? {
@@ -262,11 +288,11 @@ impl Shell {
             return Changes::NONE;
         };
         let mut changes = Changes::NONE;
-        let progress = operation.progress();
+        let (done_bytes, total_bytes) = operation.progress();
         let view = OperationView {
             kind: operation.kind(),
-            done_bytes: progress.done_bytes,
-            total_bytes: progress.total_bytes,
+            done_bytes,
+            total_bytes,
         };
         if state.operation != Some(view) {
             state.operation = Some(view);
@@ -308,9 +334,19 @@ impl Shell {
             (Operation::Load { path, .. }, Done::Loaded(session)) => {
                 changes.insert(self.apply_loaded(state, &session, &path));
             }
-            (_, Done::Failed(e)) => {
+            (Operation::Crop { plan, .. }, Done::Cropped(snapshot)) => {
+                changes.insert(self.apply_crop(state, plan, snapshot));
+            }
+            (finished, Done::Failed(e)) => {
+                // A cut that failed leaves the capture as it was.
+                if matches!(finished, Operation::Crop { .. }) {
+                    state.activity = Activity::Idle;
+                    changes.insert(Changes::PROGRESS);
+                }
                 // A cancelled operation is the user's own doing: no message.
-                if e.code() != la_session::error::CANCELLED {
+                if e.code() != la_session::error::CANCELLED
+                    && e.code() != la_storage::error::CANCELLED
+                {
                     report_into(state, Severity::Error, &e);
                     changes.insert(Changes::NOTICES);
                 }
@@ -422,6 +458,8 @@ impl Shell {
             state.presentation.visible_mask() & device_channel_mask(state);
         revalidate(state);
         state.markers = markers;
+        state.placement = None;
+        state.snap_zoom = None;
         let (decoder_extras, decoder_notices) =
             self.apply_decoder_sections(state, deco_section, dann_section, bounds);
         extras.extend(decoder_extras);
@@ -516,6 +554,14 @@ impl Shell {
     #[cfg(feature = "test-support")]
     pub fn set_session_fs(&mut self, fs: Arc<dyn la_session::harness::FileSystem>) {
         self.session_fs = fs;
+    }
+
+    /// Makes the next cuts wait before they copy anything, until released (tests: a cut that is
+    /// under way, so that cancelling it can be checked).
+    #[cfg(feature = "test-support")]
+    pub fn hold_crop(&self, hold: bool) {
+        self.crop_hold
+            .store(hold, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Whether a save or load is running.

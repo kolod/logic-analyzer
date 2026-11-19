@@ -68,11 +68,19 @@ fn write_the_fixtures_of_the_code_before_feature_014() {
         },
     );
     done(&mut shell, Command::MoveChannel { from: 3, to: 0 });
+    // (The committed fixture was written with the marker of feature 006 and the `VIEW` section of
+    // version 1; this generator is kept compiling for the record and is not to be re-run.)
     done(
         &mut shell,
-        Command::PlaceMarker {
-            position: 1_234,
-            channel: 1,
+        Command::BeginPlacement(la_host::markers::Kind::Single),
+    );
+    done(
+        &mut shell,
+        Command::FixPlacement {
+            pointer: la_host::markers::Pointer {
+                x: 12.0,
+                lane: None,
+            },
         },
     );
     done(
@@ -107,6 +115,46 @@ fn write_the_fixtures_of_the_code_before_feature_014() {
     done(
         &mut shell,
         Command::SaveSessionAs(fixtures().join("feature_008_decoder.lasession")),
+    );
+    settle(&mut shell);
+}
+
+/// Writes `markers_v2.lasession`: a capture with markers of both kinds, as feature 015 saves them
+/// (`VIEW` payload version 2). **Do not run this again**, for the reason in the module comment:
+/// `sessions_compat.rs` checks that later versions still read what this one wrote.
+#[test]
+#[ignore = "writes the fixture once; see the module comment"]
+fn write_the_fixture_of_the_code_of_feature_015() {
+    std::fs::create_dir_all(fixtures()).unwrap();
+    let dir = TempDir::new("compat-fixtures-015");
+    let mut shell = finished_shell(&dir, 0b11, 20_000, 5);
+    let single = common::place_single(&mut shell, 1_000);
+    let pair = common::place_pair(&mut shell, 5_000, 9_000);
+    done(
+        &mut shell,
+        Command::SetMarkerColour {
+            id: pair,
+            colour: 4,
+        },
+    );
+    done(
+        &mut shell,
+        Command::SetMarkerComment {
+            id: single,
+            comment: "start".into(),
+        },
+    );
+    done(
+        &mut shell,
+        Command::SetMarkerComment {
+            id: pair,
+            comment: "bit 3".into(),
+        },
+    );
+    done(&mut shell, Command::SetTimeOrigin(single));
+    done(
+        &mut shell,
+        Command::SaveSessionAs(fixtures().join("markers_v2.lasession")),
     );
     settle(&mut shell);
 }

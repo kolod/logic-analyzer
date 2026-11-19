@@ -20,6 +20,10 @@ pub enum Icon {
     Markers,
     /// A waste bin: remove.
     Trash,
+    /// A pentagon arrow pointing down: a single marker.
+    SingleMarker,
+    /// Two squares on two lines: a pair marker.
+    PairMarker,
     /// A cog: the settings.
     Settings,
     /// An arrow that points right: a collapsed block.
@@ -74,6 +78,36 @@ fn paths(icon: Icon) -> Vec<(Path, bool)> {
             });
             vec![(pole, false), (flag, true)]
         }
+        Icon::SingleMarker => {
+            let line = Path::line(Point::new(10.0, 12.0), Point::new(10.0, 19.0));
+            let arrow = Path::new(|b| {
+                b.move_to(Point::new(3.5, 2.0));
+                b.line_to(Point::new(16.5, 2.0));
+                b.line_to(Point::new(16.5, 8.0));
+                b.line_to(Point::new(10.0, 13.0));
+                b.line_to(Point::new(3.5, 8.0));
+                b.close();
+            });
+            vec![(line, false), (arrow, true)]
+        }
+        Icon::PairMarker => vec![
+            (
+                Path::line(Point::new(7.0, 5.0), Point::new(7.0, 19.0)),
+                false,
+            ),
+            (
+                Path::line(Point::new(13.0, 5.0), Point::new(13.0, 19.0)),
+                false,
+            ),
+            (
+                Path::rectangle(Point::new(1.5, 2.0), Size::new(5.5, 5.5)),
+                true,
+            ),
+            (
+                Path::rectangle(Point::new(13.0, 2.0), Size::new(5.5, 5.5)),
+                true,
+            ),
+        ],
         Icon::Trash => {
             let line = |x0: f32, y0: f32, x1: f32, y1: f32| {
                 (Path::line(Point::new(x0, y0), Point::new(x1, y1)), false)
@@ -176,6 +210,8 @@ mod tests {
             Icon::Decoders,
             Icon::Markers,
             Icon::Trash,
+            Icon::SingleMarker,
+            Icon::PairMarker,
             Icon::Settings,
             Icon::ChevronRight,
             Icon::ChevronDown,

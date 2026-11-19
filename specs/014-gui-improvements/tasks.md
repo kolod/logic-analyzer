@@ -410,7 +410,7 @@ well-formed declarations.
   `cargo deny check` (CI) and the MSRV job: if either refuses the dependency, delete this task's code, say so in
   `plan.md`'s Complexity Tracking and `verification.md`, and keep T047 only.
 - [X] T049 [US6] `packaging/linux/logic-analyzer.desktop`, `packaging/linux/logic-analyzer-session.xml`,
-  `packaging/windows/README.md` per the test of T045 (what the installer of 015+ must register). T045 passes.
+  `packaging/windows/README.md` per the test of T045 (what the installer of 016+ must register). T045 passes.
 
 **Checkpoint**: US6 works.
 

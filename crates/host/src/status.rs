@@ -6,6 +6,7 @@
 use la_i18n::{Args, Key, Localizer};
 
 use crate::capture::CaptureEnd;
+use crate::markers::Kind;
 use crate::state::{Activity, State, Unsaved};
 
 /// The parts of the status line; a part is `None` when it does not apply.
@@ -29,6 +30,8 @@ pub struct StatusLine {
     pub incomplete: bool,
     /// There are changes that are not saved.
     pub unsaved: bool,
+    /// What the user is asked to do now (a marker is being placed), if anything.
+    pub hint: Option<String>,
 }
 
 /// "1 sample", "21 samples": the count with the plural form of the language.
@@ -57,6 +60,7 @@ fn activity_key(activity: Activity) -> Key {
         Activity::Capturing => "status-capturing",
         Activity::Saving => "status-saving",
         Activity::Loading => "status-loading",
+        Activity::Cropping => "status-cropping",
     })
 }
 
@@ -97,5 +101,19 @@ pub fn status_line(state: &State, localizer: &Localizer) -> StatusLine {
         simulated: capture.is_some_and(|c| c.simulated),
         incomplete: capture.is_some_and(|c| c.incomplete),
         unsaved: state.unsaved != Unsaved::Clean,
+        hint: hint_key(state).map(|key| text(&Key::from_static(key))),
     }
+}
+
+/// The key of the hint for what the user is in the middle of, if anything.
+fn hint_key(state: &State) -> Option<&'static str> {
+    if state.snap_zoom.is_some() {
+        return Some("marker-zoomed-in");
+    }
+    let placement = state.placement?;
+    Some(match (placement.kind, placement.first) {
+        (Kind::Single, _) => "marker-placing-single",
+        (Kind::Pair, None) => "marker-placing-pair-first",
+        (Kind::Pair, Some(_)) => "marker-placing-pair-second",
+    })
 }

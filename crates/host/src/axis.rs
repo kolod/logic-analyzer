@@ -34,7 +34,8 @@ impl TickStep {
 pub struct Tick {
     /// Pixel position within the signal area.
     pub x: f64,
-    /// Time of the tick in seconds from the start of the capture (an exact decimal number).
+    /// Time of the tick in seconds from the origin of time (the start of the capture unless the
+    /// user counts time from a marker; negative before the origin), an exact decimal number.
     pub seconds: f64,
     /// A tick at a multiple of the next decade (longer mark, always labelled).
     pub major: bool,
@@ -93,17 +94,20 @@ fn choose_step(seconds_per_pixel: f64) -> TickStep {
     }
 }
 
-/// The ticks of `window` shown on `pixels` pixels at `sample_rate_hz`.
+/// The ticks of `window` shown on `pixels` pixels at `sample_rate_hz`, counting time from the
+/// sample `origin`: the ticks are at multiples of the step from the origin, so they are round
+/// numbers of that time (negative before it).
 #[must_use]
-pub fn build_ticks(window: &ViewWindow, pixels: u32, sample_rate_hz: u64) -> AxisPlan {
+pub fn build_ticks(window: &ViewWindow, pixels: u32, sample_rate_hz: u64, origin: u64) -> AxisPlan {
     if pixels == 0 || sample_rate_hz == 0 || window.length == 0 {
         return AxisPlan::empty();
     }
     let rate = sample_rate_hz as f64;
     let width = f64::from(pixels);
     let length = window.length as f64;
-    let start_time = window.start as f64 / rate;
-    let end_time = window.end() as f64 / rate;
+    let origin_samples = origin as f64;
+    let start_time = (window.start as f64 - origin_samples) / rate;
+    let end_time = (window.end() as f64 - origin_samples) / rate;
     let seconds_per_pixel = length / rate / width;
     let step = choose_step(seconds_per_pixel);
     let step_seconds = step.seconds();
@@ -125,7 +129,7 @@ pub fn build_ticks(window: &ViewWindow, pixels: u32, sample_rate_hz: u64) -> Axi
     while index <= last && ticks.len() < MAX_TICKS {
         let multiple = i128::from(index).saturating_mul(i128::from(step.mantissa));
         let seconds = decimal(multiple, step.exponent);
-        let sample = seconds * rate;
+        let sample = origin_samples + seconds * rate;
         let x = (sample - window.start as f64) * (width / length);
         ticks.push(Tick {
             x,

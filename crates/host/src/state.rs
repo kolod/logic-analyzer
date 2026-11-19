@@ -10,7 +10,7 @@ use crate::capture::{CaptureView, ProgressView};
 use crate::command::{Changes, Guarded};
 use crate::decoders::DecoderState;
 use crate::devices::{ConfigDraft, ConfigProblem};
-use crate::markers::Markers;
+use crate::markers::{End, Markers, Placement, SavedView};
 use crate::notices::NoticeList;
 use crate::presentation::Presentation;
 use crate::settings::Settings;
@@ -24,6 +24,8 @@ pub enum OperationKind {
     Save,
     /// Reading a session file.
     Load,
+    /// Building the cropped copy of the capture after a cut or a trim.
+    Crop,
 }
 
 /// A save or load that is running.
@@ -48,6 +50,8 @@ pub enum Activity {
     Saving,
     /// A session is being loaded.
     Loading,
+    /// A cut or a trim of the capture is running (a cropped copy is being built).
+    Cropping,
 }
 
 /// Whether data would be lost by discarding the current capture.
@@ -181,6 +185,13 @@ pub struct State {
     pub presentation: Presentation,
     /// The markers of the capture.
     pub markers: Markers,
+    /// The marker being placed with the mouse, if any.
+    pub placement: Option<Placement>,
+    /// The window an automatic zoom of a crowded snapping zone replaced; put back when the
+    /// marker is fixed or the placement ends.
+    pub snap_zoom: Option<SavedView>,
+    /// The marker end being dragged (after a pair's ends crossed, the role it has now).
+    pub drag: Option<(u32, End)>,
     /// The session file the capture was saved to or opened from.
     pub session_path: Option<PathBuf>,
     /// The save or load that is running.

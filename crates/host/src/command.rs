@@ -13,6 +13,7 @@ use la_decoders::setup::{Setup, Source, Value};
 
 use crate::decoders::AnnotationRef;
 use crate::devices::SignalProfile;
+use crate::markers::{End, Kind, Pointer};
 use crate::notices::NoticeId;
 use crate::presentation::Colour;
 use crate::settings::Theme;
@@ -115,9 +116,52 @@ impl Decision {
     }
 }
 
-/// A command that waits for a [`Decision`] because unsaved data would be lost.
+/// Which part of the capture a cut or a trim keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CropSide {
+    /// The data to the left of a single marker is deleted.
+    Left,
+    /// The data to the right of a single marker is deleted.
+    Right,
+    /// Only the data between the ends of a pair marker is kept.
+    Pair,
+}
+
+/// A cut or a trim of the capture that waits for the user to confirm it: the positions kept are
+/// `start..end` of the `total` positions of the capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CropPlan {
+    /// What is kept.
+    pub side: CropSide,
+    /// The first position kept.
+    pub start: u64,
+    /// One past the last position kept.
+    pub end: u64,
+    /// The length of the capture as it is now.
+    pub total: u64,
+}
+
+impl CropPlan {
+    /// How many positions are kept.
+    #[must_use]
+    pub fn kept(&self) -> u64 {
+        self.end.saturating_sub(self.start)
+    }
+
+    /// How many positions are deleted.
+    #[must_use]
+    pub fn lost(&self) -> u64 {
+        self.total.saturating_sub(self.kept())
+    }
+}
+
+/// A command that waits for a [`Decision`] because unsaved data would be lost, or because the
+/// user is asked to confirm it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Guarded {
+    /// A cut or a trim of the capture: asked to confirm, since it cannot be undone. The answer
+    /// `Discard` is "delete", `Cancel` is "keep everything".
+    Crop(CropPlan),
     /// Starting a new, empty capture.
     NewCapture,
     /// Starting a capture while one is on screen.
@@ -249,42 +293,78 @@ pub enum Command {
     RemoveRecentFile(PathBuf),
     /// Empties the list of recent files.
     ClearRecentFiles,
-    /// Places a marker.
-    PlaceMarker {
-        /// Sample position.
-        position: u64,
-        /// The channel to snap to when snapping is on.
-        channel: u8,
+    /// Starts placing a marker of a kind with the mouse; nothing is added until a click fixes it
+    /// (`FixPlacement`). The same kind again cancels the placement, the other kind switches to it.
+    BeginPlacement(Kind),
+    /// Ends the placement under way and adds nothing.
+    CancelPlacement,
+    /// A click while placing: fixes the marker (for a pair, its next half) where the pointer is.
+    FixPlacement {
+        /// Where the pointer is over the signal area.
+        pointer: Pointer,
     },
-    /// Moves a marker.
-    MoveMarker {
+    /// Moves one end of a marker (a drag); snaps like a placement.
+    MoveMarkerEnd {
         /// The marker.
         id: u32,
-        /// New sample position.
-        position: u64,
-        /// The channel to snap to when snapping is on.
-        channel: u8,
+        /// Which end.
+        end: End,
+        /// Where the pointer is over the signal area.
+        pointer: Pointer,
     },
-    /// Renames a marker.
-    RenameMarker {
+    /// The button of a drag was released: puts back the view an automatic zoom replaced.
+    EndMarkerDrag,
+    /// One frame of the automatic zoom of a crowded snapping zone; the window it replaces is
+    /// remembered and put back when the marker is fixed or the placement ends.
+    PlacementZoomTo {
+        /// First visible sample.
+        start: u64,
+        /// Number of visible samples.
+        length: u64,
+    },
+    /// Sets the colour of a marker (an index below `MARKER_COLOURS`).
+    SetMarkerColour {
         /// The marker.
         id: u32,
-        /// The new name (sanitized by the host).
-        name: String,
+        /// The colour.
+        colour: u8,
+    },
+    /// Sets the comment of a marker (sanitized and shortened by the host).
+    SetMarkerComment {
+        /// The marker.
+        id: u32,
+        /// The comment.
+        comment: String,
+    },
+    /// Selects a marker, or none.
+    SelectMarker(Option<u32>),
+    /// Makes the position of a single marker the origin of time (time counts from it).
+    SetTimeOrigin(u32),
+    /// Puts the origin of time back to the start of the capture.
+    ResetTimeOrigin,
+    /// Deletes the data to the left of a single marker (after the user confirms).
+    CutLeft(u32),
+    /// Deletes the data to the right of a single marker (after the user confirms).
+    CutRight(u32),
+    /// Keeps only the data between the ends of a pair marker (after the user confirms).
+    TrimToPair(u32),
+    /// Moves the view so that a marker is at its centre; the zoom does not change.
+    ScrollToMarker(u32),
+    /// Sets the zoom and the position so that a pair fills the view with room for its marks.
+    FitToPair(u32),
+    /// Replaces a pair marker by two single markers at its ends.
+    SplitPair(u32),
+    /// Replaces two single markers by one pair marker between them.
+    MakePair {
+        /// One single marker.
+        first: u32,
+        /// The other single marker.
+        second: u32,
     },
     /// Removes one marker.
     RemoveMarker(u32),
     /// Removes every marker.
     RemoveAllMarkers,
-    /// Chooses the two markers a measurement uses.
-    SelectMarkers {
-        /// First marker.
-        first: Option<u32>,
-        /// Second marker.
-        second: Option<u32>,
-    },
-    /// Moves the view so that a marker is visible.
-    GoToMarker(u32),
     /// Turns snapping of markers to transitions on or off.
     SetSnap(bool),
     /// Adds an instance of a registered decoder with default options and no channels yet.
@@ -418,9 +498,18 @@ impl Command {
                 | Command::MoveChannel { .. }
                 | Command::SetChannelHeight { .. }
                 | Command::ResetPresentation
-                | Command::PlaceMarker { .. }
-                | Command::MoveMarker { .. }
-                | Command::RenameMarker { .. }
+                | Command::BeginPlacement(_)
+                | Command::FixPlacement { .. }
+                | Command::MoveMarkerEnd { .. }
+                | Command::SetMarkerColour { .. }
+                | Command::SetMarkerComment { .. }
+                | Command::SetTimeOrigin(_)
+                | Command::ResetTimeOrigin
+                | Command::CutLeft(_)
+                | Command::CutRight(_)
+                | Command::TrimToPair(_)
+                | Command::SplitPair(_)
+                | Command::MakePair { .. }
                 | Command::RemoveMarker(_)
                 | Command::RemoveAllMarkers
                 | Command::AddDecoder { .. }
@@ -468,13 +557,26 @@ impl Command {
             Command::ScrollToEdge { .. } => "scroll_to_edge",
             Command::RemoveRecentFile(_) => "remove_recent_file",
             Command::ClearRecentFiles => "clear_recent_files",
-            Command::PlaceMarker { .. } => "place_marker",
-            Command::MoveMarker { .. } => "move_marker",
-            Command::RenameMarker { .. } => "rename_marker",
+            Command::BeginPlacement(_) => "begin_placement",
+            Command::CancelPlacement => "cancel_placement",
+            Command::FixPlacement { .. } => "fix_placement",
+            Command::MoveMarkerEnd { .. } => "move_marker_end",
+            Command::EndMarkerDrag => "end_marker_drag",
+            Command::PlacementZoomTo { .. } => "placement_zoom_to",
+            Command::SetMarkerColour { .. } => "set_marker_colour",
+            Command::SetMarkerComment { .. } => "set_marker_comment",
+            Command::SelectMarker(_) => "select_marker",
+            Command::SetTimeOrigin(_) => "set_time_origin",
+            Command::ResetTimeOrigin => "reset_time_origin",
+            Command::CutLeft(_) => "cut_left",
+            Command::CutRight(_) => "cut_right",
+            Command::TrimToPair(_) => "trim_to_pair",
+            Command::ScrollToMarker(_) => "scroll_to_marker",
+            Command::FitToPair(_) => "fit_to_pair",
+            Command::SplitPair(_) => "split_pair",
+            Command::MakePair { .. } => "make_pair",
             Command::RemoveMarker(_) => "remove_marker",
             Command::RemoveAllMarkers => "remove_all_markers",
-            Command::SelectMarkers { .. } => "select_markers",
-            Command::GoToMarker(_) => "go_to_marker",
             Command::SetSnap(_) => "set_snap",
             Command::AddDecoder { .. } => "add_decoder",
             Command::ConfigureDecoder { .. } => "configure_decoder",

@@ -1,6 +1,6 @@
 # Host API
 
-Version: 1.2
+Version: 2.0
 
 This is the authoritative description of the API between a user interface and the core. The crate
 is `la-host`; its constant `la_host::HOST_API_VERSION` and the version line above must agree (a test
@@ -23,7 +23,7 @@ truth.
 4. **Errors are values.** A failure is a `Notice` carrying a stable error code; a command that is
    merely not allowed now returns `Outcome::Ignored(..)` and changes nothing.
 5. **Text is localized by the host.** The shell asks for text (`text`, `notice_text`,
-   `status_line`, `measurement_text`) and never formats numbers, units or messages itself.
+   `status_line`, `marker_texts`) and never formats numbers, units or messages itself.
 6. **Versioned.** A change to commands, state fields or semantics changes the version (minor for
    additions, major for breaks) and lands with this document, the implementation and every
    consuming shell in one merge.
@@ -41,7 +41,8 @@ Shell::frame_plan(&self, size: ViewSize) -> FramePlan
 Shell::text(&self, key: &Key, args: &Args) -> String
 Shell::notice_text(&self, notice: &Notice) -> String
 Shell::status_line(&self) -> StatusLine
-Shell::measurement_text(&self) -> Option<MeasurementText>   // distance and frequency of two markers
+Shell::marker_texts(&self) -> Vec<MarkerText>               // the times of every marker, and the duration and frequency of a pair
+Shell::resolve_pointer(&self, Pointer) -> Resolved           // the sample under the pointer (and, with snapping, the transition) for a marker being placed
 Shell::shortcut_table(&self) -> Vec<ShortcutEntry>          // data: menu path, accelerator, action
 Shell::wants_ticks(&self) -> Tick                           // Fast (50 ms) while something runs, else Slow (500 ms)
 Shell::recent_files(&self) -> Vec<RecentFile>               // up to 15, newest first; RecentFile { path, exists }
@@ -97,13 +98,23 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetPanelWidth(u32)` | the width of the panel in logical pixels, kept within 220 to 480 (the default is 280); kept in the settings (`panel_width`) |
 | Unsaved data | `SetUnsavedChoice(Option<Decision>)` | remembers the answer to the question about an unsaved capture (`Some(Save)` or `Some(Discard)`: the question is no longer asked and the answer is applied as if it had been given; `None`: ask every time; `Some(Cancel)` is ignored, since a remembered Cancel would silently stop quitting and opening); kept in the settings (`unsaved_choice`: `save` or `discard`; any other word asks). A remembered Save of a capture that has no file yet still asks for a name (`needs_path`); the question about removing a decoder is always asked |
 | Recent files | `RemoveRecentFile(path)` / `ClearRecentFiles` | edit the list of the 15 most recent files |
-| Markers | `PlaceMarker { position, channel }` | at most 64; snaps to the nearest transition of `channel` when snapping is on |
-| | `MoveMarker { id, position, channel }` | snaps like a new marker |
-| | `RenameMarker { id, name }` | sanitized like a channel name |
-| | `RemoveMarker(u32)` | removes it and clears it from the measured pair |
+| Markers | `BeginPlacement(Kind)` | starts placing a single or a pair marker with the mouse; nothing is added until `FixPlacement`; the same kind again cancels, the other kind switches; ignored without a capture, at 64 markers, or while saving, loading or cropping |
+| | `CancelPlacement` | ends the placement; nothing is added |
+| | `FixPlacement { pointer }` | a click: fixes a single marker, or the first and then the second half of a pair (the left one becomes the start); the pointer is resolved like `Shell::resolve_pointer` |
+| | `MoveMarkerEnd { id, end, pointer }` | a drag of one end (`Point`, `Start`, `End`); ends that cross exchange roles |
+| | `EndMarkerDrag` | the button was released; puts back a view an automatic zoom replaced |
+| | `PlacementZoomTo { start, length }` | one frame of the automatic zoom of a crowded snapping zone; the window it replaces is remembered |
+| | `SetMarkerColour { id, colour }` | an index below 8 |
+| | `SetMarkerComment { id, comment }` | sanitized, at most 80 characters |
+| | `SelectMarker(Option<u32>)` | selects a marker, or none |
+| | `SetTimeOrigin(u32)` / `ResetTimeOrigin` | time counts from a single marker / from the start of the capture again |
+| | `CutLeft(u32)` / `CutRight(u32)` | deletes the data to the left / right of a single marker, after the user confirms; a background operation |
+| | `TrimToPair(u32)` | keeps only the data between the ends of a pair, after the user confirms; a background operation |
+| | `ScrollToMarker(u32)` | the window of the same length is centred on the marker (a pair: on its start), as near as the capture allows |
+| | `FitToPair(u32)` | zoom and position so that the pair fills the view with room for its marks |
+| | `SplitPair(u32)` / `MakePair { first, second }` | a pair becomes two single markers / two single markers become a pair |
+| | `RemoveMarker(u32)` | removes it; its number is not given again |
 | | `RemoveAllMarkers` | |
-| | `SelectMarkers { first, second }` | the pair a measurement uses |
-| | `GoToMarker(u32)` | moves the window so the marker is visible, zoom unchanged |
 | | `SetSnap(bool)` | snapping of markers to transitions |
 | Sessions | `SaveSession` | to the current file; `Ignored(needs_path)` when there is none |
 | | `SaveSessionAs(PathBuf)` | background save; atomic; the old file survives any failure |
@@ -268,10 +279,31 @@ never translated.
 
 ## The `VIEW` section of a session file
 
-The presentation, markers and window are stored in the optional `VIEW` section of a session file
-(format 1.1): `specs/006-ui-shell-signal-view/contracts/view-section.md`. It is written only when
-the look differs from the defaults. An invalid section opens the capture with defaults and a
-`host.view_invalid` warning and is dropped on the next save; a newer one is kept untouched.
+The presentation, the markers of both kinds, the origin of time and the window are stored in the
+optional `VIEW` section of a session file (format 1.1), payload version 2:
+`specs/015-markers-rework/contracts/view-section-2.md` (the channel and window parts are those of
+`specs/006-ui-shell-signal-view/contracts/view-section.md`). It is written only when the look
+differs from the defaults. An invalid section, and one of version 1 (which is not read), opens the
+capture with defaults and a `host.view_invalid` warning and is dropped on the next save; a newer one
+is kept untouched.
+
+## Markers
+
+A marker is a single marker (`T1`, a point) or a pair (`P1`, an interval); numbers are per kind and
+never reused; at most 64. A marker is put in place with the mouse: `BeginPlacement` starts a
+placement in `State.placement` and adds nothing, `FixPlacement` (a click) fixes it (a pair takes two
+clicks; the left half is the start). `Shell::resolve_pointer(Pointer { x, lane })` says what a pointer
+means (the sample under it; with snapping on and a `lane`, the nearest measured edge of that channel
+within twelve pixels, highlighted as `Resolved.snapped`; `Resolved.crowded` when a second edge is
+in reach); it asks the storage's indexed queries a fixed number of times. When the pointer rests over
+a crowded zone the shell offers `Shell::crowded_zoom_target`; the interface animates with
+`PlacementZoomTo` frames, the host remembers the view it replaced (`State.snap_zoom`) and puts it back
+when the marker is fixed or the placement ends (`EndMarkerDrag` for a drag), unless the user zoomed or
+moved the view by hand. `CutLeft`, `CutRight` and `TrimToPair` ask a confirmation
+(`Guarded::Crop`, never answered by a remembered choice; `Discard` deletes) and then build a cropped
+copy of the capture in the background (`Activity::Cropping`, `OperationKind::Crop`,
+`CancelOperation`); the capture, the markers, the window and the decoders are replaced in one change
+when it is done, and a failed or cancelled cut leaves everything as it was.
 
 ## The `LAYT` section of a session file
 

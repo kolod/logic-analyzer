@@ -12,7 +12,10 @@ mod common;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use common::{SlowFs, TempDir, assert_same_snapshot, finished_shell, temp_files, wait_operation};
+use common::{
+    SlowFs, TempDir, assert_same_snapshot, finished_shell, place_pair, place_single, temp_files,
+    wait_operation,
+};
 use la_host::notices::NoticeContent;
 use la_host::presentation::Colour;
 use la_host::{Command, Outcome, Shell, ShellConfig, Unsaved};
@@ -79,23 +82,24 @@ fn decorated_shell(dir: &TempDir, seed: u64) -> Shell {
         },
     );
     done(&mut shell, Command::MoveChannel { from: 3, to: 0 });
-    for position in [50_000, 120_000] {
-        done(
-            &mut shell,
-            Command::PlaceMarker {
-                position,
-                channel: 1,
-            },
-        );
-    }
+    place_single(&mut shell, 50_000);
+    let pair = place_pair(&mut shell, 70_000, 120_000);
     let first = shell.state().markers.list[0].id;
     done(
         &mut shell,
-        Command::RenameMarker {
+        Command::SetMarkerComment {
             id: first,
-            name: "start".into(),
+            comment: "start".into(),
         },
     );
+    done(
+        &mut shell,
+        Command::SetMarkerColour {
+            id: pair,
+            colour: 5,
+        },
+    );
+    done(&mut shell, Command::SetTimeOrigin(first));
     done(
         &mut shell,
         Command::ZoomToRange {
@@ -138,8 +142,7 @@ fn a_saved_capture_opens_exactly_as_it_was() {
     assert!(cb.simulated, "the simulated mark survives");
     assert_eq!(ca.incomplete, cb.incomplete);
     assert_eq!(a.presentation, b.presentation);
-    assert_eq!(a.markers.list, b.markers.list);
-    assert_eq!(a.markers.selected, b.markers.selected);
+    assert_eq!(a.markers, b.markers);
     assert_eq!(a.window, b.window);
     assert!(!b.auto_fit);
     assert_eq!(b.unsaved, Unsaved::Clean);
@@ -399,7 +402,9 @@ fn an_invalid_view_section_opens_with_defaults_a_warning_and_is_dropped_on_the_n
     let shell = finished_shell(&dir, 0b11, 30_000, 12);
     // A VIEW section the reader rejects: one marker beyond the end of the capture.
     let capture = shell.state().capture.as_ref().unwrap();
-    let bad_payload = vec![1_u8, 0, 1, 1, 0xff, 0xff, 0x7f, 0, 0, 0, 0, 0, 0];
+    let bad_payload = vec![
+        2_u8, 0, 1, 1, 0, 1, 0, 0xff, 0xff, 0x7f, 0, 1, 2, 1, 0, 0, 0, 0, 0,
+    ];
     let data = la_session::SessionData::new(capture.description.clone(), capture.snapshot.clone())
         .with_section(la_session::Section {
             tag: la_session::SectionTag::new("VIEW").unwrap(),

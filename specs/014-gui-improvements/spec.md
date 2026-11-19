@@ -392,8 +392,8 @@ view sideways.
 - **FR-008**: A click on the icon of the view that is shown MUST hide the panel; a click on another icon
   MUST show that view. The state of the panel (hidden or the view shown) MUST be kept for the next
   start.
-- **FR-009** *(amended)*: The content of the Decoders view and of the Markers view MUST be what the panels
-  of feature 006 and feature 007 held, with these changes of presentation: a decoder is shown by its
+- **FR-009** *(amended)*: The content of the Decoders view MUST be what the panel of feature 007
+  held (the content of the Markers view is defined by feature 015), with these changes of presentation: a decoder is shown by its
   name (the editable name field is gone; the host command `RenameDecoder` stays), an arrow folds its
   properties away and unfolds them, a bin removes it, and the header buttons have no tooltips.
 - **FR-010** *(amended)*: The panel MUST keep a usable minimum width; the signals give way first. Its width
@@ -540,7 +540,7 @@ view sideways.
   as the names, colours and order already are.
 - Icons: the application icon is drawn for this project, as vector artwork with raster exports; the
   session-file icon shares its motif. Registering the file type with the operating system (Windows
-  registry, installation of the desktop entry and the MIME type) belongs to packaging (roadmap item 015+);
+  registry, installation of the desktop entry and the MIME type) belongs to packaging (roadmap item 016+);
   this feature supplies the files.
 - The toolbar of feature 006 is removed; what it held moved into the Capture view and the status line
   (see the Clarifications).

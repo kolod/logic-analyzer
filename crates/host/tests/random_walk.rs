@@ -203,28 +203,24 @@ fn check_invariants(shell: &Shell) -> Result<(), String> {
             ));
         }
     }
-    // Markers.
+    // Markers: every invariant of the model.
     let markers = &state.markers;
-    if markers.list.len() > la_host::markers::MAX_MARKERS {
-        return Err("too many markers".into());
-    }
-    let mut ids = BTreeSet::new();
-    for m in &markers.list {
-        if !ids.insert(m.id) {
-            return Err(format!("marker id {} repeats", m.id));
-        }
-        let length = capture.map_or(0, |c| c.snapshot.length());
-        if m.position >= length.max(1) {
-            return Err(format!("marker at {} beyond {length}", m.position));
-        }
-    }
-    for id in markers.selected.into_iter().flatten() {
-        if !ids.contains(&id) {
-            return Err(format!("selected marker {id} does not exist"));
-        }
-    }
+    markers.check(capture.map_or(0, |c| c.snapshot.length()))?;
     if capture.is_none() && !markers.list.is_empty() {
         return Err("markers without a capture".into());
+    }
+    // Placing and the view an automatic zoom replaced.
+    if state.placement.is_some() && capture.is_none() {
+        return Err("a placement without a capture".into());
+    }
+    if state.snap_zoom.is_some() && state.placement.is_none() && state.drag.is_none() {
+        return Err("a saved view with nothing being placed or dragged".into());
+    }
+    if state.drag.is_some_and(|(id, _)| markers.get(id).is_none()) {
+        return Err("a drag of a marker that does not exist".into());
+    }
+    if state.activity == la_host::Activity::Cropping && state.operation.is_none() {
+        return Err("a cut without its operation".into());
     }
     // The presentation.
     let styles = &state.presentation.channels;
@@ -511,6 +507,69 @@ fn decoder_action(rng: &mut Lcg, shell: &Shell, files: &Files) -> Command {
     }
 }
 
+/// A pointer anywhere over (and beyond) the signal area, over a lane or not.
+fn random_pointer(rng: &mut Lcg, channel: u8) -> la_host::markers::Pointer {
+    la_host::markers::Pointer {
+        x: [-50.0, f32::NAN, 0.0, 400.0, 799.0, 5_000.0][rng.below(6) as usize]
+            + rng.below(100) as f32,
+        lane: [None, Some(channel)][rng.below(2) as usize],
+    }
+}
+
+/// Any command about markers: placing, dragging, the actions of both kinds, the cuts.
+fn marker_action(rng: &mut Lcg, channel: u8) -> Command {
+    use la_host::markers::{End, Kind};
+    let id = rng.below(90) as u32;
+    match rng.below(26) {
+        0..=2 => Command::BeginPlacement(if rng.below(2) == 0 {
+            Kind::Single
+        } else {
+            Kind::Pair
+        }),
+        3..=6 => Command::FixPlacement {
+            pointer: random_pointer(rng, channel),
+        },
+        7 => Command::CancelPlacement,
+        8 | 9 => Command::MoveMarkerEnd {
+            id,
+            end: [End::Point, End::Start, End::End][rng.below(3) as usize],
+            pointer: random_pointer(rng, channel),
+        },
+        10 => Command::EndMarkerDrag,
+        11 => Command::PlacementZoomTo {
+            start: rng.below(8_000),
+            length: [0, 1, 40, 800, 9_000, u64::MAX][rng.below(6) as usize],
+        },
+        12 => Command::SetMarkerColour {
+            id,
+            colour: rng.below(10) as u8,
+        },
+        13 => Command::SetMarkerComment {
+            id,
+            comment: ["m", "", "\u{202e}x\u{0}", &"c".repeat(200)][rng.below(4) as usize].into(),
+        },
+        14 => Command::SelectMarker([None, Some(id)][rng.below(2) as usize]),
+        15 => Command::SetTimeOrigin(id),
+        16 => Command::ResetTimeOrigin,
+        17 => Command::CutLeft(id),
+        18 => Command::CutRight(id),
+        19 => Command::TrimToPair(id),
+        20 => Command::ScrollToMarker(id),
+        21 => Command::FitToPair(id),
+        22 => Command::SplitPair(id),
+        23 => Command::MakePair {
+            first: id,
+            second: rng.below(90) as u32,
+        },
+        24 => Command::RemoveMarker(id),
+        _ => [
+            Command::RemoveAllMarkers,
+            Command::SetSnap(rng.below(2) == 0),
+        ][rng.below(2) as usize]
+            .clone(),
+    }
+}
+
 fn random_action(rng: &mut Lcg, files: &Files, shell: &Shell) -> Command {
     let channel = rng.below(40) as u8; // some beyond the capture: invalid on purpose
     let position = rng.below(6_000);
@@ -576,24 +635,7 @@ fn random_action(rng: &mut Lcg, files: &Files, shell: &Shell) -> Command {
             to: rng.below(40) as usize,
         },
         18 => Command::ResetPresentation,
-        19..=21 => Command::PlaceMarker { position, channel },
-        22 => Command::MoveMarker {
-            id: rng.below(80) as u32,
-            position,
-            channel,
-        },
-        23 => Command::RenameMarker {
-            id: rng.below(80) as u32,
-            name: "m".into(),
-        },
-        24 => Command::RemoveMarker(rng.below(80) as u32),
-        25 => Command::RemoveAllMarkers,
-        26 => Command::SelectMarkers {
-            first: Some(rng.below(80) as u32),
-            second: [None, Some(rng.below(80) as u32)][rng.below(2) as usize],
-        },
-        27 => Command::GoToMarker(rng.below(80) as u32),
-        28 => Command::SetSnap(rng.below(2) == 0),
+        19..=28 => marker_action(rng, channel),
         29..=30 => Command::SaveSessionAs(files.targets[rng.below(3) as usize].clone()),
         31 => Command::SaveSession,
         32..=33 => Command::OpenSession(files.good.clone()),

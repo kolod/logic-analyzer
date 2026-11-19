@@ -176,6 +176,6 @@ call.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| A new build dependency (`winresource`), Windows only | Windows shows the icon of an executable from a resource inside it; the window icon alone does not give Explorer or the task-bar pin the icon | Leaving it to the installer (015+) leaves a developer build without an icon in Explorer; the fallback is exactly that, taken if the dependency is refused by `cargo deny` or the MSRV job |
+| A new build dependency (`winresource`), Windows only | Windows shows the icon of an executable from a resource inside it; the window icon alone does not give Explorer or the task-bar pin the icon | Leaving it to the installer (016+) leaves a developer build without an icon in Explorer; the fallback is exactly that, taken if the dependency is refused by `cargo deny` or the MSRV job |
 | A new optional session section (`LAYT`) instead of extending `VIEW` | A reader without this feature must still open names, colours and order | `VIEW` version 2 would be unreadable to the version before (it is treated as newer and ignored), so a user who goes back would lose names and colours |
 | Two new queries in `la-storage` | The next and the previous edge in O(log N); forward-only `transitions` cannot find the previous edge without a scan | A scan from the start is O(N) in the capture, which Principle VIII forbids |

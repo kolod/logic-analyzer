@@ -13,6 +13,7 @@ mod block;
 mod capture;
 mod channel;
 mod config;
+mod crop;
 pub mod error;
 mod ingest;
 mod math;
@@ -27,6 +28,7 @@ mod types;
 pub use capture::Capture;
 pub use channel::TransitionIter;
 pub use config::{CaptureConfig, Limits, MAX_CHANNELS};
+pub use crop::{CropControl, crop};
 pub use published::{CaptureReader, Snapshot};
 pub use restore::{CaptureRestorer, RestoredStatus};
 pub use types::{

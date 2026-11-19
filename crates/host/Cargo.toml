@@ -39,5 +39,9 @@ harness = false
 name = "annotation_plan"
 harness = false
 
+[[bench]]
+name = "markers"
+harness = false
+
 [lints]
 workspace = true

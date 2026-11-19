@@ -116,15 +116,42 @@ as an edge.
 
 ## Markers and measuring
 
-Press **M** (or right-click a lane) to place a marker; at most 64 fit. With **Snap to transitions**
-(S) a marker jumps to the nearest signal change of the lane it was placed on, within about twelve
-pixels. Drag a marker's line to move it. In the **Markers** panel give each marker a name, choose
-which two are measured (the buttons **1** and **2**), jump to one, or remove it (Delete removes the
-selected one; **Markers → Remove all markers** clears them). **[** and **]** jump to the previous
-and next marker.
+There are two kinds of marker. A **single marker** (named **T1**, **T2**, ...) is one point in time:
+a coloured pentagon arrow pointing down at the top of the signals, on a line through them. A
+**pair marker** (**P1**, **P2**, ...) is an interval: two lines, a coloured square to the left of the
+start line and one to the right of the end line. The two kinds are numbered separately, and a number
+is never used twice in one capture. At most 64 markers fit (a pair counts as one).
 
-With two markers chosen the panel shows the **distance** in time and its **frequency**, formatted for
-your language. The frequency shows only as many digits as the distance really resolves.
+**Placing.** The buttons at the top of the **Markers** panel (and **M** for a single marker,
+**Shift+M** for a pair, or the **Markers** menu) only *start* a placement: nothing is added yet. A
+dotted line in the colour of the marker follows the pointer. Click to fix a single marker; for a
+pair click twice, the left of the two clicks becomes the start whichever came first. While the first
+end of a pair is fixed, the squares jump to the side that suits the end the pointer would make.
+**Esc**, the right mouse button or the same button again cancel. The line sits only on a whole
+sample.
+
+**Snapping.** With **Snap to transitions** (S, on by default) the line snaps to the nearest edge of
+the signal the pointer is over, within about twelve pixels, and that edge is highlighted; over the
+ruler, the legend or another signal nothing snaps. If many edges lie close together and you hold the
+pointer still for about two seconds, the view zooms in by itself until the edges can be told apart;
+click the one you want, or press Esc, and the view returns to what it was.
+
+**Dragging.** Drag a marker's line or its mark to move it; a pair's two ends swap roles if you drag
+one past the other.
+
+**Actions.** Open them with the `⋯` button of a row in the panel or by right-clicking a mark. For
+every marker: a colour (one of eight), a short comment (up to 80 characters) and delete (the bin
+icon of a row deletes at once). For a single marker: *Count time from here* (the ruler and all
+times count from it; earlier points are negative), *Delete data to the left* and *to the right*,
+*Scroll to it*. For a pair: *Trim to the pair* (keep only the data between its ends), *Fit the view
+to the pair* and *Convert to two single markers*. Check two single markers in the panel and press
+**Make a pair** to join them. The deleting actions ask first, run in the background and **cannot be
+undone**; a pair that would be left with one end is removed, and you are told how many. **[** and
+**]** go to the previous and next marker, Delete removes the selected one, and **Markers → Remove
+all markers** clears them.
+
+A pair shows its **duration** and the **frequency** of that duration, formatted for your language;
+the frequency shows only as many digits as the duration really resolves.
 
 ## Decoders
 
@@ -227,7 +254,8 @@ Saving never damages an existing file: it writes a new file and replaces the old
 new one is complete, so a full disk, a crash or a power failure leaves the previous file as it
 was. A damaged or truncated file is refused with a message that says what is wrong, and what you
 had open stays open. If only the part of the file that stores your channel names and markers is
-damaged, the capture still opens with the defaults and a warning.
+damaged, the capture still opens with the defaults and a warning. Files saved before markers had two
+kinds open without their markers (and with that warning).
 
 You are never silently asked to lose data: a new capture, opening a file or closing the window while
 the capture is unsaved or still running first asks **Save**, **Discard** or **Cancel**. A running
@@ -274,7 +302,7 @@ contains signal data, channel names or marker names.
 | Ctrl+, | settings |
 | F1 | about |
 | `+` `-` Ctrl+0 Home End Left Right (with Shift: a whole view) | the view |
-| M `[` `]` Delete S | markers |
+| M Shift+M Esc `[` `]` Delete S | markers |
 | D, F8, Shift+F8, Ctrl+F8 | add a decoder, next / previous / selected annotation |
 | Ctrl+= Ctrl+- | interface scale |
 

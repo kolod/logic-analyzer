@@ -129,12 +129,21 @@ pub enum Message {
     SaveFileAs,
     /// The file chooser ended (`None`: the user gave up).
     FileChosen(FileIntent, Option<std::path::PathBuf>),
-    /// A marker shortcut or menu entry: place, previous, next, remove selected, snap.
+    /// A marker shortcut or menu entry: previous, next, remove selected, snap.
     MarkerAction(MarkerAction),
-    /// A marker was renamed in the markers panel.
-    MarkerName(u32, String),
-    /// A marker becomes the first (0) or second (1) of the measurement.
-    MarkerMeasure(usize, u32),
+    /// Where the pointer is over the signal area while a marker is being placed (`None`: it is
+    /// not over it).
+    PlacementPointer(Option<la_host::markers::Pointer>, Instant),
+    /// A frame of the clock of the automatic zoom (only while a marker is placed or dragged).
+    DwellTick(Instant),
+    /// The actions of a marker are opened or closed (its swatch or its menu button).
+    MarkerMenu(u32),
+    /// A marker was pressed with the right button in the signal view: show its actions.
+    MarkerContext(u32),
+    /// The comment of a marker is being edited in its action list.
+    MarkerComment(u32, String),
+    /// A single marker is checked or unchecked for making a pair.
+    MarkerCheck(u32, bool),
     /// The menu entry that adds a decoder.
     /// An entry of the open menu that has a submenu (the index in the table) is pressed.
     SubmenuToggled(usize),
@@ -216,8 +225,6 @@ pub enum FileIntent {
 /// What a marker menu entry or shortcut asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarkerAction {
-    /// Place a marker at the centre of the view.
-    Place,
     /// Go to the previous marker.
     Previous,
     /// Go to the next marker.
@@ -404,7 +411,18 @@ pub struct App {
     length_text: String,
     length_error: Option<la_host::config::SecondsError>,
     seed_text: String,
-    marker_names: std::collections::BTreeMap<u32, String>,
+    /// What the pointer means to the marker being placed (the host's answer to the pointer).
+    placement_preview: Option<la_host::markers::Resolved>,
+    /// The marker whose actions are open in the Markers view.
+    marker_menu: Option<u32>,
+    /// The comments of the markers as their text fields hold them.
+    marker_comments: std::collections::BTreeMap<u32, String>,
+    /// The single markers that are checked, to be made a pair.
+    marker_checked: std::collections::BTreeSet<u32>,
+    /// How long the pointer has rested while a marker is placed or dragged.
+    dwell: crate::dwell::Dwell,
+    /// The animation of an automatic zoom that is running.
+    zoom_animation: Option<crate::dwell::ZoomAnimation>,
     /// The decoders whose properties are folded away.
     folded_decoders: std::collections::BTreeSet<u32>,
     option_texts: std::collections::BTreeMap<(u32, String), String>,
@@ -504,7 +522,12 @@ impl App {
             length_text: String::new(),
             length_error: None,
             seed_text: String::new(),
-            marker_names: std::collections::BTreeMap::new(),
+            placement_preview: None,
+            marker_menu: None,
+            marker_comments: std::collections::BTreeMap::new(),
+            marker_checked: std::collections::BTreeSet::new(),
+            dwell: crate::dwell::Dwell::default(),
+            zoom_animation: None,
             folded_decoders: std::collections::BTreeSet::new(),
             option_texts: std::collections::BTreeMap::new(),
             messages_open: false,
@@ -805,64 +828,22 @@ impl App {
             window.start.saturating_add(window.length / 2)
         };
         match action {
-            MarkerAction::Place => {
-                let channel = self.plan.channels.first().map_or(0, |c| c.channel);
-                self.run(Command::PlaceMarker {
-                    position: centre,
-                    channel,
-                })
-            }
             MarkerAction::Previous | MarkerAction::Next => {
-                let mut by_position: Vec<(u64, u32)> = state
-                    .markers
-                    .list
-                    .iter()
-                    .map(|m| (m.position, m.id))
-                    .collect();
-                by_position.sort_unstable();
-                let target = if action == MarkerAction::Next {
-                    by_position
-                        .iter()
-                        .find(|(p, _)| *p > centre)
-                        .or(by_position.first())
-                } else {
-                    by_position
-                        .iter()
-                        .rev()
-                        .find(|(p, _)| *p < centre)
-                        .or(by_position.last())
-                };
-                match target {
-                    Some((_, id)) => self.run(Command::GoToMarker(*id)),
+                let forward = action == MarkerAction::Next;
+                match state.markers.jump_target(centre, forward) {
+                    Some(id) => self.run(Command::ScrollToMarker(id)),
                     None => Task::none(),
                 }
             }
-            MarkerAction::RemoveSelected => {
-                let id = state.markers.selected[1]
-                    .or(state.markers.selected[0])
-                    .or_else(|| state.markers.list.last().map(|m| m.id));
-                match id {
-                    Some(id) => self.run(Command::RemoveMarker(id)),
-                    None => Task::none(),
-                }
-            }
+            MarkerAction::RemoveSelected => match state.markers.selected {
+                Some(id) => self.run(Command::RemoveMarker(id)),
+                None => Task::none(),
+            },
             MarkerAction::ToggleSnap => {
                 let snap = !state.snap;
                 self.run(Command::SetSnap(snap))
             }
         }
-    }
-
-    /// Copies the marker names into the text fields.
-    fn sync_marker_names(&mut self) {
-        self.marker_names = self
-            .shell
-            .state()
-            .markers
-            .list
-            .iter()
-            .map(|m| (m.id, m.name.clone()))
-            .collect();
     }
 
     /// Recomputes the frame plan and the canvas cache when what they depend on changed.
@@ -954,6 +935,12 @@ impl App {
             splitter,
             keyboard::listen().map(Message::Key),
             iced::time::every(period).map(Message::Tick),
+            // The clock of the automatic zoom runs only while a marker is placed or dragged.
+            if self.shell.state().placement.is_some() || self.shell.state().drag.is_some() {
+                iced::time::every(Duration::from_millis(33)).map(Message::DwellTick)
+            } else {
+                Subscription::none()
+            },
             window::close_requests().map(|_| Message::CloseRequested),
             // Only the moves and size changes are wanted: turning every window event (redraw
             // requests included) into a message would make the toolkit redraw for each of them.
@@ -967,13 +954,110 @@ impl App {
         ])
     }
 
+    /// Keeps what the Markers view holds in step with the markers: a menu, a check or a comment
+    /// of a marker that is gone goes away, and the comment fields show the comments (except while
+    /// one is being typed, which would move the cursor).
+    fn sync_markers(&mut self, editing_comment: bool) {
+        let state = self.shell.state();
+        let exists = |id: &u32| state.markers.get(*id).is_some();
+        if self.marker_menu.as_ref().is_some_and(|id| !exists(id)) {
+            self.marker_menu = None;
+        }
+        self.marker_checked.retain(exists);
+        if !editing_comment {
+            self.marker_comments = crate::marker_view::comments_of(state);
+        }
+    }
+
+    /// The texts of the Markers view.
+    fn marker_strings(&self) -> crate::marker_view::Strings {
+        crate::marker_view::Strings {
+            title: self.t("panel-markers"),
+            single: self.t("marker-single-add"),
+            pair: self.t("marker-pair-add"),
+            empty: self.t("marker-empty"),
+            limit: self.t("marker-limit"),
+            actions: self.t("marker-actions"),
+            delete: self.t("marker-delete"),
+            comment: self.t("marker-comment"),
+            make_pair: self.t("marker-make-pair"),
+            origin: self.t("marker-action-origin"),
+            origin_reset: self.t("marker-action-origin-reset"),
+            cut_left: self.t("marker-action-cut-left"),
+            cut_right: self.t("marker-action-cut-right"),
+            scroll: self.t("marker-action-scroll"),
+            trim: self.t("marker-action-trim"),
+            fit: self.t("marker-action-fit"),
+            split: self.t("marker-action-split"),
+            disabled_running: self.t("marker-cut-disabled-running"),
+            disabled_nothing: self.t("marker-cut-disabled-nothing"),
+            colours: [
+                "marker-colour-0",
+                "marker-colour-1",
+                "marker-colour-2",
+                "marker-colour-3",
+                "marker-colour-4",
+                "marker-colour-5",
+                "marker-colour-6",
+                "marker-colour-7",
+            ]
+            .iter()
+            .map(|key| self.t(key))
+            .collect(),
+        }
+    }
+
+    /// One frame of the clock of the automatic zoom: starts the zoom when the pointer has rested
+    /// over a crowded zone, and steps the animation of one that is running.
+    fn dwell_tick(&mut self, now: Instant) {
+        let state = self.shell.state();
+        if state.placement.is_none() && state.drag.is_none() {
+            self.dwell.reset();
+            self.zoom_animation = None;
+            return;
+        }
+        if let Some(animation) = self.zoom_animation {
+            // The user took the view over (a wheel turn, a pan): the zoom stops.
+            if state.snap_zoom.is_none() {
+                self.zoom_animation = None;
+                return;
+            }
+            let ((start, length), done) = animation.frame(now);
+            let _ = self.run(Command::PlacementZoomTo { start, length });
+            if done {
+                self.zoom_animation = None;
+            }
+            return;
+        }
+        if let Some(pointer) = self.dwell.due(now)
+            && let Some(target) = self.shell.crowded_zoom_target(pointer)
+        {
+            let shown = if state.auto_fit {
+                (0, state.capture.as_ref().map_or(0, |c| c.snapshot.length()))
+            } else {
+                (state.window.start, state.window.length)
+            };
+            let animation = crate::dwell::ZoomAnimation::new(shown, target, now);
+            let ((start, length), done) = animation.frame(now);
+            let _ = self.run(Command::PlacementZoomTo { start, length });
+            if !done {
+                self.zoom_animation = Some(animation);
+            }
+        }
+    }
+
     /// Runs a host command and turns its outcome into a task.
     fn run(&mut self, command: Command) -> Task<Message> {
-        let renames = matches!(command, Command::RenameMarker { .. });
+        let editing_comment = matches!(command, Command::SetMarkerComment { .. });
         let outcome = self.shell.apply(command);
-        if !renames {
-            self.sync_marker_names();
+        if self.shell.state().placement.is_none() {
+            self.placement_preview = None;
         }
+        if self.shell.state().placement.is_none() && self.shell.state().drag.is_none() {
+            self.dwell.reset();
+            self.zoom_animation = None;
+        }
+        self.sync_markers(editing_comment);
         self.after(&outcome)
     }
 
@@ -1028,6 +1112,13 @@ impl App {
             Message::Key(keyboard::Event::KeyPressed {
                 key: keyboard::Key::Named(keyboard::key::Named::Escape),
                 ..
+            }) if self.marker_menu.is_some() && self.shell.state().placement.is_none() => {
+                self.marker_menu = None;
+                Task::none()
+            }
+            Message::Key(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
             }) if self.settings_open || self.about_open => {
                 self.settings_open = false;
                 self.about_open = false;
@@ -1048,9 +1139,6 @@ impl App {
                     Some(Action::UiScaleDown) => self.update(Message::ScaleStep(-1)),
                     Some(Action::SaveFile) => self.update(Message::SaveFile),
                     Some(Action::SaveFileAs) => self.update(Message::SaveFileAs),
-                    Some(Action::PlaceMarker) => {
-                        self.update(Message::MarkerAction(MarkerAction::Place))
-                    }
                     Some(Action::PreviousMarker) => {
                         self.update(Message::MarkerAction(MarkerAction::Previous))
                     }
@@ -1125,19 +1213,36 @@ impl App {
                 self.open_menu = None;
                 self.marker_action(action)
             }
-            Message::MarkerName(id, name) => {
-                self.marker_names.insert(id, name.clone());
-                self.run(Command::RenameMarker { id, name })
+            Message::PlacementPointer(pointer, now) => {
+                self.placement_preview = pointer.map(|p| self.shell.resolve_pointer(p));
+                self.dwell.moved(pointer, now);
+                Task::none()
             }
-            Message::MarkerMeasure(slot, id) => {
-                let mut pair = self.shell.state().markers.selected;
-                if let Some(entry) = pair.get_mut(slot) {
-                    *entry = Some(id);
+            Message::DwellTick(now) => {
+                self.dwell_tick(now);
+                Task::none()
+            }
+            Message::MarkerMenu(id) => {
+                self.marker_menu = (self.marker_menu != Some(id)).then_some(id);
+                Task::none()
+            }
+            Message::MarkerContext(id) => {
+                self.marker_menu = Some(id);
+                let _ = self.run(Command::SelectMarker(Some(id)));
+                self.run(Command::SetSidePanel(la_host::SidePanel::Markers))
+            }
+            Message::MarkerComment(id, comment) => {
+                let comment = crate::marker_view::limit_comment(&comment);
+                self.marker_comments.insert(id, comment.clone());
+                self.run(Command::SetMarkerComment { id, comment })
+            }
+            Message::MarkerCheck(id, on) => {
+                if on {
+                    self.marker_checked.insert(id);
+                } else {
+                    self.marker_checked.remove(&id);
                 }
-                self.run(Command::SelectMarkers {
-                    first: pair[0],
-                    second: pair[1],
-                })
+                Task::none()
             }
             Message::OpenSettings => {
                 self.open_menu = None;
@@ -1316,6 +1421,10 @@ impl App {
             Message::Run(command) => {
                 self.open_menu = None;
                 self.open_submenu = None;
+                // A marker being dragged rests like one being placed.
+                if let Command::MoveMarkerEnd { pointer, .. } = &command {
+                    self.dwell.moved(Some(*pointer), Instant::now());
+                }
                 self.run(command)
             }
             Message::RemoveMissingRecent => {
@@ -1556,9 +1665,6 @@ impl App {
                     Action::UiScaleDown => item = item.on_press(Message::ScaleStep(-1)),
                     Action::SaveFile => item = item.on_press(Message::SaveFile),
                     Action::SaveFileAs => item = item.on_press(Message::SaveFileAs),
-                    Action::PlaceMarker => {
-                        item = item.on_press(Message::MarkerAction(MarkerAction::Place));
-                    }
                     Action::PreviousMarker => {
                         item = item.on_press(Message::MarkerAction(MarkerAction::Previous));
                     }
@@ -1889,88 +1995,20 @@ impl App {
         scrollable(view).height(Fill).into()
     }
 
-    /// The panel with the markers and the measurement between two of them.
+    /// The Markers view (see `marker_view`).
     fn markers_panel(&self) -> Element<'_, Message> {
-        let state = self.shell.state();
-        let localizer = self.shell.localizer();
-        let mut list = column![].spacing(4).padding(PANEL_PADDING);
-        list = list.push(text(self.t("panel-markers")).size(14));
-        for (position, marker) in state.markers.list.iter().enumerate() {
-            let default_label = localizer.message(
-                &Key::from_static("marker-default"),
-                &Args::new().uint("number", u64::from(marker.id)),
-            );
-            let name = self.marker_names.get(&marker.id).map_or("", String::as_str);
-            let id = marker.id;
-            let measured = |slot: usize, key: &'static str, label: &'static str| {
-                let chosen = state.markers.selected.get(slot).copied().flatten() == Some(id);
-                tooltip(
-                    button(text(label).size(11))
-                        .padding(3)
-                        .style(if chosen {
-                            button::primary
-                        } else {
-                            button::text
-                        })
-                        .on_press(Message::MarkerMeasure(slot, id)),
-                    text(self.t(key)),
-                    tooltip::Position::Bottom,
-                )
-            };
-            let _ = position;
-            list = list.push(
-                row![
-                    text_input(&default_label, name)
-                        .size(13)
-                        .width(Fill)
-                        .on_input(move |t| Message::MarkerName(id, t)),
-                    measured(0, "marker-measure-first", "1"),
-                    measured(1, "marker-measure-second", "2"),
-                    tooltip(
-                        button(text("\u{21e5}").size(12))
-                            .style(button::text)
-                            .padding(3)
-                            .on_press(Message::Run(Command::GoToMarker(id))),
-                        text(self.t("marker-go")),
-                        tooltip::Position::Bottom,
-                    ),
-                    tooltip(
-                        button(text("\u{d7}").size(12))
-                            .style(button::text)
-                            .padding(3)
-                            .on_press(Message::Run(Command::RemoveMarker(id))),
-                        text(self.t("marker-remove")),
-                        tooltip::Position::Bottom,
-                    ),
-                ]
-                .spacing(4)
-                .align_y(iced::Alignment::Center),
-            );
+        let texts = self.shell.marker_texts();
+        let strings = self.marker_strings();
+        crate::marker_view::Panel {
+            state: self.shell.state(),
+            texts: &texts,
+            variant: self.variant,
+            open: self.marker_menu,
+            comments: &self.marker_comments,
+            checked: &self.marker_checked,
+            strings: &strings,
         }
-        match self.shell.measurement_text() {
-            Some(measurement) => {
-                list = list.push(text(format!(
-                    "{}: {}",
-                    self.t("measure-distance"),
-                    measurement.distance
-                )));
-                if let Some(frequency) = measurement.frequency {
-                    list = list.push(text(format!(
-                        "{}: {frequency}",
-                        self.t("measure-frequency")
-                    )));
-                }
-            }
-            None if state.capture.is_some() => {
-                list = list.push(text(self.t("measure-pick")).size(12));
-            }
-            None => {}
-        }
-        container(scrollable(list))
-            .width(Fill)
-            .height(Length::FillPortion(1))
-            .style(container::bordered_box)
-            .into()
+        .view()
     }
 
     /// The panel of the decoders: the instances, their channels and options, the state of each
@@ -2469,6 +2507,7 @@ impl App {
                 .push(text(part).size(13).font(iced::Font::MONOSPACE));
         }
         let mut rest: Vec<String> = Vec::new();
+        rest.extend(line.hint);
         rest.extend(line.end_reason);
         rest.extend(line.rate);
         if line.simulated {
@@ -2559,6 +2598,7 @@ impl App {
         let title = match progress.kind {
             la_host::OperationKind::Save => self.t("dialog-saving"),
             la_host::OperationKind::Load => self.t("dialog-opening"),
+            la_host::OperationKind::Crop => self.t("dialog-cropping"),
         };
         let total = progress.total_bytes.max(1) as f32;
         let body = column![
@@ -2575,7 +2615,58 @@ impl App {
             .into()
     }
 
+    /// The question before data of the capture is deleted: what goes, what stays, and that it
+    /// cannot be undone.
+    fn crop_dialog(&self, plan: la_host::CropPlan) -> Element<'_, Message> {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let rate = state
+            .capture
+            .as_ref()
+            .map_or(1, |c| c.snapshot.sample_rate_hz())
+            .max(1) as f64;
+        let time = |samples: u64| localizer.format_duration(samples as f64 / rate);
+        let percent = plan
+            .lost()
+            .saturating_mul(100)
+            .checked_div(plan.total)
+            .unwrap_or(0);
+        let key = match plan.side {
+            la_host::CropSide::Left => "dialog-crop-left-body",
+            la_host::CropSide::Right => "dialog-crop-right-body",
+            la_host::CropSide::Pair => "dialog-crop-pair-body",
+        };
+        let message = localizer.message(
+            &Key::from_static(key),
+            &Args::new()
+                .trusted("lost", &time(plan.lost()))
+                .trusted("kept", &time(plan.kept()))
+                .uint("percent", percent),
+        );
+        let body = column![
+            text(self.t("dialog-crop-title")).size(18),
+            text(message),
+            row![
+                button(text(self.t("dialog-crop-confirm")))
+                    .style(button::danger)
+                    .on_press(Message::Run(Command::Decide(Decision::Discard))),
+                button(text(self.t("dialog-cancel")))
+                    .style(button::secondary)
+                    .on_press(Message::Run(Command::Decide(Decision::Cancel))),
+            ]
+            .spacing(8),
+        ]
+        .spacing(12)
+        .max_width(420);
+        container(container(body).padding(20).style(container::bordered_box))
+            .center(Fill)
+            .into()
+    }
+
     fn unsaved_dialog(&self) -> Element<'_, Message> {
+        if let Some(la_host::Guarded::Crop(plan)) = self.shell.state().pending_decision {
+            return self.crop_dialog(plan);
+        }
         // The question about removing a decoder that others read from is not about the capture.
         if let Some(la_host::Guarded::RemoveDecoder(_)) = self.shell.state().pending_decision {
             let body = column![
@@ -2648,6 +2739,9 @@ impl App {
                 .as_ref()
                 .map(|s| (s.instance, s.annotation)),
             editing: self.editing.is_some(),
+            placement: self.shell.state().placement,
+            preview: self.placement_preview,
+            drag_end: self.shell.state().drag,
         })
         .width(Fill)
         .height(Fill);
@@ -2965,6 +3059,42 @@ mod tests {
     }
 
     /// Runs a fast capture on the simulated device and returns the application showing it.
+    /// The pointer that means `sample` in the window now shown, in the middle of its column.
+    fn pointer_for(app: &App, sample: u64) -> la_host::markers::Pointer {
+        let state = app.shell.state();
+        let length = state.capture.as_ref().map_or(1, |c| c.snapshot.length());
+        let (start, window_length) = if state.auto_fit {
+            (0, length.max(1))
+        } else {
+            (state.window.start, state.window.length.max(1))
+        };
+        let pixels = f64::from(state.view_size.pixels);
+        la_host::markers::Pointer {
+            x: ((sample.saturating_sub(start) as f64 + 0.5) * pixels / window_length as f64) as f32,
+            lane: None,
+        }
+    }
+
+    /// Places a single marker the way the user does: start, then a click.
+    fn place_single(app: &mut App, sample: u64) {
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Single,
+        )));
+        let pointer = pointer_for(app, sample);
+        let _ = app.update(Message::Run(Command::FixPlacement { pointer }));
+    }
+
+    /// Places a pair marker: start, then two clicks.
+    fn place_pair(app: &mut App, a: u64, b: u64) {
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Pair,
+        )));
+        for sample in [a, b] {
+            let pointer = pointer_for(app, sample);
+            let _ = app.update(Message::Run(Command::FixPlacement { pointer }));
+        }
+    }
+
     fn app_with_capture(name: &str) -> App {
         let dir = std::env::temp_dir().join(format!("la-app-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -3595,7 +3725,7 @@ mod tests {
         let marks = [
             (la_host::SidePanel::Capture, app.t("toolbar-rate")),
             (la_host::SidePanel::Decoders, app.t("decoders-empty")),
-            (la_host::SidePanel::Markers, app.t("measure-pick")),
+            (la_host::SidePanel::Markers, app.t("marker-empty")),
         ];
         for size in [
             iced::Size::new(1180.0, 720.0),
@@ -4148,7 +4278,428 @@ mod tests {
     }
 
     #[test]
-    fn two_markers_show_their_distance_and_frequency() {
+    fn placing_a_marker_shows_what_to_do_and_follows_the_pointer_until_it_is_fixed() {
+        let mut app = app_with_capture("placing");
+        let hint = |app: &App| app.shell.status_line().hint;
+        assert_eq!(hint(&app), None);
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Pair,
+        )));
+        assert_eq!(hint(&app), Some(app.t("marker-placing-pair-first")));
+        let pointer = pointer_for(&app, 1_000);
+        let _ = app.update(Message::PlacementPointer(Some(pointer), Instant::now()));
+        assert_eq!(app.placement_preview.map(|p| p.position), Some(1_000));
+        let _ = app.update(Message::Run(Command::FixPlacement { pointer }));
+        assert_eq!(hint(&app), Some(app.t("marker-placing-pair-second")));
+        let _ = app.update(Message::Run(Command::FixPlacement {
+            pointer: pointer_for(&app, 5_000),
+        }));
+        assert_eq!(hint(&app), None);
+        assert!(
+            app.placement_preview.is_none(),
+            "nothing stale is left for the next one"
+        );
+        assert_eq!(app.shell.state().markers.list.len(), 1);
+        // The pointer leaving the view takes the preview away.
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Single,
+        )));
+        let _ = app.update(Message::PlacementPointer(Some(pointer), Instant::now()));
+        let _ = app.update(Message::PlacementPointer(None, Instant::now()));
+        assert!(app.placement_preview.is_none());
+    }
+
+    #[test]
+    fn resting_over_a_crowded_zone_zooms_in_and_the_view_comes_back_when_the_marker_is_fixed() {
+        use std::time::Duration;
+        let mut app = app_with_capture("dwell");
+        let _ = app.update(Message::AreaResized(1000.0));
+        let lane = app.plan.channels.first().map(|c| c.channel);
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Single,
+        )));
+        let t0 = Instant::now();
+        let pointer = la_host::markers::Pointer { x: 400.0, lane };
+        let target = app
+            .shell
+            .crowded_zoom_target(pointer)
+            .expect("the whole capture is crowded under the pointer");
+        let _ = app.update(Message::PlacementPointer(Some(pointer), t0));
+        // Under two seconds nothing happens.
+        let _ = app.update(Message::DwellTick(t0 + Duration::from_millis(1_900)));
+        assert_eq!(app.shell.state().snap_zoom, None);
+        assert!(app.shell.state().auto_fit);
+        // At two seconds the zoom starts; 0.4 s later it is at the target.
+        let _ = app.update(Message::DwellTick(t0 + Duration::from_secs(2)));
+        assert!(app.shell.state().snap_zoom.is_some());
+        assert_eq!(
+            app.shell.status_line().hint,
+            Some(app.t("marker-zoomed-in"))
+        );
+        let _ = app.update(Message::DwellTick(t0 + Duration::from_millis(2_200)));
+        let middle = app.shell.state().window;
+        assert!(middle.length < target.length * 100, "{middle:?} on its way");
+        let _ = app.update(Message::DwellTick(t0 + Duration::from_millis(2_450)));
+        let state = app.shell.state();
+        assert_eq!(
+            (state.window.start, state.window.length),
+            (target.start, target.length)
+        );
+        // A click fixes the marker and brings the whole capture back.
+        let click = pointer_for(&app, target.start + 3);
+        let _ = app.update(Message::Run(Command::FixPlacement {
+            pointer: la_host::markers::Pointer { lane, ..click },
+        }));
+        let state = app.shell.state();
+        assert!(state.auto_fit);
+        assert_eq!(state.snap_zoom, None);
+        assert_eq!(state.markers.list.len(), 1);
+        assert_eq!(app.shell.status_line().hint, None);
+        assert!(app.zoom_animation.is_none());
+    }
+
+    #[test]
+    fn moving_the_pointer_or_cancelling_stops_the_wait_for_the_zoom() {
+        use std::time::Duration;
+        let mut app = app_with_capture("dwell-stop");
+        let _ = app.update(Message::AreaResized(1000.0));
+        let lane = app.plan.channels.first().map(|c| c.channel);
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Single,
+        )));
+        let t0 = Instant::now();
+        let at = |x: f32| la_host::markers::Pointer { x, lane };
+        let _ = app.update(Message::PlacementPointer(Some(at(400.0)), t0));
+        // Moved by three pixels at 1.9 s: the two seconds start again.
+        let _ = app.update(Message::PlacementPointer(
+            Some(at(403.0)),
+            t0 + Duration::from_millis(1_900),
+        ));
+        let _ = app.update(Message::DwellTick(t0 + Duration::from_millis(2_100)));
+        assert_eq!(app.shell.state().snap_zoom, None);
+        // Cancelled at 3 s: the clock is forgotten, whatever time it is.
+        let _ = app.update(Message::Run(Command::CancelPlacement));
+        let _ = app.update(Message::DwellTick(t0 + Duration::from_secs(30)));
+        assert_eq!(app.shell.state().snap_zoom, None);
+        assert!(app.shell.state().auto_fit);
+    }
+
+    /// The Markers view alone, at the narrowest width the side panel can have.
+    fn markers_view_of(app: &App) -> iced_test::Simulator<'_, Message> {
+        iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(220.0, 600.0),
+            app.markers_panel(),
+        )
+    }
+
+    #[test]
+    fn the_markers_view_has_the_two_buttons_and_a_row_for_each_marker() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-view");
+        let _ = app.update(Message::AreaResized(1000.0));
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let (single, pair, empty) = (
+                app.t("marker-single-add"),
+                app.t("marker-pair-add"),
+                app.t("marker-empty"),
+            );
+            let mut ui = markers_view_of(&app);
+            assert!(ui.find(single.as_str()).is_ok(), "{language:?}: {single}");
+            assert!(ui.find(pair.as_str()).is_ok(), "{language:?}: {pair}");
+            assert!(ui.find(empty.as_str()).is_ok(), "{language:?}: {empty}");
+        }
+        let _ = app.update(Message::Run(Command::SetLanguage(la_i18n::Language::En)));
+        place_single(&mut app, 3_000);
+        place_pair(&mut app, 1_000, 2_000);
+        place_single(&mut app, 500);
+        let mut ui = markers_view_of(&app);
+        for name in ["T1", "P1", "T2"] {
+            assert!(ui.find(name).is_ok(), "{name}");
+        }
+        assert!(ui.find(app.t("marker-empty").as_str()).is_err());
+        // The rows follow the time of the (start) position, not the order of creation.
+        let order: Vec<String> = app
+            .shell
+            .state()
+            .markers
+            .ordered()
+            .iter()
+            .map(|m| m.name())
+            .collect();
+        assert_eq!(order, ["T2", "P1", "T1"]);
+    }
+
+    #[test]
+    fn the_button_of_the_kind_being_placed_is_pressed_and_pressing_it_again_cancels() {
+        let mut app = app_with_capture("marker-buttons");
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Pair,
+        )));
+        assert_eq!(
+            app.shell.state().placement.map(|p| p.kind),
+            Some(la_host::markers::Kind::Pair)
+        );
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Pair,
+        )));
+        assert_eq!(app.shell.state().placement, None);
+    }
+
+    #[test]
+    fn the_actions_of_a_marker_open_and_close_and_the_bin_deletes_without_asking() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-actions");
+        let _ = app.update(Message::AreaResized(1000.0));
+        place_single(&mut app, 3_000);
+        let id = app.shell.state().markers.list[0].id;
+        let delete = app.t("marker-delete");
+        let comment = app.t("marker-comment");
+        assert!(markers_view_of(&app).find(delete.as_str()).is_err());
+        let _ = app.update(Message::MarkerMenu(id));
+        {
+            let mut ui = markers_view_of(&app);
+            assert!(ui.find(delete.as_str()).is_ok(), "the list is open");
+            assert!(ui.find(comment.as_str()).is_ok(), "the comment field");
+        }
+        // Pressing again closes it, and so does Escape.
+        let _ = app.update(Message::MarkerMenu(id));
+        assert!(markers_view_of(&app).find(delete.as_str()).is_err());
+        let _ = app.update(Message::MarkerMenu(id));
+        let escape = keyboard::Key::Named(keyboard::key::Named::Escape);
+        let _ = app.update(Message::Key(keyboard::Event::KeyPressed {
+            key: escape.clone(),
+            modified_key: escape,
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::Escape),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        }));
+        assert!(markers_view_of(&app).find(delete.as_str()).is_err());
+        // A right click on the mark in the view selects it and shows its actions.
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        let _ = app.update(Message::MarkerContext(id));
+        assert_eq!(app.shell.state().side_panel, la_host::SidePanel::Markers);
+        assert_eq!(app.shell.state().markers.selected, Some(id));
+        assert!(markers_view_of(&app).find(delete.as_str()).is_ok());
+        // The delete button of the list removes it at once, and nothing stale is left.
+        let _ = app.update(Message::Run(Command::RemoveMarker(id)));
+        assert!(app.shell.state().markers.list.is_empty());
+        assert_eq!(app.marker_menu, None);
+        assert!(app.marker_comments.is_empty());
+    }
+
+    #[test]
+    fn a_comment_typed_in_the_list_is_kept_by_the_host_and_cut_to_its_limit() {
+        let mut app = app_with_capture("marker-comment");
+        let _ = app.update(Message::AreaResized(1000.0));
+        place_single(&mut app, 3_000);
+        let id = app.shell.state().markers.list[0].id;
+        let _ = app.update(Message::MarkerComment(id, "rising edge".into()));
+        assert_eq!(app.shell.state().markers.list[0].comment, "rising edge");
+        assert_eq!(
+            app.marker_comments.get(&id).map(String::as_str),
+            Some("rising edge")
+        );
+        let long = "x".repeat(200);
+        let _ = app.update(Message::MarkerComment(id, long));
+        assert_eq!(
+            app.shell.state().markers.list[0].comment.chars().count(),
+            80
+        );
+    }
+
+    #[test]
+    fn at_the_limit_the_view_says_why_nothing_can_be_added() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-limit");
+        let _ = app.update(Message::AreaResized(1000.0));
+        for i in 0..64 {
+            place_single(&mut app, 1_000 + i * 100);
+        }
+        assert_eq!(app.shell.state().markers.list.len(), 64);
+        let limit = app.t("marker-limit");
+        assert!(markers_view_of(&app).find(limit.as_str()).is_ok());
+        // The commands are refused too.
+        let _ = app.update(Message::Run(Command::BeginPlacement(
+            la_host::markers::Kind::Single,
+        )));
+        assert_eq!(app.shell.state().placement, None);
+    }
+
+    #[test]
+    fn two_checked_single_markers_can_be_made_a_pair() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-make-pair");
+        let _ = app.update(Message::AreaResized(1000.0));
+        place_single(&mut app, 1_000);
+        place_single(&mut app, 2_000);
+        place_single(&mut app, 3_000);
+        let make = app.t("marker-make-pair");
+        let ids: Vec<u32> = app
+            .shell
+            .state()
+            .markers
+            .list
+            .iter()
+            .map(|m| m.id)
+            .collect();
+        let _ = app.update(Message::MarkerCheck(ids[0], true));
+        assert!(
+            markers_view_of(&app).find(make.as_str()).is_err(),
+            "one is not enough"
+        );
+        let _ = app.update(Message::MarkerCheck(ids[1], true));
+        assert!(markers_view_of(&app).find(make.as_str()).is_ok());
+        let _ = app.update(Message::MarkerCheck(ids[2], true));
+        assert!(
+            markers_view_of(&app).find(make.as_str()).is_err(),
+            "three are too many"
+        );
+        let _ = app.update(Message::MarkerCheck(ids[2], false));
+        let _ = app.update(Message::Run(Command::MakePair {
+            first: ids[0],
+            second: ids[1],
+        }));
+        assert_eq!(app.shell.state().markers.list.len(), 2);
+        assert!(
+            app.marker_checked.is_empty(),
+            "the checks of markers that are gone go away"
+        );
+        assert!(markers_view_of(&app).find(make.as_str()).is_err());
+    }
+
+    #[test]
+    fn the_actions_of_a_single_marker_and_of_a_pair_are_those_of_their_kind() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-kinds");
+        place_single(&mut app, 100_000);
+        place_pair(&mut app, 150_000, 200_000);
+        let single = app.shell.state().markers.list[0].id;
+        let pair = app.shell.state().markers.list[1].id;
+        let singles = [
+            "marker-action-origin",
+            "marker-action-cut-left",
+            "marker-action-cut-right",
+            "marker-action-scroll",
+        ];
+        let pairs = [
+            "marker-action-trim",
+            "marker-action-fit",
+            "marker-action-split",
+        ];
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let _ = app.update(Message::MarkerMenu(single));
+            {
+                let mut ui = markers_view_of(&app);
+                for key in singles {
+                    assert!(ui.find(app.t(key).as_str()).is_ok(), "{language:?} {key}");
+                }
+                for key in pairs {
+                    assert!(ui.find(app.t(key).as_str()).is_err(), "{language:?} {key}");
+                }
+            }
+            let _ = app.update(Message::MarkerMenu(pair));
+            {
+                let mut ui = markers_view_of(&app);
+                for key in pairs {
+                    assert!(ui.find(app.t(key).as_str()).is_ok(), "{language:?} {key}");
+                }
+                for key in singles {
+                    assert!(ui.find(app.t(key).as_str()).is_err(), "{language:?} {key}");
+                }
+            }
+            let _ = app.update(Message::MarkerMenu(pair));
+        }
+    }
+
+    #[test]
+    fn the_marker_that_time_counts_from_offers_to_count_from_the_start_again() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-origin");
+        place_single(&mut app, 100_000);
+        let id = app.shell.state().markers.list[0].id;
+        let _ = app.update(Message::MarkerMenu(id));
+        let (origin, reset) = (
+            app.t("marker-action-origin"),
+            app.t("marker-action-origin-reset"),
+        );
+        {
+            let mut ui = markers_view_of(&app);
+            assert!(ui.find(origin.as_str()).is_ok());
+            assert!(ui.find(reset.as_str()).is_err());
+        }
+        let _ = app.update(Message::Run(Command::SetTimeOrigin(id)));
+        {
+            let mut ui = markers_view_of(&app);
+            assert!(ui.find(reset.as_str()).is_ok());
+            assert!(ui.find(origin.as_str()).is_err());
+        }
+        // The axis counts from the marker: its labels are negative before it.
+        let first = app.plan.axis.ticks.first().expect("ticks");
+        assert!(first.seconds < 0.0, "{first:?}");
+        assert!(app.plan.axis.ticks.iter().any(|t| t.seconds == 0.0));
+    }
+
+    #[test]
+    fn a_cut_asks_first_names_what_is_lost_and_shows_its_progress_and_cancel() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-cut");
+        place_single(&mut app, 150_000);
+        let id = app.shell.state().markers.list[0].id;
+        let _ = app.update(Message::Run(Command::CutLeft(id)));
+        assert!(matches!(
+            app.shell.state().pending_decision,
+            Some(la_host::Guarded::Crop(_))
+        ));
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let size = iced::Size::new(800.0, 560.0);
+            let mut ui =
+                iced_test::Simulator::with_size(crate::fonts::settings(), size, app.view());
+            for key in ["dialog-crop-title", "dialog-crop-confirm", "dialog-cancel"] {
+                assert!(ui.find(app.t(key).as_str()).is_ok(), "{language:?} {key}");
+            }
+        }
+        let _ = app.update(Message::Run(Command::SetLanguage(la_i18n::Language::En)));
+        // Cancel keeps everything; delete starts the cut, which shows its progress and a cancel.
+        let _ = app.update(Message::Run(Command::Decide(Decision::Cancel)));
+        assert_eq!(app.shell.state().pending_decision, None);
+        let _ = app.update(Message::Run(Command::CutLeft(id)));
+        let _ = app.update(Message::Run(Command::Decide(Decision::Discard)));
+        assert_eq!(app.shell.state().activity, Activity::Cropping);
+        {
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 560.0),
+                app.view(),
+            );
+            assert!(ui.find(app.t("dialog-cropping").as_str()).is_ok());
+            assert!(ui.find(app.t("dialog-cancel").as_str()).is_ok());
+        }
+        let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
+        while app.shell.state().activity != Activity::Idle {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the cut did not end");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(
+            app.shell
+                .state()
+                .capture
+                .as_ref()
+                .unwrap()
+                .snapshot
+                .length(),
+            150_000
+        );
+    }
+
+    #[test]
+    fn a_pair_marker_shows_its_duration_and_frequency() {
         let _turn = render_turn();
         let mut app = app_with_capture("markers");
         let _ = app.update(Message::Run(Command::SetSnap(false)));
@@ -4156,26 +4707,21 @@ mod tests {
             start: 150_000,
             end: 150_400,
         }));
-        for position in [150_080, 150_280] {
-            let _ = app.update(Message::Run(Command::PlaceMarker {
-                position,
-                channel: 0,
-            }));
-        }
         let _ = app.update(Message::AreaResized(1000.0));
+        place_pair(&mut app, 150_080, 150_280);
         // The measurement is in the Markers view of the side panel.
         let _ = app.update(Message::SidePanel(la_host::SidePanel::Markers));
-        assert_eq!(app.plan.markers.len(), 2);
-        let text = app.shell.measurement_text().unwrap();
-        assert!(text.distance.starts_with("200"), "{}", text.distance);
-        assert!(text.frequency.is_some());
+        assert_eq!(app.plan.markers.len(), 1);
+        let texts = app.shell.marker_texts();
+        let duration = texts[0].duration.clone().unwrap();
+        assert!(duration.starts_with("200"), "{duration}");
+        assert!(texts[0].frequency.is_some());
         let mut ui = iced_test::Simulator::with_size(
             crate::fonts::settings(),
             iced::Size::new(1180.0, 720.0),
             app.view(),
         );
-        let line = format!("Distance: {}", text.distance);
-        assert!(ui.find(line.as_str()).is_ok());
+        assert!(ui.find("P1").is_ok());
         let snapshot = ui.snapshot(&app.theme()).unwrap();
         if let Ok(directory) = std::env::var("LA_SNAPSHOT_DIR") {
             snapshot
@@ -4295,10 +4841,7 @@ mod tests {
         let _turn = render_turn();
         let mut app = app_with_capture("languages");
         let _ = app.update(Message::Run(Command::SetSnap(false)));
-        let _ = app.update(Message::Run(Command::PlaceMarker {
-            position: 100_000,
-            channel: 0,
-        }));
+        place_single(&mut app, 100_000);
         let _ = app.update(Message::Run(Command::TestError("session.damaged")));
         // A decoder with its lane and overlays is on screen in every language.
         decode(&mut app);

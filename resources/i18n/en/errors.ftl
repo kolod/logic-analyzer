@@ -94,6 +94,8 @@ error-storage-invalid_gap = A gap in the capture was described incorrectly. Ever
 error-storage-invalid_limits = The memory or size limits are not valid. Open the settings and enter valid values.
 # The view asked for a number of pixel columns that is not allowed.
 error-storage-invalid_pixels = The view could not be drawn at that width. Resize the window or change the zoom and try again.
+# A long operation on the capture (a crop) was cancelled.
+error-storage-cancelled = The operation was cancelled. Nothing was changed.
 # A stored capture breaks the rules a capture must follow.
 error-storage-invalid_restore = The stored capture does not follow the rules for captures, so it cannot be opened. If you have a backup copy of the file, open that instead.
 # The sample rate is zero.
