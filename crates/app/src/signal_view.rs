@@ -318,6 +318,33 @@ impl SignalView<'_> {
         None
     }
 
+    /// Where the marks of the fixed markers are in the ruler.
+    fn mark_rectangles(&self, scale: f32) -> Vec<Rectangle> {
+        let mut rectangles = Vec::new();
+        for marker in &self.plan.markers {
+            match marker.shape {
+                PlanShape::Point { x } => rectangles.push(marker_marks::mark_bounds(
+                    GUTTER + x as f32 * scale,
+                    AXIS_HEIGHT,
+                    End::Point,
+                )),
+                PlanShape::Interval { start_x, end_x } => {
+                    rectangles.push(marker_marks::mark_bounds(
+                        GUTTER + start_x as f32 * scale,
+                        AXIS_HEIGHT,
+                        End::Start,
+                    ));
+                    rectangles.push(marker_marks::mark_bounds(
+                        GUTTER + end_x as f32 * scale,
+                        AXIS_HEIGHT,
+                        End::End,
+                    ));
+                }
+            }
+        }
+        rectangles
+    }
+
     /// The fixed markers: a solid line and a mark for each end, with the number in the mark.
     fn draw_markers(&self, frame: &mut Frame, size: Size) {
         let scale = (size.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
@@ -468,6 +495,7 @@ impl SignalView<'_> {
             Size::new(size.width, AXIS_HEIGHT),
             palette.background,
         );
+        let marks = self.mark_rectangles(scale);
         for tick in &plan.axis.ticks {
             let x = GUTTER + tick.x as f32 * scale;
             let depth = if tick.major { 10.0 } else { 6.0 };
@@ -478,8 +506,20 @@ impl SignalView<'_> {
                 ),
                 Stroke::default().with_color(text_colour).with_width(1.0),
             );
+            // A label that a mark of a marker covers is left out: the mark is over the axis.
+            let content = self.localizer.format_duration(tick.seconds);
+            let label = Rectangle::new(
+                Point::new(x + 3.0, 4.0),
+                Size::new(
+                    content.chars().count() as f32 * (TEXT_SIZE - 1.0) * 0.62,
+                    TEXT_SIZE,
+                ),
+            );
+            if marks.iter().any(|mark| mark.intersects(&label)) {
+                continue;
+            }
             frame.fill_text(Text {
-                content: self.localizer.format_duration(tick.seconds),
+                content,
                 position: Point::new(x + 3.0, 4.0),
                 color: text_colour,
                 size: Pixels(TEXT_SIZE - 1.0),
