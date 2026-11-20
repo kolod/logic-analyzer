@@ -394,7 +394,7 @@ empty list, in two languages at the smallest panel width.
 - [X] T037 [P] [US7] `crates/app/src/icons.rs`: `Icon::SingleMarker` (the pentagon) and `Icon::PairMarker` (two squares
   with lines), drawn by the canvas; the icon-strip icon of the Markers view (`Icon::Markers`) stays.
 - [X] T038 [P] [US7] `resources/i18n/*/ui.ftl`: the texts of the panel: `panel-markers`, the tooltips of the add
-  buttons, `marker-actions` (tooltip of `⋯`), `marker-limit` (notice), `marker-delete`; six languages; parity
+  buttons, `marker-limit` (notice), `marker-delete`; six languages; parity
   green.
 - [X] T039 [US7] `crates/app/src/marker_view.rs`: the view (buttons, rows, bin, selection, empty text) and
   `ActionList`, the overlay component of the interaction contract (a list of labelled buttons with enabled and

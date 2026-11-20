@@ -101,7 +101,6 @@ marker-placing-pair-first = Cliquez pour placer la première extrémité de la p
 marker-placing-pair-second = Cliquez pour placer la seconde extrémité. Échap annule.
 marker-zoomed-in = Zoom avant pour trouver le front. La vue revient après un clic ou avec Échap.
 marker-limit = La limite de 64 repères est atteinte. Supprimez-en un pour en ajouter un autre.
-marker-actions = Actions
 marker-delete = Supprimer
 marker-comment = Commentaire
 marker-make-pair = Former une paire

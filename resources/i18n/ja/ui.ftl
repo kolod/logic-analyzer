@@ -101,7 +101,6 @@ marker-placing-pair-first = クリックしてペアの最初の端を置きま�
 marker-placing-pair-second = クリックして 2 つ目の端を置きます。Esc で中止します。
 marker-zoomed-in = エッジを探すために拡大しました。クリックまたは Esc で元の表示に戻ります。
 marker-limit = マーカーは最大 64 個です。追加するには 1 つ削除してください。
-marker-actions = 操作
 marker-delete = 削除
 marker-comment = コメント
 marker-make-pair = ペアにする

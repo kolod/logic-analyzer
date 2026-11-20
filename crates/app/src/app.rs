@@ -977,7 +977,6 @@ impl App {
             pair: self.t("marker-pair-add"),
             empty: self.t("marker-empty"),
             limit: self.t("marker-limit"),
-            actions: self.t("marker-actions"),
             delete: self.t("marker-delete"),
             comment: self.t("marker-comment"),
             make_pair: self.t("marker-make-pair"),

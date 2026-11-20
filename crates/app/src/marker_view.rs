@@ -32,8 +32,6 @@ pub struct Strings {
     pub empty: String,
     /// The text shown at the limit of 64 markers.
     pub limit: String,
-    /// The tooltip of the button that opens the actions of a marker.
-    pub actions: String,
     /// The label of the delete button in the action list.
     pub delete: String,
     /// The placeholder of the comment field.
@@ -211,14 +209,10 @@ impl<'a> Panel<'a> {
                 .width(Fill)
                 .padding(3)
                 .on_press(Message::Run(Command::SelectMarker(Some(id)))),
-            tooltip(
-                button(text("\u{22ef}").size(14))
-                    .style(button::text)
-                    .padding(2)
-                    .on_press(Message::MarkerMenu(id)),
-                text(self.strings.actions.clone()),
-                tooltip::Position::Bottom,
-            ),
+            button(text("\u{22ef}").size(14))
+                .style(button::text)
+                .padding(2)
+                .on_press(Message::MarkerMenu(id)),
             button(icons::icon(Icon::Trash, false))
                 .style(button::text)
                 .padding(2)

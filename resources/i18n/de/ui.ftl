@@ -101,7 +101,6 @@ marker-placing-pair-first = Klicken, um das erste Ende des Paars zu setzen. Esc 
 marker-placing-pair-second = Klicken, um das zweite Ende zu setzen. Esc bricht ab.
 marker-zoomed-in = Hineingezoomt, um die Flanke zu finden. Die Ansicht kehrt nach einem Klick oder mit Esc zurück.
 marker-limit = Das Limit von 64 Markierungen ist erreicht. Löschen Sie eine, um eine neue hinzuzufügen.
-marker-actions = Aktionen
 marker-delete = Löschen
 marker-comment = Kommentar
 marker-make-pair = Paar bilden

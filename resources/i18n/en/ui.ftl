@@ -183,7 +183,6 @@ marker-zoomed-in = Zoomed in to find the edge. The view returns when you click o
 # Shown in the Markers view when no more markers can be added.
 marker-limit = The limit of 64 markers is reached. Delete one to add another.
 # Tooltip of the button that opens the actions of a marker.
-marker-actions = Actions
 # Button that deletes a marker.
 marker-delete = Delete
 # Placeholder of the field for the comment of a marker.

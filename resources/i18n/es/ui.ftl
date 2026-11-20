@@ -101,7 +101,6 @@ marker-placing-pair-first = Haga clic para colocar el primer extremo del par. Es
 marker-placing-pair-second = Haga clic para colocar el segundo extremo. Esc cancela.
 marker-zoomed-in = Se acercó la vista para encontrar el flanco. Vuelve al hacer clic o pulsar Esc.
 marker-limit = Se alcanzó el límite de 64 marcadores. Elimine uno para añadir otro.
-marker-actions = Acciones
 marker-delete = Eliminar
 marker-comment = Comentario
 marker-make-pair = Crear un par

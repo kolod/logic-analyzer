@@ -101,7 +101,6 @@ marker-placing-pair-first = Клацніть, щоб поставити перш
 marker-placing-pair-second = Клацніть, щоб поставити другий кінець. Esc скасовує.
 marker-zoomed-in = Наближено, щоб знайти перехід. Вигляд повернеться після кліку або Esc.
 marker-limit = Досягнуто ліміту в 64 позначки. Видаліть одну, щоб додати іншу.
-marker-actions = Дії
 marker-delete = Видалити
 marker-comment = Коментар
 marker-make-pair = Утворити пару
