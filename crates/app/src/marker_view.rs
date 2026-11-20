@@ -8,10 +8,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use iced::widget::{
-    Space, button, checkbox, column, container, row, scrollable, text, text_input, tooltip,
-};
-use iced::{Border, Color, Element, Fill, Length, Theme};
+use iced::widget::{Space, button, checkbox, column, container, row, text, text_input, tooltip};
+use iced::{Border, Color, Element, Fill, Theme};
 use la_host::markers::{
     Kind, MARKER_COLOURS, MAX_COMMENT_CHARS, MAX_MARKERS, Marker, MarkerText, Shape,
 };
@@ -386,10 +384,17 @@ impl<'a> Panel<'a> {
             list = list.push(text(self.strings.empty.clone()).size(12));
         }
         for marker in state.markers.ordered() {
-            list = list.push(self.row_of(marker));
+            // Each marker has its own outline; the view itself has none, like the Capture view.
+            let mut block = column![self.row_of(marker)].spacing(4);
             if self.open == Some(marker.id) {
-                list = list.push(self.actions_of(marker));
+                block = block.push(self.actions_of(marker));
             }
+            list = list.push(
+                container(block)
+                    .padding(4)
+                    .width(Fill)
+                    .style(container::bordered_box),
+            );
         }
         let singles: Vec<u32> = state
             .markers
@@ -409,11 +414,7 @@ impl<'a> Panel<'a> {
                     })),
             );
         }
-        container(scrollable(list))
-            .width(Fill)
-            .height(Length::FillPortion(1))
-            .style(container::bordered_box)
-            .into()
+        list.into()
     }
 }
 
