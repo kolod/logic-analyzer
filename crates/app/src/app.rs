@@ -1049,8 +1049,16 @@ impl App {
     /// Runs a host command and turns its outcome into a task.
     fn run(&mut self, command: Command) -> Task<Message> {
         let editing_comment = matches!(command, Command::SetMarkerComment { .. });
+        // A drag snaps like a placement: what the pointer resolves to is shown (the ring).
+        let drag_preview = match &command {
+            Command::MoveMarkerEnd { pointer, .. } => Some(self.shell.resolve_pointer(*pointer)),
+            _ => None,
+        };
         let outcome = self.shell.apply(command);
-        if self.shell.state().placement.is_none() {
+        if drag_preview.is_some() {
+            self.placement_preview = drag_preview;
+        }
+        if self.shell.state().placement.is_none() && self.shell.state().drag.is_none() {
             self.placement_preview = None;
         }
         if self.shell.state().placement.is_none() && self.shell.state().drag.is_none() {
@@ -4275,6 +4283,29 @@ mod tests {
                 .matches_image(std::path::Path::new(&directory).join("banner"))
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn dragging_a_placed_marker_keeps_the_preview_for_the_snap_ring_until_it_is_released() {
+        use la_host::markers::{End, Kind};
+        let mut app = app_with_capture("dragging");
+        let _ = app.update(Message::Run(Command::BeginPlacement(Kind::Single)));
+        let _ = app.update(Message::Run(Command::FixPlacement {
+            pointer: pointer_for(&app, 1_000),
+        }));
+        let id = app.shell.state().markers.list[0].id;
+        let pointer = pointer_for(&app, 2_000);
+        let _ = app.update(Message::Run(Command::MoveMarkerEnd {
+            id,
+            end: End::Point,
+            pointer,
+        }));
+        assert_eq!(app.placement_preview.map(|p| p.position), Some(2_000));
+        let _ = app.update(Message::Run(Command::EndMarkerDrag));
+        assert!(
+            app.placement_preview.is_none(),
+            "nothing stale after the release"
+        );
     }
 
     #[test]

@@ -1125,6 +1125,12 @@ impl canvas::Program<Message> for SignalView<'_> {
         self.draw_markers(&mut overlay, size);
         if self.placement.is_some() {
             self.draw_placement(&mut overlay, size, state.scroll);
+        } else if let (Some((id, _)), Some(preview)) = (self.drag_end, self.preview) {
+            // The drag of a marker placed earlier snaps like a placement: show the ring too.
+            if let Some(marker) = self.plan.markers.iter().find(|m| m.id == id) {
+                let colour = self.variant.marker(marker.colour);
+                self.draw_snap(&mut overlay, size, state.scroll, colour, preview);
+            }
         } else if let Some(position) = cursor.position_in(bounds) {
             self.draw_hover(&mut overlay, size, position, theme, state.scroll);
         }
@@ -1283,6 +1289,45 @@ impl SignalView<'_> {
     /// The lane that is being moved, lifted under the pointer as a whole (its background, its
     /// bands and its signal, the full width of the view), and the line where it will land (the
     /// other lanes make room there, see `shifts`).
+    /// The transition the line has snapped to: a ring on its lane and a tick over the lane. Used by
+    /// a placement and by the drag of a marker that was placed earlier.
+    fn draw_snap(
+        &self,
+        frame: &mut Frame,
+        size: Size,
+        scroll: f32,
+        colour: Color,
+        preview: Resolved,
+    ) {
+        let Some(snapped) = preview.snapped else {
+            return;
+        };
+        let plan = self.plan;
+        let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
+        let layout = self.layout(size.height, scroll);
+        let lane = plan
+            .channels
+            .iter()
+            .position(|c| c.channel == snapped.channel)
+            .and_then(|index| layout.lane(index));
+        let Some(lane) = lane else {
+            return;
+        };
+        let offset = snapped.position as f64 - plan.window.start as f64;
+        let x = GUTTER
+            + (offset * plan.pixels.max(1) as f64 / plan.window.length.max(1) as f64) as f32
+                * scale;
+        let stroke = Stroke::default().with_color(colour).with_width(2.0);
+        frame.stroke(
+            &Path::line(Point::new(x, lane.top), Point::new(x, lane.bottom())),
+            stroke,
+        );
+        frame.stroke(
+            &Path::circle(Point::new(x, lane.top + lane.height / 2.0), 6.0),
+            stroke,
+        );
+    }
+
     /// The marker being placed: its line, dotted, at the sample the pointer means, and its mark;
     /// for a pair the half that is already fixed is drawn solid, and each half has the mark of the
     /// role it would have (the start's square left of its line, the end's right of its line).
@@ -1312,28 +1357,7 @@ impl SignalView<'_> {
             );
             marker_marks::draw_mark(frame, x, AXIS_HEIGHT, end, colour, placement.number);
         };
-        // The transition the line has snapped to: a ring on its lane and a tick over the lane.
-        if let Some(snapped) = preview.snapped {
-            let layout = self.layout(size.height, scroll);
-            let lane = self
-                .plan
-                .channels
-                .iter()
-                .position(|c| c.channel == snapped.channel)
-                .and_then(|index| layout.lane(index));
-            if let Some(lane) = lane {
-                let x = x_of(snapped.position);
-                let stroke = Stroke::default().with_color(colour).with_width(2.0);
-                frame.stroke(
-                    &Path::line(Point::new(x, lane.top), Point::new(x, lane.bottom())),
-                    stroke,
-                );
-                frame.stroke(
-                    &Path::circle(Point::new(x, lane.top + lane.height / 2.0), 6.0),
-                    stroke,
-                );
-            }
-        }
+        self.draw_snap(frame, size, scroll, colour, preview);
         match (placement.kind, placement.first) {
             (Kind::Single, _) => draw_half(frame, pointer_x, End::Point, true),
             (Kind::Pair, None) => draw_half(frame, pointer_x, End::Start, true),
