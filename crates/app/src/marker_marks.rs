@@ -90,6 +90,16 @@ fn pentagon_path(x: f32, bottom: f32) -> Path {
     })
 }
 
+/// Where the line of an end starts: a single marker's line starts at the tip of its pentagon (the
+/// lowest, central point), a pair's at the top corner of its square next to the line.
+#[must_use]
+pub fn line_top(bottom: f32, end: End) -> f32 {
+    match end {
+        End::Point => bottom,
+        End::Start | End::End => bottom - PENTAGON_TIP - PENTAGON_BODY,
+    }
+}
+
 /// A vertical line of a marker from `top` to `bottom`: solid when fixed, dotted while it is being
 /// placed or dragged.
 pub fn draw_line(
@@ -217,6 +227,15 @@ mod tests {
         assert!(!start.contains(Point::new(105.0, 20.0)));
         let end = mark_bounds(100.0, 30.0, End::End);
         assert!(end.contains(Point::new(105.0, 20.0)));
+    }
+
+    #[test]
+    fn a_line_starts_at_the_tip_of_a_pentagon_and_at_the_top_corner_of_a_square() {
+        assert!((line_top(30.0, End::Point) - 30.0).abs() < f32::EPSILON);
+        for end in [End::Start, End::End] {
+            let square = square_bounds(100.0, 30.0, end);
+            assert!((line_top(30.0, end) - square.y).abs() < f32::EPSILON);
+        }
     }
 
     #[test]

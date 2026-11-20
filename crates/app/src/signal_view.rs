@@ -365,7 +365,7 @@ impl SignalView<'_> {
                 marker_marks::draw_line(
                     frame,
                     x,
-                    AXIS_HEIGHT,
+                    marker_marks::line_top(AXIS_HEIGHT, end),
                     size.height,
                     colour,
                     marker.selected,
@@ -1301,7 +1301,15 @@ impl SignalView<'_> {
         };
         let pointer_x = x_of(preview.position);
         let draw_half = |frame: &mut Frame, x: f32, end: End, dotted: bool| {
-            marker_marks::draw_line(frame, x, AXIS_HEIGHT, size.height, colour, false, dotted);
+            marker_marks::draw_line(
+                frame,
+                x,
+                marker_marks::line_top(AXIS_HEIGHT, end),
+                size.height,
+                colour,
+                false,
+                dotted,
+            );
             marker_marks::draw_mark(frame, x, AXIS_HEIGHT, end, colour, placement.number);
         };
         // The transition the line has snapped to: a ring on its lane and a tick over the lane.

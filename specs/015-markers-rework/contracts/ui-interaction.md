@@ -10,7 +10,7 @@ against the lane background and distinct from its neighbours (the legibility che
 |------|-------|
 | Single marker line | a solid 1.5 px line from the ruler to the bottom of the lanes, in the marker's colour |
 | Single marker mark | a small pentagon-arrow (18 px wide): a 18 × 12 rectangle on a 6 px triangle pointing down, the tip on the line at the bottom of the ruler; filled with the colour, no outline, the **number** written in it. The marks are smaller than the ruler, so its time labels stay readable beside them |
-| Pair marker lines | two solid lines as above |
+| Pair marker lines | two solid lines as above; each starts at the top corner of its square next to it (a single's line starts at the tip of its pentagon) |
 | Pair marker marks | an 18 × 14 square, its top level with the top of a single marker's mark, filled with the colour, no outline, the **number** written in it; for the **start** it touches its line from the **left**, for the **end** from the **right** |
 | Name | the number only is written in the mark (no `T`/`P`, no text beside it); the prefix with the number (`T3`, `P1`) is used in the Markers view only |
 | Selected marker | the lines 2.5 px |
