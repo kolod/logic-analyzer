@@ -229,6 +229,18 @@ impl Markers {
         self.next_number.get(kind.index()).copied().unwrap_or(1)
     }
 
+    /// The colour the next marker gets: the colours follow one another, one for each marker
+    /// that was ever added, and start again after the last.
+    #[must_use]
+    pub fn next_colour(&self) -> u8 {
+        u8::try_from(
+            self.next_id
+                .checked_rem(u32::from(MARKER_COLOURS))
+                .unwrap_or(0),
+        )
+        .unwrap_or(0)
+    }
+
     /// The next number of each kind, `[single, pair]`.
     #[must_use]
     pub fn next_numbers(&self) -> [u32; 2] {
@@ -244,17 +256,18 @@ impl Markers {
         Some((id, number))
     }
 
-    /// Adds a marker of the kind of `shape` with colour 0 and no comment; `None` at the limit.
+    /// Adds a marker of the kind of `shape` with the next colour and no comment; `None` at the limit.
     /// The new marker is not selected (the command that adds it decides).
     pub fn add(&mut self, shape: Shape) -> Option<u32> {
         if self.list.len() >= MAX_MARKERS {
             return None;
         }
+        let colour = self.next_colour();
         let (id, number) = self.allocate(shape.kind())?;
         self.list.push(Marker {
             id,
             number,
-            colour: 0,
+            colour,
             comment: String::new(),
             shape,
         });

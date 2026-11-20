@@ -69,6 +69,7 @@ pointer and selects the marker.
 └───────────────────────────────┘
 ```
 
+- The two buttons share the width of the view in one line, with a gap below them. A new marker gets the next of the eight colours (colour 0 for the first, and round again after the eighth).
 - The buttons are at the top and always visible. The one of the kind being placed is shown pressed; pressing
   it again cancels.
 - One row per marker, in the order of `ordered()`: the kind's mark icon, the name, a colour swatch (opens

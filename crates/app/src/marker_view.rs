@@ -157,6 +157,8 @@ impl<'a> Panel<'a> {
                 .spacing(4)
                 .align_y(iced::Alignment::Center),
         )
+        // The two buttons share the width of the view, in one line.
+        .width(Fill)
         .style(if placing {
             button::success
         } else {
@@ -375,8 +377,11 @@ impl<'a> Panel<'a> {
                 self.add_button(Kind::Single, &self.strings.single, full),
                 self.add_button(Kind::Pair, &self.strings.pair, full),
             ]
-            .spacing(6),
+            .spacing(6)
+            .width(Fill),
         );
+        // A gap between the buttons and the first marker.
+        list = list.push(Space::new().height(6));
         if full {
             list = list.push(text(self.strings.limit.clone()).size(12));
         }

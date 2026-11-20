@@ -70,7 +70,7 @@ fn the_limit_is_64_in_all_and_a_pair_counts_one() {
 }
 
 #[test]
-fn an_interval_is_always_in_order_and_new_markers_have_colour_0_and_no_comment() {
+fn an_interval_is_always_in_order_and_the_first_marker_has_colour_0_and_no_comment() {
     assert_eq!(Shape::interval(9, 3), Shape::Interval { start: 3, end: 9 });
     assert_eq!(Shape::interval(3, 9), Shape::Interval { start: 3, end: 9 });
     let mut m = Markers::new();
@@ -80,6 +80,17 @@ fn an_interval_is_always_in_order_and_new_markers_have_colour_0_and_no_comment()
     assert_eq!((marker.shape.start(), marker.shape.end()), (3, 9));
     assert_eq!(Shape::Point(4).start(), 4);
     assert_eq!(Shape::Point(4).end(), 4);
+}
+
+#[test]
+fn each_new_marker_gets_the_next_colour_and_the_colours_start_again_after_the_last() {
+    let mut m = Markers::new();
+    let ids: Vec<u32> = (0..10).map(|i| point(&mut m, i)).collect();
+    let colours: Vec<u8> = ids.iter().map(|id| m.get(*id).unwrap().colour).collect();
+    assert_eq!(colours, [0, 1, 2, 3, 4, 5, 6, 7, 0, 1]);
+    // A removed marker does not give its colour to the next one.
+    m.remove(ids[9]);
+    assert_eq!(m.next_colour(), 2);
 }
 
 #[test]
