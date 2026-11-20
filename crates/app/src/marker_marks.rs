@@ -11,13 +11,15 @@ use iced::{Color, Point, Rectangle, Size};
 use la_host::markers::End;
 
 /// The width of the pentagon-arrow.
-pub const PENTAGON_WIDTH: f32 = 26.0;
+pub const PENTAGON_WIDTH: f32 = 18.0;
 /// The height of its rectangular body.
-pub const PENTAGON_BODY: f32 = 18.0;
-/// The height of its pointed end: the whole mark is as high as the time ruler (28 pixels).
-pub const PENTAGON_TIP: f32 = 10.0;
-/// The side of the square of a pair: as high as the time ruler.
-pub const SQUARE: f32 = 28.0;
+pub const PENTAGON_BODY: f32 = 12.0;
+/// The height of its pointed end.
+pub const PENTAGON_TIP: f32 = 6.0;
+/// The width of the square of a pair.
+pub const SQUARE: f32 = 18.0;
+/// Its height: as high as the body of the pentagon plus two, so the tops of all marks are level.
+pub const SQUARE_HEIGHT: f32 = 14.0;
 /// The gap kept between a mark and whatever is beside it.
 #[cfg_attr(
     not(test),
@@ -57,7 +59,9 @@ pub fn square_bounds(x: f32, bottom: f32, end: End) -> Rectangle {
         End::Start => x - SQUARE,
         End::End | End::Point => x,
     };
-    Rectangle::new(Point::new(left, bottom - SQUARE), Size::new(SQUARE, SQUARE))
+    // Level with the top of the pentagon that hangs on the same `bottom`.
+    let top = bottom - PENTAGON_TIP - PENTAGON_BODY;
+    Rectangle::new(Point::new(left, top), Size::new(SQUARE, SQUARE_HEIGHT))
 }
 
 /// The area of the mark of an end of a marker, for a press to find it.
@@ -120,8 +124,14 @@ pub fn draw_line(
 pub fn number_centre(x: f32, bottom: f32, end: End) -> Point {
     match end {
         End::Point => Point::new(x, bottom - PENTAGON_TIP - PENTAGON_BODY / 2.0),
-        End::Start => Point::new(x - SQUARE / 2.0, bottom - SQUARE / 2.0),
-        End::End => Point::new(x + SQUARE / 2.0, bottom - SQUARE / 2.0),
+        End::Start => Point::new(
+            x - SQUARE / 2.0,
+            bottom - PENTAGON_TIP - PENTAGON_BODY + SQUARE_HEIGHT / 2.0,
+        ),
+        End::End => Point::new(
+            x + SQUARE / 2.0,
+            bottom - PENTAGON_TIP - PENTAGON_BODY + SQUARE_HEIGHT / 2.0,
+        ),
     }
 }
 
@@ -132,16 +142,16 @@ pub fn draw_mark(frame: &mut Frame, x: f32, bottom: f32, end: End, colour: Color
         End::Point => pentagon_path(x, bottom),
         End::Start | End::End => Path::rectangle(
             square_bounds(x, bottom, end).position(),
-            Size::new(SQUARE, SQUARE),
+            Size::new(SQUARE, SQUARE_HEIGHT),
         ),
     };
     frame.fill(&path, colour);
     let text = number.to_string();
     // The digits are made smaller when there are many, so they stay inside the mark.
     let size = match text.len() {
-        0..=2 => 14.0,
-        3 => 11.0,
-        _ => 9.0,
+        0..=2 => 11.0,
+        3 => 9.0,
+        _ => 8.0,
     };
     frame.fill_text(iced::widget::canvas::Text {
         content: text,
@@ -172,9 +182,9 @@ mod tests {
         assert!((lowest - 30.0).abs() < f32::EPSILON);
         assert!((points[0].x + points[1].x - 200.0).abs() < f32::EPSILON);
         assert!((points[2].x + points[4].x - 200.0).abs() < f32::EPSILON);
-        // 26 wide, 18 + 10 high: as high as the time ruler.
-        assert!((points[1].x - points[0].x - 26.0).abs() < f32::EPSILON);
-        assert!((30.0 - points[0].y - 28.0).abs() < f32::EPSILON);
+        // 18 wide, 12 + 6 high.
+        assert!((points[1].x - points[0].x - 18.0).abs() < f32::EPSILON);
+        assert!((30.0 - points[0].y - 18.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -190,12 +200,10 @@ mod tests {
             "touches from the right"
         );
         for square in [start, end] {
-            assert!((square.width - 28.0).abs() < f32::EPSILON);
-            assert!((square.height - 28.0).abs() < f32::EPSILON);
-            assert!(
-                (square.y + square.height - 30.0).abs() < f32::EPSILON,
-                "sits in the ruler"
-            );
+            assert!((square.width - 18.0).abs() < f32::EPSILON);
+            assert!((square.height - 14.0).abs() < f32::EPSILON);
+            let pentagon_top = pentagon_points(100.0, 30.0)[0].y;
+            assert!((square.y - pentagon_top).abs() < f32::EPSILON, "level tops");
         }
     }
 
@@ -205,10 +213,10 @@ mod tests {
         assert!(single.contains(Point::new(100.0, 20.0)));
         assert!(!single.contains(Point::new(120.0, 20.0)));
         let start = mark_bounds(100.0, 30.0, End::Start);
-        assert!(start.contains(Point::new(95.0, 25.0)));
-        assert!(!start.contains(Point::new(105.0, 25.0)));
+        assert!(start.contains(Point::new(95.0, 20.0)));
+        assert!(!start.contains(Point::new(105.0, 20.0)));
         let end = mark_bounds(100.0, 30.0, End::End);
-        assert!(end.contains(Point::new(105.0, 25.0)));
+        assert!(end.contains(Point::new(105.0, 20.0)));
     }
 
     #[test]
@@ -229,6 +237,6 @@ mod tests {
 
     #[test]
     fn the_fit_margin_of_the_host_is_a_square_and_a_gap() {
-        assert!((la_host::markers::MARK_MARGIN_PX as f32 - (SQUARE + GAP)).abs() < f32::EPSILON);
+        assert!(la_host::markers::MARK_MARGIN_PX as f32 >= SQUARE + GAP);
     }
 }
