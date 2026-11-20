@@ -27,9 +27,9 @@ pub const SQUARE_HEIGHT: f32 = 14.0;
 )]
 pub const GAP: f32 = 4.0;
 /// The width of a solid marker line.
-pub const LINE_WIDTH: f32 = 1.0;
+pub const LINE_WIDTH: f32 = 1.5;
 /// The width of the line of the selected marker.
-pub const SELECTED_LINE_WIDTH: f32 = 2.0;
+pub const SELECTED_LINE_WIDTH: f32 = 2.5;
 /// The dash and the gap of a line that is being placed.
 pub const DASH: [f32; 2] = [4.0, 3.0];
 /// How far from a line a press still takes it.
