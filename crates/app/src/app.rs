@@ -318,6 +318,68 @@ fn key_name(key: &keyboard::Key) -> Option<String> {
     }
 }
 
+/// The key of a press for the shortcut table. A letter typed on a layout that is not Latin (`ь`
+/// where the key `M` is) is taken by the place of the key on the keyboard, so the shortcuts work
+/// in every layout; a Latin layout of any arrangement (Dvorak) keeps the letter it types.
+#[must_use]
+pub fn shortcut_key(key: &keyboard::Key, physical: &keyboard::key::Physical) -> keyboard::Key {
+    use keyboard::key::{Code, Physical};
+    let typed_latin = match key {
+        keyboard::Key::Character(text) => text.is_ascii(),
+        _ => true,
+    };
+    if typed_latin {
+        return key.clone();
+    }
+    let Physical::Code(code) = physical else {
+        return key.clone();
+    };
+    let character = match code {
+        Code::KeyA => "a",
+        Code::KeyB => "b",
+        Code::KeyC => "c",
+        Code::KeyD => "d",
+        Code::KeyE => "e",
+        Code::KeyF => "f",
+        Code::KeyG => "g",
+        Code::KeyH => "h",
+        Code::KeyI => "i",
+        Code::KeyJ => "j",
+        Code::KeyK => "k",
+        Code::KeyL => "l",
+        Code::KeyM => "m",
+        Code::KeyN => "n",
+        Code::KeyO => "o",
+        Code::KeyP => "p",
+        Code::KeyQ => "q",
+        Code::KeyR => "r",
+        Code::KeyS => "s",
+        Code::KeyT => "t",
+        Code::KeyU => "u",
+        Code::KeyV => "v",
+        Code::KeyW => "w",
+        Code::KeyX => "x",
+        Code::KeyY => "y",
+        Code::KeyZ => "z",
+        Code::Digit0 => "0",
+        Code::Digit1 => "1",
+        Code::Digit2 => "2",
+        Code::Digit3 => "3",
+        Code::Digit4 => "4",
+        Code::Digit5 => "5",
+        Code::Digit6 => "6",
+        Code::Digit7 => "7",
+        Code::Digit8 => "8",
+        Code::Digit9 => "9",
+        Code::BracketLeft => "[",
+        Code::BracketRight => "]",
+        Code::Equal => "=",
+        Code::Minus => "-",
+        _ => return key.clone(),
+    };
+    keyboard::Key::Character(character.into())
+}
+
 /// The accelerator a key press stands for.
 #[must_use]
 pub fn accelerator_of(
@@ -1131,7 +1193,13 @@ impl App {
                 self.about_open = false;
                 Task::none()
             }
-            Message::Key(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
+            Message::Key(keyboard::Event::KeyPressed {
+                key,
+                modifiers,
+                physical_key,
+                ..
+            }) => {
+                let key = shortcut_key(&key, &physical_key);
                 let action = entry_for(&self.table, &key, modifiers)
                     .filter(|entry| entry.enabled_when.is_enabled(self.shell.state()))
                     .map(|entry| entry.action.clone());
@@ -4304,6 +4372,39 @@ mod tests {
         assert!(
             app.placement_preview.is_none(),
             "nothing stale after the release"
+        );
+    }
+
+    #[test]
+    fn the_shortcuts_work_on_a_layout_that_is_not_latin() {
+        use keyboard::key::{Code, Physical};
+        let physical = |code| Physical::Code(code);
+        let typed = |text: &str| keyboard::Key::Character(text.into());
+        let table = la_host::shortcuts::table();
+        for (cyrillic, code, latin, shift) in [
+            ("ь", Code::KeyM, "M", false),
+            ("Ь", Code::KeyM, "M", true),
+            ("х", Code::BracketLeft, "[", false),
+            ("ї", Code::BracketRight, "]", false),
+            ("і", Code::KeyS, "S", false),
+        ] {
+            let modifiers = if shift {
+                keyboard::Modifiers::SHIFT
+            } else {
+                keyboard::Modifiers::empty()
+            };
+            let key = shortcut_key(&typed(cyrillic), &physical(code));
+            let got = entry_for(&table, &key, modifiers).map(|e| e.action.clone());
+            let want = entry_for(&table, &typed(latin), modifiers).map(|e| e.action.clone());
+            assert!(want.is_some(), "{latin} has a shortcut");
+            assert_eq!(got, want, "{cyrillic} on the key of {latin}");
+        }
+        // A Latin letter stays what it is, wherever its key is (Dvorak).
+        assert_eq!(shortcut_key(&typed("m"), &physical(Code::KeyB)), typed("m"));
+        // A key that is not known is left as it is.
+        assert_eq!(
+            shortcut_key(&typed("ь"), &physical(Code::Quote)),
+            typed("ь")
         );
     }
 
