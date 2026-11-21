@@ -144,7 +144,7 @@ every marker: a colour (one of eight), a short comment (up to 80 characters) and
 times count from it; earlier points are negative), *Delete data to the left* and *to the right*,
 *Scroll to it*. For a pair: *Trim to the pair* (keep only the data between its ends), *Fit the view
 to the pair* and *Convert to two single markers*. For a single marker, **Make a pair** closes the list;
-then click the second single marker (pairs and the first one are shaded; Esc cancels). The deleting actions ask first, run in the background and **cannot be
+then click the second single marker, in the panel or on its mark in the view (pairs and the first one are shaded; Esc cancels). The deleting actions ask first, run in the background and **cannot be
 undone**; a pair that would be left with one end is removed, and you are told how many. **[** and
 **]** go to the previous and next marker, Delete removes the selected one, and **Markers → Remove
 all markers** clears them.

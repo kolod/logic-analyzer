@@ -79,7 +79,7 @@ pointer and selects the marker.
   delete action; the Delete key removes the selected marker.
 - Making a pair: the action "Make a pair" of a single marker (enabled when there is another single marker)
   closes the list and shows "Click the second single marker. Esc cancels." at the top of the view; the
-  next click on a single marker other than the first sends `MakePair`. While it waits, the rows of pairs
+  next click on a single marker other than the first, in the list or on its mark or line in the signal view, sends `MakePair` (nothing is selected or dragged in the view meanwhile). While it waits, the rows of pairs
   and of the first marker are shaded and ignore clicks. Esc, or the loss of the first marker, cancels.
 - Empty list: the text "No markers. Use the buttons above to add one."
 
