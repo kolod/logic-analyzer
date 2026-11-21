@@ -104,6 +104,7 @@ marker-limit = Das Limit von 64 Markierungen ist erreicht. Löschen Sie eine, um
 marker-delete = Löschen
 marker-comment = Kommentar
 marker-make-pair = Paar bilden
+marker-join-hint = Den zweiten einzelnen Marker anklicken. Esc bricht ab.
 marker-action-origin = Zeit ab hier zählen
 marker-action-origin-reset = Zeit zählt ab dem Anfang
 marker-action-cut-left = Daten links löschen

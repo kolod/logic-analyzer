@@ -1,14 +1,14 @@
 //! The Markers view of the side panel: the two buttons that start a placement, one row per marker
-//! with its colour, name, comment and times, the action list of a marker, and the bin (see
+//! with its colour, name, comment and times, and the action list of the marker that was clicked (see
 //! `specs/015-markers-rework/contracts/ui-interaction.md`).
 //!
 //! The view only draws what the host says and turns presses into messages; every rule is the
 //! host's. It is built from a [`Panel`] that holds plain data, so it is tested without the
 //! application around it.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use iced::widget::{Space, button, checkbox, column, container, row, text, text_input, tooltip};
+use iced::widget::{Space, button, column, container, row, text, text_input, tooltip};
 use iced::{Border, Color, Element, Fill, Theme};
 use la_host::markers::{
     Kind, MARKER_COLOURS, MAX_COMMENT_CHARS, MAX_MARKERS, Marker, MarkerText, Shape,
@@ -36,8 +36,10 @@ pub struct Strings {
     pub delete: String,
     /// The placeholder of the comment field.
     pub comment: String,
-    /// The label of the button that makes a pair of two single markers.
+    /// The label of the action that makes a pair of two single markers.
     pub make_pair: String,
+    /// What to do after it: click the second single marker.
+    pub join_hint: String,
     /// The names of the eight colours.
     pub colours: Vec<String>,
     /// Count time from a single marker.
@@ -74,8 +76,9 @@ pub struct Panel<'a> {
     pub open: Option<u32>,
     /// The comments being edited.
     pub comments: &'a BTreeMap<u32, String>,
-    /// The single markers that are checked.
-    pub checked: &'a BTreeSet<u32>,
+    /// The single marker a pair is being made from: the next single marker that is clicked is
+    /// the other half.
+    pub joining: Option<u32>,
     /// The texts.
     pub strings: &'a Strings,
 }
@@ -113,11 +116,15 @@ fn swatch_style(colour: Color, chosen: bool) -> impl Fn(&Theme, button::Status) 
     }
 }
 
-fn swatch<'a>(colour: Color, chosen: bool, message: Message) -> button::Button<'a, Message> {
+fn swatch<'a>(
+    colour: Color,
+    chosen: bool,
+    message: Option<Message>,
+) -> button::Button<'a, Message> {
     button(Space::new().width(14).height(14))
         .padding(2)
         .style(swatch_style(colour, chosen))
-        .on_press(message)
+        .on_press_maybe(message)
 }
 
 impl<'a> Panel<'a> {
@@ -182,13 +189,13 @@ impl<'a> Panel<'a> {
             title = title.push(text(marker.comment.clone()).size(11));
         }
         let label = column![title, text(self.summary(id)).size(11)].spacing(1);
-        let leading: Element<'static, Message> = match marker.shape {
-            Shape::Point(_) => checkbox(self.checked.contains(&id))
-                .size(14)
-                .on_toggle(move |on| Message::MarkerCheck(id, on))
-                .into(),
-            Shape::Interval { .. } => Space::new().width(14).into(),
+        // While a pair is being made only a single marker other than the first can be chosen: the
+        // others are shaded (they cannot be pressed).
+        let choosable = match self.joining {
+            None => true,
+            Some(first) => first != id && matches!(marker.shape, Shape::Point(_)),
         };
+        let press = choosable.then_some(Message::MarkerMenu(id));
         let icon = icons::icon(
             match marker.kind() {
                 Kind::Single => Icon::SingleMarker,
@@ -197,9 +204,9 @@ impl<'a> Panel<'a> {
             false,
         );
         row![
-            leading,
             icon,
-            swatch(colour, false, Message::MarkerMenu(id)),
+            swatch(colour, false, press.clone()),
+            // A press on the marker selects it and opens or closes its actions.
             button(label)
                 .style(if selected {
                     button::primary
@@ -208,15 +215,7 @@ impl<'a> Panel<'a> {
                 })
                 .width(Fill)
                 .padding(3)
-                .on_press(Message::Run(Command::SelectMarker(Some(id)))),
-            button(text("\u{22ef}").size(14))
-                .style(button::text)
-                .padding(2)
-                .on_press(Message::MarkerMenu(id)),
-            button(icons::icon(Icon::Trash, false))
-                .style(button::text)
-                .padding(2)
-                .on_press(Message::Run(Command::RemoveMarker(id))),
+                .on_press_maybe(press),
         ]
         .spacing(4)
         .align_y(iced::Alignment::Center)
@@ -289,6 +288,17 @@ impl<'a> Panel<'a> {
                         Some(Message::Run(Command::ScrollToMarker(id))),
                         None,
                     ),
+                    // Needs another single marker to pair with.
+                    Self::entry(
+                        &strings.make_pair,
+                        state
+                            .markers
+                            .list
+                            .iter()
+                            .any(|m| m.id != id && matches!(m.shape, Shape::Point(_)))
+                            .then_some(Message::MarkerJoin(id)),
+                        None,
+                    ),
                 ]
             }
             Shape::Interval { start, end } => vec![
@@ -328,7 +338,7 @@ impl<'a> Panel<'a> {
                 swatch(
                     self.variant.marker(colour),
                     marker.colour == colour,
-                    Message::Run(Command::SetMarkerColour { id, colour }),
+                    Some(Message::Run(Command::SetMarkerColour { id, colour })),
                 ),
                 text(name),
                 tooltip::Position::Bottom,
@@ -376,6 +386,9 @@ impl<'a> Panel<'a> {
         );
         // A gap between the buttons and the first marker.
         list = list.push(Space::new().height(6));
+        if self.joining.is_some() {
+            list = list.push(text(self.strings.join_hint.clone()).size(12));
+        }
         if full {
             list = list.push(text(self.strings.limit.clone()).size(12));
         }
@@ -393,24 +406,6 @@ impl<'a> Panel<'a> {
                     .padding(4)
                     .width(Fill)
                     .style(container::bordered_box),
-            );
-        }
-        let singles: Vec<u32> = state
-            .markers
-            .list
-            .iter()
-            .filter(|m| matches!(m.shape, Shape::Point(_)) && self.checked.contains(&m.id))
-            .map(|m| m.id)
-            .collect();
-        if let [first, second] = singles.as_slice() {
-            list = list.push(
-                button(text(self.strings.make_pair.clone()).size(12))
-                    .style(button::primary)
-                    .padding(4)
-                    .on_press(Message::Run(Command::MakePair {
-                        first: *first,
-                        second: *second,
-                    })),
             );
         }
         list.into()

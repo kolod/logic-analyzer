@@ -104,6 +104,7 @@ marker-limit = Досягнуто ліміту в 64 позначки. Вида�
 marker-delete = Видалити
 marker-comment = Коментар
 marker-make-pair = Утворити пару
+marker-join-hint = Клацніть другий одиночний маркер. Esc скасовує.
 marker-action-origin = Рахувати час звідси
 marker-action-origin-reset = Час рахується від початку
 marker-action-cut-left = Видалити дані ліворуч

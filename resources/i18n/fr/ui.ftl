@@ -104,6 +104,7 @@ marker-limit = La limite de 64 repères est atteinte. Supprimez-en un pour en aj
 marker-delete = Supprimer
 marker-comment = Commentaire
 marker-make-pair = Former une paire
+marker-join-hint = Cliquez sur le second marqueur simple. Échap annule.
 marker-action-origin = Compter le temps à partir d'ici
 marker-action-origin-reset = Le temps compte depuis le début
 marker-action-cut-left = Supprimer les données à gauche

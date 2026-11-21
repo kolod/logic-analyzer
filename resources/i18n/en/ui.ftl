@@ -187,8 +187,10 @@ marker-limit = The limit of 64 markers is reached. Delete one to add another.
 marker-delete = Delete
 # Placeholder of the field for the comment of a marker.
 marker-comment = Comment
-# Button that turns the two checked single markers into a pair marker.
+# Action of a single marker: it and the single marker that is clicked next become a pair.
 marker-make-pair = Make a pair
+# Shown while a pair is being made: the first single marker is chosen.
+marker-join-hint = Click the second single marker. Esc cancels.
 # Action of a single marker: time is counted from it.
 marker-action-origin = Count time from here
 # Action of the single marker that time is counted from: count from the start again.

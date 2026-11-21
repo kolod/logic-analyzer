@@ -139,13 +139,12 @@ click the one you want, or press Esc, and the view returns to what it was.
 **Dragging.** Drag a marker's line or its mark to move it; a pair's two ends swap roles if you drag
 one past the other.
 
-**Actions.** Open them with the `⋯` button of a row in the panel or by right-clicking a mark. For
-every marker: a colour (one of eight), a short comment (up to 80 characters) and delete (the bin
-icon of a row deletes at once). For a single marker: *Count time from here* (the ruler and all
+**Actions.** Open them by clicking a marker in the panel (click again to close) or by right-clicking a mark. For
+every marker: a colour (one of eight), a short comment (up to 80 characters) and delete. For a single marker: *Count time from here* (the ruler and all
 times count from it; earlier points are negative), *Delete data to the left* and *to the right*,
 *Scroll to it*. For a pair: *Trim to the pair* (keep only the data between its ends), *Fit the view
-to the pair* and *Convert to two single markers*. Check two single markers in the panel and press
-**Make a pair** to join them. The deleting actions ask first, run in the background and **cannot be
+to the pair* and *Convert to two single markers*. For a single marker, **Make a pair** closes the list;
+then click the second single marker (pairs and the first one are shaded; Esc cancels). The deleting actions ask first, run in the background and **cannot be
 undone**; a pair that would be left with one end is removed, and you are told how many. **[** and
 **]** go to the previous and next marker, Delete removes the selected one, and **Markers → Remove
 all markers** clears them.

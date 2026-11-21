@@ -64,8 +64,8 @@ pointer and selects the marker.
 ┌───────────────────────────────┐
 │ [▼ Single marker] [▯▯ Pair marker]   ← two buttons, each with its mark
 │ ─────────────────────────────  │
-│ ▼ T1  ■  Rising edge      12.5 µs   ⋯  🗑
-│ ▯▯ P1  ■  Bit 3     1.25 µs · 800 kHz  ⋯  🗑
+│ ▼ T1  ■  Rising edge      12.5 µs
+│ ▯▯ P1  ■  Bit 3     1.25 µs · 800 kHz
 └───────────────────────────────┘
 ```
 
@@ -74,22 +74,22 @@ pointer and selects the marker.
   it again cancels.
 - One row per marker, in the order of `ordered()`: the kind's mark icon, the name, a colour swatch (opens
   the colours), the comment (truncated; full text in the tooltip), the time (a single) or the duration and
-  the frequency (a pair), the `⋯` button, and the **bin** icon (`Icon::Trash`, the same widget, size and
-  place at the right of the row as in the Decoders view; no confirmation).
-- A click on a row selects the marker (and the mark in the view shows selected); the Delete key removes it.
-- Checkmarks: a row of a single marker has a small checkbox; with exactly two single markers checked, the
-  button "Make a pair" appears under the list (sending `MakePair`); the checks are cleared when it is
-  used and when a checked marker disappears.
+  the frequency (a pair). There is no `⋯` button and no bin: a click on the row selects the marker (and
+  the mark in the view shows selected) and opens or closes its action list under it; the list has the
+  delete action; the Delete key removes the selected marker.
+- Making a pair: the action "Make a pair" of a single marker (enabled when there is another single marker)
+  closes the list and shows "Click the second single marker. Esc cancels." at the top of the view; the
+  next click on a single marker other than the first sends `MakePair`. While it waits, the rows of pairs
+  and of the first marker are shaded and ignore clicks. Esc, or the loss of the first marker, cancels.
 - Empty list: the text "No markers. Use the buttons above to add one."
-- The `⋯` button opens the action list (below) under the row.
 
-## The action list (the row's `⋯` and the right click on a mark)
+## The action list (a click on the row and the right click on a mark)
 
 An overlay panel of buttons with text, one per action, closed by Esc, by a click outside or after an action:
 
 | Kind | Actions (send) |
 |------|----------------|
-| Single | Count time from here (`SetTimeOrigin`) — shown as "Time counts from the start" (`ResetTimeOrigin`) when this marker is the origin; Delete data to the left (`CutLeft`); Delete data to the right (`CutRight`); Scroll to it (`ScrollToMarker`) |
+| Single | Count time from here (`SetTimeOrigin`) — shown as "Time counts from the start" (`ResetTimeOrigin`) when this marker is the origin; Delete data to the left (`CutLeft`); Delete data to the right (`CutRight`); Scroll to it (`ScrollToMarker`); Make a pair (then a click on the second single marker; `MakePair`) |
 | Pair | Trim to the pair (`TrimToPair`); Fit the view to the pair (`FitToPair`); Convert to two single markers (`SplitPair`) |
 | Both | a row of eight colour swatches (`SetMarkerColour`); a text field for the comment, limited to 80 characters (`SetMarkerComment` on every edit); Delete (`RemoveMarker`) |
 

@@ -136,14 +136,15 @@ pub enum Message {
     PlacementPointer(Option<la_host::markers::Pointer>, Instant),
     /// A frame of the clock of the automatic zoom (only while a marker is placed or dragged).
     DwellTick(Instant),
-    /// The actions of a marker are opened or closed (its swatch or its menu button).
+    /// A marker of the Markers view was pressed: it is selected and its actions are opened or
+    /// closed; while a pair is being made it is the second half instead.
     MarkerMenu(u32),
     /// A marker was pressed with the right button in the signal view: show its actions.
     MarkerContext(u32),
     /// The comment of a marker is being edited in its action list.
     MarkerComment(u32, String),
-    /// A single marker is checked or unchecked for making a pair.
-    MarkerCheck(u32, bool),
+    /// "Make a pair" of a single marker: the single marker pressed next is the other half.
+    MarkerJoin(u32),
     /// The menu entry that adds a decoder.
     /// An entry of the open menu that has a submenu (the index in the table) is pressed.
     SubmenuToggled(usize),
@@ -479,8 +480,8 @@ pub struct App {
     marker_menu: Option<u32>,
     /// The comments of the markers as their text fields hold them.
     marker_comments: std::collections::BTreeMap<u32, String>,
-    /// The single markers that are checked, to be made a pair.
-    marker_checked: std::collections::BTreeSet<u32>,
+    /// The single marker a pair is being made from, until the other half is pressed.
+    marker_joining: Option<u32>,
     /// How long the pointer has rested while a marker is placed or dragged.
     dwell: crate::dwell::Dwell,
     /// The animation of an automatic zoom that is running.
@@ -587,7 +588,7 @@ impl App {
             placement_preview: None,
             marker_menu: None,
             marker_comments: std::collections::BTreeMap::new(),
-            marker_checked: std::collections::BTreeSet::new(),
+            marker_joining: None,
             dwell: crate::dwell::Dwell::default(),
             zoom_animation: None,
             folded_decoders: std::collections::BTreeSet::new(),
@@ -1025,7 +1026,9 @@ impl App {
         if self.marker_menu.as_ref().is_some_and(|id| !exists(id)) {
             self.marker_menu = None;
         }
-        self.marker_checked.retain(exists);
+        if self.marker_joining.as_ref().is_some_and(|id| !exists(id)) {
+            self.marker_joining = None;
+        }
         if !editing_comment {
             self.marker_comments = crate::marker_view::comments_of(state);
         }
@@ -1042,6 +1045,7 @@ impl App {
             delete: self.t("marker-delete"),
             comment: self.t("marker-comment"),
             make_pair: self.t("marker-make-pair"),
+            join_hint: self.t("marker-join-hint"),
             origin: self.t("marker-action-origin"),
             origin_reset: self.t("marker-action-origin-reset"),
             cut_left: self.t("marker-action-cut-left"),
@@ -1181,6 +1185,13 @@ impl App {
             Message::Key(keyboard::Event::KeyPressed {
                 key: keyboard::Key::Named(keyboard::key::Named::Escape),
                 ..
+            }) if self.marker_joining.is_some() => {
+                self.marker_joining = None;
+                Task::none()
+            }
+            Message::Key(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
             }) if self.marker_menu.is_some() && self.shell.state().placement.is_none() => {
                 self.marker_menu = None;
                 Task::none()
@@ -1298,7 +1309,18 @@ impl App {
                 Task::none()
             }
             Message::MarkerMenu(id) => {
+                if let Some(first) = self.marker_joining.take() {
+                    // The second half of the pair; the view shades what cannot be one, and the
+                    // host refuses it anyway.
+                    self.marker_menu = None;
+                    return self.run(Command::MakePair { first, second: id });
+                }
                 self.marker_menu = (self.marker_menu != Some(id)).then_some(id);
+                self.run(Command::SelectMarker(Some(id)))
+            }
+            Message::MarkerJoin(id) => {
+                self.marker_menu = None;
+                self.marker_joining = Some(id);
                 Task::none()
             }
             Message::MarkerContext(id) => {
@@ -1310,14 +1332,6 @@ impl App {
                 let comment = crate::marker_view::limit_comment(&comment);
                 self.marker_comments.insert(id, comment.clone());
                 self.run(Command::SetMarkerComment { id, comment })
-            }
-            Message::MarkerCheck(id, on) => {
-                if on {
-                    self.marker_checked.insert(id);
-                } else {
-                    self.marker_checked.remove(&id);
-                }
-                Task::none()
             }
             Message::OpenSettings => {
                 self.open_menu = None;
@@ -2080,7 +2094,7 @@ impl App {
             variant: self.variant,
             open: self.marker_menu,
             comments: &self.marker_comments,
-            checked: &self.marker_checked,
+            joining: self.marker_joining,
             strings: &strings,
         }
         .view()
@@ -4661,14 +4675,22 @@ mod tests {
     }
 
     #[test]
-    fn two_checked_single_markers_can_be_made_a_pair() {
+    fn a_pair_is_made_by_the_action_of_one_single_marker_and_a_click_on_another() {
         let _turn = render_turn();
         let mut app = app_with_capture("marker-make-pair");
         let _ = app.update(Message::AreaResized(1000.0));
         place_single(&mut app, 1_000);
+        let make = app.t("marker-make-pair");
+        let hint = app.t("marker-join-hint");
+        let first = app.shell.state().markers.list[0].id;
+        let _ = app.update(Message::MarkerMenu(first));
+        {
+            let mut ui = markers_view_of(&app);
+            let found = ui.find(make.as_str()).is_ok();
+            assert!(found, "the action is in the list");
+        }
         place_single(&mut app, 2_000);
         place_single(&mut app, 3_000);
-        let make = app.t("marker-make-pair");
         let ids: Vec<u32> = app
             .shell
             .state()
@@ -4677,29 +4699,79 @@ mod tests {
             .iter()
             .map(|m| m.id)
             .collect();
-        let _ = app.update(Message::MarkerCheck(ids[0], true));
-        assert!(
-            markers_view_of(&app).find(make.as_str()).is_err(),
-            "one is not enough"
+        let _ = app.update(Message::MarkerJoin(ids[0]));
+        assert_eq!(
+            app.marker_menu, None,
+            "the list is closed to let the click through"
         );
-        let _ = app.update(Message::MarkerCheck(ids[1], true));
-        assert!(markers_view_of(&app).find(make.as_str()).is_ok());
-        let _ = app.update(Message::MarkerCheck(ids[2], true));
         assert!(
-            markers_view_of(&app).find(make.as_str()).is_err(),
-            "three are too many"
+            markers_view_of(&app).find(hint.as_str()).is_ok(),
+            "what to do"
         );
-        let _ = app.update(Message::MarkerCheck(ids[2], false));
-        let _ = app.update(Message::Run(Command::MakePair {
-            first: ids[0],
-            second: ids[1],
+        // Escape gives it up.
+        let escape = keyboard::Key::Named(keyboard::key::Named::Escape);
+        let _ = app.update(Message::Key(keyboard::Event::KeyPressed {
+            key: escape.clone(),
+            modified_key: escape,
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::Escape),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
         }));
+        assert_eq!(app.marker_joining, None);
+        assert!(markers_view_of(&app).find(hint.as_str()).is_err());
+        // The first and the second press: a pair of the two, the third is left.
+        let _ = app.update(Message::MarkerJoin(ids[0]));
+        let _ = app.update(Message::MarkerMenu(ids[2]));
         assert_eq!(app.shell.state().markers.list.len(), 2);
-        assert!(
-            app.marker_checked.is_empty(),
-            "the checks of markers that are gone go away"
-        );
-        assert!(markers_view_of(&app).find(make.as_str()).is_err());
+        assert_eq!(app.marker_joining, None);
+        assert!(markers_view_of(&app).find(hint.as_str()).is_err());
+    }
+
+    #[test]
+    fn while_a_pair_is_made_a_pair_marker_and_the_first_one_are_not_taken() {
+        let _turn = render_turn();
+        let mut app = app_with_capture("marker-join-ignore");
+        let _ = app.update(Message::AreaResized(1000.0));
+        place_single(&mut app, 1_000);
+        place_single(&mut app, 2_000);
+        place_single(&mut app, 3_000);
+        let ids: Vec<u32> = app
+            .shell
+            .state()
+            .markers
+            .list
+            .iter()
+            .map(|m| m.id)
+            .collect();
+        let _ = app.update(Message::MarkerJoin(ids[0]));
+        let _ = app.update(Message::MarkerMenu(ids[1]));
+        let pair = app
+            .shell
+            .state()
+            .markers
+            .list
+            .iter()
+            .find(|m| m.kind() == la_host::markers::Kind::Pair)
+            .map(|m| m.id)
+            .unwrap();
+        // A pair is not a half of a pair, and the first one is not its own other half.
+        let other = app
+            .shell
+            .state()
+            .markers
+            .list
+            .iter()
+            .find(|m| m.kind() == la_host::markers::Kind::Single)
+            .map(|m| m.id)
+            .unwrap();
+        let _ = app.update(Message::MarkerJoin(other));
+        let _ = app.update(Message::MarkerMenu(pair));
+        assert_eq!(app.shell.state().markers.list.len(), 2, "nothing changed");
+        let _ = app.update(Message::MarkerJoin(other));
+        let _ = app.update(Message::MarkerMenu(other));
+        assert_eq!(app.shell.state().markers.list.len(), 2, "nothing changed");
     }
 
     #[test]

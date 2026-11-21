@@ -104,6 +104,7 @@ marker-limit = マーカーは最大 64 個です。追加するには 1 つ削�
 marker-delete = 削除
 marker-comment = コメント
 marker-make-pair = ペアにする
+marker-join-hint = 2つ目の単独マーカーをクリックします。Esc で取り消し。
 marker-action-origin = ここから時間を数える
 marker-action-origin-reset = 時間は先頭から数える
 marker-action-cut-left = 左側のデータを削除

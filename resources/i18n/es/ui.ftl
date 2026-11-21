@@ -104,6 +104,7 @@ marker-limit = Se alcanzó el límite de 64 marcadores. Elimine uno para añadir
 marker-delete = Eliminar
 marker-comment = Comentario
 marker-make-pair = Crear un par
+marker-join-hint = Haga clic en el segundo marcador simple. Esc cancela.
 marker-action-origin = Contar el tiempo desde aquí
 marker-action-origin-reset = El tiempo cuenta desde el inicio
 marker-action-cut-left = Eliminar datos a la izquierda
