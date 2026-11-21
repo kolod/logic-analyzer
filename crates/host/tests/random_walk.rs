@@ -912,7 +912,11 @@ fn walk(seed: u64, steps: u64) {
             })
         {
             shell.poll(Instant::now());
-            assert!(Instant::now() < deadline, "seed {seed}: did not settle");
+            assert!(
+                Instant::now() < deadline,
+                "seed {seed}: did not settle; {}",
+                unsettled(&shell)
+            );
             std::thread::sleep(Duration::from_millis(3));
         }
     }
@@ -938,6 +942,32 @@ fn setting(name: &str, default: u64) -> u64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
+}
+
+/// What still keeps the wind-down of the walk waiting, for the message of a timeout (a flake seen
+/// on Debian whose cause is not known: the message must say which condition held).
+fn unsettled(shell: &Shell) -> String {
+    let state = shell.state();
+    let instances: Vec<String> = state
+        .decoders
+        .instances
+        .iter()
+        .map(|i| {
+            format!(
+                "#{} {:?} ready={} covered={}/{} loaded={} fault={:?}",
+                i.id, i.state, i.ready, i.covered, i.length, i.loaded, i.fault
+            )
+        })
+        .collect();
+    format!(
+        "activity {:?}, operation {:?}, running {}, pending decision {:?}, instances {instances:#?}",
+        state.activity,
+        state
+            .operation
+            .map(|o| (o.kind, o.done_bytes, o.total_bytes)),
+        shell.operation_running(),
+        state.pending_decision
+    )
 }
 
 #[test]
