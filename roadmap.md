@@ -24,7 +24,7 @@ built and verified without capture hardware, using the virtual device.
 | 012 | `012-driver-logic16-clone` | mcupro Logic16 clone driver, same requirements. | 004 |
 | 013 | `013-driver-weact` (merged) | WeAct LogicAnalyzer driver, same requirements. | 004 |
 | 014 | `014-gui-improvements` (merged) | Interface rework (no change to the host API contract of decoding or storage), in one feature or split in two when planning: see the list under "GUI improvements" below. | 006, 007, 008 |
-| 015 | `015-markers-rework` | Two kinds of marker, single (T) and pair (P), replacing the one kind of 006: lines with a pentagon-arrow or two squares, placed with the mouse and snapped to transitions, colours, comments, time origin, cutting and trimming the data, fit and scroll to a marker, duration and frequency of a pair; the Markers panel with two add buttons. | 006, 014 |
+| 015 | `015-markers-rework` (merged) | Two kinds of marker, single (T) and pair (P), replacing the one kind of 006: lines with a pentagon-arrow or two squares, placed with the mouse and snapped to transitions, colours, comments, time origin, cutting and trimming the data, fit and scroll to a marker, duration and frequency of a pair; the Markers panel with two add buttons. | 006, 014 |
 | 016+ | as needed | More decoders (SPI, UART, 1-Wire, ...), raw data export, `.sr` import/export, packaging (Windows installer, `.deb`). | — |
 
 ## Notes on the order

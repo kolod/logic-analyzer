@@ -76,3 +76,7 @@ quickstart were brought in line with them (the task list keeps the history as it
 - The snap ring is shown while a placed marker is dragged.
 - The keyboard shortcuts work on non-Latin layouts (a letter that is not Latin is taken by the place of its
   key); this is outside the markers but was found with them.
+
+## CI
+
+Pull request #27 (merged): fmt, clippy, test, deny and msrv passed on Debian and Windows, and the commit-subject check passed. The first run of `test (debian)` caught a real fault that the local runs had not hit: a drag whose marker was removed, joined into a pair or replaced by an opened session stayed in `State.drag` (the random walk found it at action 78494). It is fixed in `e28798a` with a test that fails without the fix. `cargo deny` is thus covered by CI.

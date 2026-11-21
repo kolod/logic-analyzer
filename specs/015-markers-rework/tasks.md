@@ -623,13 +623,13 @@ compare everything; open a file written before this feature.
 - [X] T069 [P] `crates/host/tests/containment.rs`/`error_sweep.rs`: every new error code and notice has a localized
   message in six languages and a log entry; a panic injected into the crop worker and into `resolve_pointer`
   is contained and leaves the state intact.
-- [ ] T070 `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo +1.85 check -p
+- [X] T070 `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo +1.85 check -p
   la-host -p la-storage`, `cargo test --workspace`, `cargo deny check` on this system; push and confirm CI on
   Windows and Debian is green (the same MSRV job as before).
 - [X] T071 Walk through `quickstart.md` by hand on both systems with the simulated device and write the results,
   with the commands run and the test names, into `specs/015-markers-rework/verification.md` (started in T002);
   record in it every deviation from the spec and decision taken during the work.
-- [ ] T072 `roadmap.md`: mark 015 as merged when the pull request is merged; check that `specs/006-…` and
+- [X] T072 `roadmap.md`: mark 015 as merged when the pull request is merged; check that `specs/006-…` and
   `specs/014-…` still read correctly next to this feature (the pointers added with the spec); update
   `specs/015-markers-rework/checklists/requirements.md` if a requirement changed during the work.
 
