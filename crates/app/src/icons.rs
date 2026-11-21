@@ -92,11 +92,11 @@ fn paths(icon: Icon) -> Vec<(Path, bool)> {
         }
         Icon::PairMarker => vec![
             (
-                Path::line(Point::new(7.0, 5.0), Point::new(7.0, 19.0)),
+                Path::line(Point::new(7.0, 2.0), Point::new(7.0, 19.0)),
                 false,
             ),
             (
-                Path::line(Point::new(13.0, 5.0), Point::new(13.0, 19.0)),
+                Path::line(Point::new(13.0, 2.0), Point::new(13.0, 19.0)),
                 false,
             ),
             (
