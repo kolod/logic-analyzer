@@ -2831,6 +2831,7 @@ impl App {
             placement: self.shell.state().placement,
             preview: self.placement_preview,
             drag_end: self.shell.state().drag,
+            joining: self.marker_joining,
         })
         .width(Fill)
         .height(Fill);

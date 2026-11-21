@@ -77,6 +77,9 @@ pub struct SignalView<'a> {
     pub preview: Option<Resolved>,
     /// The marker end being dragged, as the host knows it (a pair whose ends crossed swaps roles).
     pub drag_end: Option<(u32, End)>,
+    /// The single marker a pair is being made from: a press on another single marker, in the
+    /// view as in the panel, is the other half.
+    pub joining: Option<u32>,
 }
 
 /// A press in the legend strip that has not been released yet.
@@ -910,6 +913,16 @@ impl canvas::Program<Message> for SignalView<'_> {
                     };
                     return Some(canvas::Action::publish(Message::Run(command)).and_capture());
                 }
+                if let Some(first) = self.joining {
+                    // Choosing the other half of a pair: a single marker other than the first
+                    // is taken, everything else is ignored (no drag, no selection).
+                    return Some(match self.marker_hit(position, scale) {
+                        Some((id, End::Point)) if id != first => {
+                            canvas::Action::publish(Message::MarkerMenu(id)).and_capture()
+                        }
+                        _ => canvas::Action::capture(),
+                    });
+                }
                 state.drag_marker = self.marker_hit(position, scale);
                 state.drag_from = Some(position.x);
                 match state.drag_marker {
@@ -1585,6 +1598,7 @@ mod tests {
             placement: None,
             preview: None,
             drag_end: None,
+            joining: None,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         // The width is reported first, as the view does on its first event.
@@ -1721,6 +1735,7 @@ mod tests {
             placement: None,
             preview: None,
             drag_end: None,
+            joining: None,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         let at = mouse::Cursor::Available(Point::new(400.0, 200.0));
@@ -1837,6 +1852,7 @@ mod tests {
             placement: None,
             preview: None,
             drag_end: None,
+            joining: None,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         state.reported_width = bounds.width - GUTTER;
@@ -1896,6 +1912,7 @@ mod tests {
             placement: None,
             preview: None,
             drag_end: None,
+            joining: None,
         }
     }
 
@@ -2453,6 +2470,46 @@ mod tests {
             message,
             Some(Message::Run(Command::EndMarkerDrag))
         ));
+        assert_eq!(state.drag_marker, None);
+    }
+
+    #[test]
+    fn while_a_pair_is_made_a_press_on_another_single_marker_is_the_second_half() {
+        let (plan, _shell) = plan_with_channels();
+        let plan = with_markers(&plan);
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let mut view = view_of(&plan, &cache, &localizer);
+        let on_single = Point::new(GUTTER + 202.0, 60.0);
+        let on_pair = Point::new(GUTTER + 400.0, 60.0);
+        // The first half is another marker: the press chooses this one and drags nothing.
+        view.joining = Some(99);
+        let mut state = ViewState::default();
+        let (message, _) = send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            on_single,
+        )
+        .unwrap();
+        assert!(
+            matches!(message, Some(Message::MarkerMenu(1))),
+            "{message:?}"
+        );
+        assert_eq!(state.drag_marker, None);
+        // A pair is not a half of a pair; the first marker is not its own other half.
+        let (message, _) =
+            send_event(&view, &mut state, button_down(mouse::Button::Left), on_pair).unwrap();
+        assert!(message.is_none());
+        assert_eq!(state.drag_marker, None);
+        view.joining = Some(1);
+        let (message, _) = send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            on_single,
+        )
+        .unwrap();
+        assert!(message.is_none());
         assert_eq!(state.drag_marker, None);
     }
 
