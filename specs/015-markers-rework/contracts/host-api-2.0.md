@@ -77,7 +77,7 @@ MakePair { first: u32, second: u32 }      // two single markers' ids → one pai
   The selection is unchanged.
 - **FixPlacement { pointer }**: ignored when `placement` is `None`. Resolves the pointer with
   `resolve_pointer` (same function, same input as the drawing used), then follows the state machine. A new
-  marker takes `id = last_id + 1`, the next number of its kind, colour 0, an empty comment, and becomes
+  marker takes `id = last_id + 1`, the next number of its kind, the next colour (`last_id` modulo 8, so the first marker has colour 0), an empty comment, and becomes
   `selected`. Marks the capture unsaved.
 - **PlacementZoomTo { start, length }**: ignored unless a placement is active or a drag is under way
   (the interface sends `MoveMarkerEnd` first; the host remembers `dragging: Option<u32>`); sets the window

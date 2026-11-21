@@ -32,8 +32,8 @@ dotted line in the marker's colour follows the pointer (and snaps to the transit
 under it) until a click fixes it, and then the line is solid.
 
 Both kinds have a colour (from a few choices), an optional short comment, and can be deleted. The
-Markers view gets two buttons at its top, one for each kind, and a bin icon for deleting, the same
-as in the Decoders panel.
+Markers view gets two buttons at its top, one for each kind; a click on a marker's row opens its actions,
+which include deleting.
 
 Out of scope: more than two kinds of marker, free colour choice (a palette only), measurements among
 more than two points, markers on decoder annotations, exporting marker data to a file other than the
@@ -155,7 +155,7 @@ that says what it marks, and delete it.
 there is what makes them usable; it does not block the measuring itself.
 
 **Independent Test**: on a capture with a single and a pair marker, change both colours, write a
-comment on each, delete one with the bin icon, save, reopen and compare.
+comment on each, delete one from its action list, save, reopen and compare.
 
 **Acceptance Scenarios**:
 
@@ -164,8 +164,7 @@ comment on each, delete one with the bin icon, save, reopen and compare.
 2. **Given** a marker, **When** the user types a comment, **Then** it is shown in its row of the panel
    and as a tooltip on its mark, is limited to a short length, and is shown exactly as typed (control
    and invisible characters removed), never translated.
-3. **Given** a marker, **When** the user presses its bin icon (the same icon and place as the bin of a
-   decoder in the Decoders panel), **Then** it disappears from the view and the panel at once, a
+3. **Given** a marker, **When** the user chooses **Delete** in its action list, **Then** it disappears from the view and the panel at once, a
    pair together with both its ends.
 4. **Given** a marker's row has been deleted, **When** the user adds a marker of the same kind,
    **Then** it does not take the deleted one's number (see FR-006).
@@ -252,12 +251,13 @@ ends at the two positions and the singles are gone.
 
 **Acceptance Scenarios**:
 
-1. **Given** at least two single markers, **When** the user selects exactly two of them in the panel
-   and chooses "make a pair", **Then** they are replaced by one pair marker whose start is the
-   earlier and whose end the later of the two, with a new number of the pair kind, the colour and
-   comment of the earlier one.
-2. **Given** fewer than two or more than two single markers are selected, or a pair is among the
-   selection, **When** the user looks at the action, **Then** it is unavailable.
+1. **Given** at least two single markers, **When** the user chooses "make a pair" in the action list
+   of one of them and then clicks another single marker (its row in the panel, or its mark or line in
+   the signal view), **Then** they are replaced by one pair marker whose start is the earlier and whose
+   end the later of the two, with a new number of the pair kind, the colour and comment of the earlier one.
+2. **Given** "make a pair" is waiting for the second marker, **When** the user looks at the markers,
+   **Then** pairs and the first marker are shaded (in the panel and in the signal view) and ignore clicks,
+   and Escape cancels. **Given** there is only one single marker, **Then** the action is unavailable.
 
 ---
 
@@ -277,10 +277,10 @@ and the actions of every row, in two languages and at the smallest supported pan
    the placement of a marker of that kind (stories 1, 2 and 9).
 2. **Given** markers of both kinds exist, **When** the user looks at the list, **Then** it holds one
    row per marker in the order of the time of its (start) position, each with its name (**T3**,
-   **P1**), its colour swatch, its comment, its time or duration and its frequency (pairs), and the
-   bin icon at the right.
-3. **Given** a row, **When** the user opens its action menu (a button on the row, or the context
-   menu of the marker's mark in the signal view), **Then** it offers the actions of its kind (stories
+   **P1**), its colour swatch, its comment, its time or its two times with the duration and the
+   frequency (pairs); there is no separate button or bin on the row.
+3. **Given** a row, **When** the user clicks it (or presses the marker's mark in the signal view with the
+   right button), **Then** it offers the actions of its kind (stories
    4 and 5) and, for every kind, the colour and the comment.
 4. **Given** a mark in the signal view, **When** the user selects it or its row, **Then** both are
    shown as selected, and the Delete key removes the selected marker.
@@ -517,23 +517,23 @@ move the pointer above and below the lane of the signal and check that nothing s
 **Actions of every marker**
 
 - **FR-018**: Every marker MUST offer **colour** (a choice among a small fixed set of colours, eight
-  by default, the same for both kinds, distinguishable on every theme; a new marker takes the first
-  one), **comment** (short text, at most 80 characters, sanitized like names of channels and never
-  translated) and **delete** (the bin icon of the Decoders panel, in the same place of the row, with no
-  confirmation, as for a decoder). The comment MUST be shown in the row and as a tooltip of the mark.
+  by default, the same for both kinds, distinguishable on every theme; each new marker takes the next
+  one in turn, and the first one again after the last), **comment** (short text, at most 80 characters, sanitized like names of channels and never
+  translated) and **delete** (in the action list, with no confirmation). The comment MUST be shown in the row and as a tooltip of the mark.
 - **FR-019**: The user MUST be able to turn **two single markers into one pair marker**: selecting
-  exactly two single markers in the panel offers "make a pair"; the pair's start is the earlier of
+  "make a pair" in the action list of a single marker and a click on another single marker (in the panel or in
+  the signal view) joins the two; the pair's start is the earlier of
   the two and its end the later, with a new pair-kind number, the colour and the comment of the earlier.
 
 **The panel**
 
 - **FR-020**: The Markers view MUST have, at its top, two buttons (one per kind) and below them one
   row per marker, ordered by the time of its (start) position; a row MUST show the name, the colour,
-  the comment, the time (a single) or the duration and the frequency (a pair), an action menu and the
-  bin icon. Every action of FR-011 to FR-019 MUST be reachable from the row and from the context menu
+  the comment, the time (a single) or the two times, the duration and the frequency (a pair). A click on
+  a row opens the action list under it. Every action of FR-011 to FR-019 MUST be reachable from the row and from the context menu
   of the marker's mark in the signal view. The text of the view MUST be localized in the six languages
   and fit at the smallest panel width in the longest German text and in Japanese.
-- **FR-021**: Selecting a marker (its mark or its row) MUST select both; the Delete key removes the
+- **FR-021**: Selecting a marker (its mark or its row) MUST select both (the row by a stronger outline); the Delete key removes the
   selected marker; the previous/next marker shortcuts of feature 006 MUST jump to the previous and
   next marker position (for a pair, its start).
 

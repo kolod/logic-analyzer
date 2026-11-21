@@ -42,7 +42,7 @@ Derived, never stored: the kind (from the shape); the name (`"T"`/`"P"` + number
 |-------|------|---------|
 | `kind` | `Kind` | `Single` or `Pair` |
 | `first` | `Option<u64>` | the half of a pair that is already fixed (always `None` for a single) |
-| `colour` | `u8` | the colour the marker will have: the first of the palette (`0`) |
+| `colour` | `u8` | the colour the marker will have: the next of the palette (`Markers::next_colour`) |
 
 `State.snap_zoom: Option<(u64, u64)>` (outside `Placement`, because a drag uses it too) holds the window
 `(start, length)` that an automatic zoom replaced and must put back (research R4).
@@ -82,7 +82,7 @@ is read as 0.
 
 | Function | Rule |
 |----------|------|
-| `Markers::add(shape) -> Option<u32>` | `None` at the limit; allocates `id` and the next number of the kind; colour 0 |
+| `Markers::add(shape) -> Option<u32>` | `None` at the limit; allocates `id` and the next number of the kind; the next colour (one for each id ever allocated, modulo 8) |
 | `Shape::interval(a, b)` | sorts the two ends |
 | `Markers::move_end(id, end, position)` | `end` is `Point`, `Start` or `End`; moving past the other end of an interval swaps the roles (the result is re-sorted) |
 | `Markers::set_origin(id)` | `origin = position of the single marker id`; refuses an interval |

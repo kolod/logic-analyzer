@@ -44,7 +44,7 @@ button cancelling, the limit text, the action list.
 - The eight marker colours are the eight annotation colours (`Variant::marker` = `Variant::annotation`),
   already chosen for legibility on the three themes; no new table.
 - A right click on a mark selects the marker, shows the Markers view and opens its action list **there**
-  (the same list as the `⋯` button), not an overlay at the pointer.
+  (the same list as a click on the row), not an overlay at the pointer.
 - The fit margin is computed in closed form (`ViewWindow::fit_range`), not by iteration.
 - Pixel checks of the drawing (planned in T016, T025, T031) are replaced by tests of the geometry
   (`marker_marks.rs`: tip on the line, squares left/right of their lines) and of the events that produce
@@ -58,3 +58,21 @@ button cancelling, the limit text, the action list.
   (this session had no screen); `cargo deny` locally.
 - `Cargo.toml` has `debug = "line-tables-only"` for the dev profile (changed by the owner during the
   work to save disk space); it is not part of this feature.
+
+## Changes after looking at the running application
+
+Decided by the owner after trying the first version; the spec, plan, research, data model, contracts and
+quickstart were brought in line with them (the task list keeps the history as it was written):
+
+- Marks are smaller (pentagon 18 px, squares 18 × 14), have no outline, carry the number only and are drawn
+  over the ruler; the lines are 1 px (1.5 px selected), start at the tip of the pentagon or at the top
+  corner of the square of a pair.
+- Each new marker takes the next of the eight colours.
+- The Markers view: the add buttons fill the width; each marker has its own outline, the selected one a
+  stronger one; the `⋯` button, the bin and the checkboxes are gone; a click on a row opens its actions; the
+  pair is made by "Make a pair" and a click on the second single marker in the panel or in the view
+  (the rest shaded; Esc cancels).
+- A pair's row shows the times on one line and the duration and frequency on the next.
+- The snap ring is shown while a placed marker is dragged.
+- The keyboard shortcuts work on non-Latin layouts (a letter that is not Latin is taken by the place of its
+  key); this is outside the markers but was found with them.

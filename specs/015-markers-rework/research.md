@@ -122,15 +122,17 @@ for the same result.
 
 **Decision**:
 
-- *Fixed marker* (from `FramePlan.markers`, drawn in the cached layer with the lanes): a **solid** 1.5 px line
-  across the signal area in the marker's colour; the **mark** at the top, in the ruler strip. Single: a
-  pentagon-arrow pointing down — a rectangle 14 px wide and 9 px high above a triangle 5 px high, the tip
-  on the line; filled with the colour, a 1 px outline in the text colour for contrast. Pair: two lines; a
-  **square** 12 px × 12 px, filled, touching its line from the left for the start and from the right for the
-  end, with the same outline. The name (`T3`, `P1`) is written next to the mark; times are in the panel and
-  in the tooltip (as before).
+- *Fixed marker* (from `FramePlan.markers`, drawn in the cached layer with the lanes): a **solid** 1 px line
+  (1.5 px when selected; thinner than the 1.6 px signal line) from the tip of the pentagon (single) or the
+  top corner of the square (pair) down the signal area, in the marker's colour; the **mark** in the ruler
+  strip. Single: a pentagon-arrow pointing down — a rectangle 18 px wide and 12 px high above a triangle
+  6 px high, the tip on the line; filled with the colour, no outline. Pair: two lines; a **square**
+  18 × 14 px, its top level with the pentagon's, filled, touching its line from the left for the start and
+  from the right for the end. The marker's **number** is written in the mark (no prefix; `T3`, `P1` are
+  used in the panel only); times are in the panel and in the tooltip. The marks are smaller than the ruler
+  and the labels of the ruler that they cover are not drawn.
 - *Unfixed marker / placement* (overlay layer, redrawn on pointer moves, never invalidates the cache): a
-  **dotted** line (1.5 px, 4 px dash, 3 px gap) in the colour of the marker about to be placed, with its
+  **dotted** line (1 px, 4 px dash, 3 px gap) in the colour of the marker about to be placed, with its
   mark at the top; the half already fixed of a pair is drawn solid. While the second half is placed the mark
   of each half is on the side of its role (FR-030): the half at the left of the other has its square on the
   left of its line, the other on the right; the pointer line is the start when the pointer is left of the
@@ -242,8 +244,8 @@ fraction of the window; the result is clamped by the existing zoom limits.
 
 ## R12 — The row menu and the context menu
 
-**Decision**: each row of the Markers view has a button that opens the list of the actions of its kind
-(plus colour and comment) as a small panel under the row; the same list opens at the pointer on a right
+**Decision**: a click on a row of the Markers view opens the list of the actions of its kind
+(plus colour and comment) as a small panel under the row (there is no separate button); the same list opens at the pointer on a right
 click of a mark in the signal view (drawn by the application with `stack!` over the canvas, closed by Esc
 or a click outside). The colours are a row of eight swatches in that panel; the comment is a text input with
 the limit of FR-018. One component serves both places.

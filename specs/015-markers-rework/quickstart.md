@@ -50,15 +50,15 @@ Expected: all pass. The tests that matter for this feature:
    fixed half moves to its right (it is now the end); move right of it: back to the left. Click on a falling
    edge. **P1** appears with its duration and the frequency in your language (switch the language in the
    Settings and check the formatting).
-5. Open `⋯` of **T1**: *Count time from here* — the axis shows negative times to the left, the markers'
+5. Click the row **T1**: *Count time from here* — the axis shows negative times to the left, the markers'
    times shift; *Time counts from the start* puts it back. *Scroll to it* from far away: it is at the
    centre. *Delete data to the left* → the confirmation names the lost time → Delete: the capture
    shortens, the unsaved mark appears, decoders (if any) run again; Cancel during a large cut leaves it as
    it was.
-6. Open `⋯` of **P1**: *Fit the view to the pair* — the interval fills the signals with room for both
+6. Click the row **P1**: *Fit the view to the pair* — the interval fills the signals with room for both
    squares; *Trim to the pair*; *Convert to two single markers* gives **T3** and **T4** (not T1/T2).
-7. Add two singles, check both, press **Make a pair**: one **P2** (P1's number is not reused).
-8. Change a colour, write a comment, press the bin icon: the marker is gone without a question.
+7. Add two singles, open the actions of one, press **Make a pair**, then click the other (its row or its mark): one **P2** (P1's number is not reused). Pairs and the first marker are shaded meanwhile; Esc cancels.
+8. Change a colour, write a comment, press **Delete** in the list: the marker is gone without a question. New markers took the colours in turn.
 9. Save, close and open the file: every marker, colour, comment, number and the time origin are back.
    Open `crates/host/tests/fixtures/` files made by the version before this feature: they open, with no
    markers and the `view_invalid` warning (that is the specified behaviour, not a bug).

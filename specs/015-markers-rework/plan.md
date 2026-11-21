@@ -11,9 +11,9 @@ Replace the one kind of marker of feature 006 (two chosen of many for a measurem
 interval. Both are put in place with the mouse in a **placement mode** (the add command only starts it; a
 dotted line in the marker's colour follows the pointer and snaps to the transitions of the lane under the
 pointer; a click fixes it, a pair takes two clicks and the left half becomes the start), have a colour from
-eight, a short comment and a bin icon, and offer the actions of their kind: time origin, cut left, cut right
+eight, a short comment and a delete action, and offer the actions of their kind: time origin, cut left, cut right
 and scroll to for a single marker; trim, fit and split into two singles for a pair; two singles can be made
-a pair. The logic goes to `la-host` (a new `markers` model, placement and snapping resolution, the actions;
+a pair (an action of one, then a click on the other). The logic goes to `la-host` (a new `markers` model, placement and snapping resolution, the actions;
 host API 1.2 → 2.0, since commands are removed) and to `la-storage` (one new operation that builds a cropped
 copy of a capture, run in the background because it is O(kept transitions)); the `VIEW` section payload goes
 to version 2 (no reader for version 1: such a section is dropped with the existing warning); `la-app` keeps
