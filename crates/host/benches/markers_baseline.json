@@ -1,0 +1,8 @@
+{
+  "markers": {
+    "1M plan with 48 markers": {"us": 1648.7},
+    "1M resolve a pointer": {"us": 0.6},
+    "8M plan with 48 markers": {"us": 4010.7},
+    "8M resolve a pointer": {"us": 0.9}
+  }
+}

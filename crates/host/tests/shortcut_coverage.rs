@@ -58,8 +58,7 @@ fn table_commands() -> BTreeSet<String> {
             Action::SaveFile => &["SaveSession"],
             Action::SaveFileAs => &["SaveSessionAs"],
             Action::ToggleFollowLatest => &["SetFollowLatest"],
-            Action::PlaceMarker => &["PlaceMarker"],
-            Action::PreviousMarker | Action::NextMarker => &["GoToMarker"],
+            Action::PreviousMarker | Action::NextMarker => &["ScrollToMarker"],
             Action::RemoveSelectedMarker => &["RemoveMarker"],
             Action::ToggleSnap => &["SetSnap"],
             Action::AddDecoder => &["AddDecoder"],
@@ -82,7 +81,7 @@ const SETTINGS_DIALOG: [&str; 5] = [
 ];
 
 /// Controls of the side panels and the toolbar: reachable with Tab and the keyboard in them.
-const FOCUSABLE_CONTROLS: [&str; 24] = [
+const FOCUSABLE_CONTROLS: [&str; 33] = [
     "RefreshDevices",
     "SelectDevice",
     "EditConfig",
@@ -91,8 +90,17 @@ const FOCUSABLE_CONTROLS: [&str; 24] = [
     "SetChannelVisible",
     "MoveChannel",
     "ResetPresentation",
-    "RenameMarker",
-    "SelectMarkers",
+    "SetMarkerColour",
+    "SetMarkerComment",
+    "SelectMarker",
+    "SetTimeOrigin",
+    "ResetTimeOrigin",
+    "CutLeft",
+    "CutRight",
+    "TrimToPair",
+    "FitToPair",
+    "SplitPair",
+    "MakePair",
     "DismissNotice",
     "DismissAllNotices",
     "CancelOperation",
@@ -113,12 +121,11 @@ const FOCUSABLE_CONTROLS: [&str; 24] = [
 const DIALOG_ANSWERS: [&str; 1] = ["Decide"];
 
 /// Pointer gestures. Each has a menu or shortcut equivalent: wheel zoom and drag pan are
-/// `ZoomStep` and `PanStep`; dragging a marker is removing it and placing another.
-const POINTER_WITH_EQUIVALENT: [(&str, &str); 4] = [
+/// `ZoomStep` and `PanStep`.
+const POINTER_WITH_EQUIVALENT: [(&str, &str); 3] = [
     ("Zoom", "ZoomStep"),
     ("Pan", "PanStep"),
     ("ZoomToRange", "FitAll and ZoomStep"),
-    ("MoveMarker", "RemoveMarker and PlaceMarker"),
 ];
 
 /// Not something a person triggers: the window reports, the close button (the same as Quit) and
@@ -134,7 +141,7 @@ const NOT_USER_TRIGGERED: [&str; 5] = [
 /// Controls of feature 014 that are operated with the mouse only. Their keyboard operation is not
 /// part of that feature (its spec, assumptions: a gap of feature 006 that stays); the list is here so
 /// that the gap is explicit and every new command still has to be named.
-const MOUSE_ONLY_BY_DESIGN: [&str; 7] = [
+const MOUSE_ONLY_BY_DESIGN: [&str; 11] = [
     "SetPanelWidth",
     "SetUnsavedChoice",
     "SetChannelHeight",
@@ -142,6 +149,13 @@ const MOUSE_ONLY_BY_DESIGN: [&str; 7] = [
     "ScrollToEdge",
     "RemoveRecentFile",
     "ClearRecentFiles",
+    // Markers are put in place with the mouse (feature 015, FR-007 and FR-027): the keyboard
+    // starts and cancels a placement and the click fixes it; dragging an end, the automatic zoom
+    // of a crowded snapping zone and the end of a drag are pointer events.
+    "FixPlacement",
+    "MoveMarkerEnd",
+    "EndMarkerDrag",
+    "PlacementZoomTo",
 ];
 
 #[test]

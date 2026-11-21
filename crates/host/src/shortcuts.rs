@@ -5,6 +5,7 @@
 //! is reachable and that no accelerator is used twice (contract `shell-layout.md`).
 
 use crate::command::{AnnotationTarget, Command, PanStep, ZoomDirection};
+use crate::markers::Kind;
 use crate::state::{Activity, State};
 
 /// A keyboard shortcut. `key` is a name from a small fixed vocabulary: a letter or digit, `F1`..
@@ -90,8 +91,6 @@ pub enum Action {
     UiScaleDown,
     /// Turn following the newest data of a running capture on or off.
     ToggleFollowLatest,
-    /// Place a marker at the pointer (or the centre of the view).
-    PlaceMarker,
     /// Go to the previous marker.
     PreviousMarker,
     /// Go to the next marker.
@@ -121,6 +120,8 @@ pub enum EnabledWhen {
     CaptureExists,
     /// There is at least one marker.
     MarkersExist,
+    /// A marker is being placed.
+    Placing,
     /// Idle, a device is selected and its configuration has no problem.
     CanStart,
     /// A capture is on screen (decoders work on it).
@@ -145,6 +146,7 @@ impl EnabledWhen {
             EnabledWhen::Capturing => state.activity == Activity::Capturing,
             EnabledWhen::CaptureExists => state.capture.is_some(),
             EnabledWhen::MarkersExist => !state.markers.list.is_empty(),
+            EnabledWhen::Placing => state.placement.is_some(),
             EnabledWhen::CanDecode => state.capture.is_some() && state.operation.is_none(),
             EnabledWhen::AnnotationSelected => state.decoders.selection.is_some(),
             EnabledWhen::CanStart => {
@@ -238,10 +240,22 @@ pub fn table() -> Vec<ShortcutEntry> {
             EnabledWhen::Capturing,
         ),
         ShortcutEntry::new(
-            Action::PlaceMarker,
-            ["menu-markers", "menu-markers-place"],
+            Action::Command(Command::BeginPlacement(Kind::Single)),
+            ["menu-markers", "menu-markers-place-single"],
             Some(Accelerator::key("M")),
             EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::BeginPlacement(Kind::Pair)),
+            ["menu-markers", "menu-markers-place-pair"],
+            Some(Accelerator::shift("M")),
+            EnabledWhen::CaptureExists,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::CancelPlacement),
+            ["menu-markers", "menu-markers-cancel"],
+            Some(Accelerator::key("Escape")),
+            EnabledWhen::Placing,
         ),
         ShortcutEntry::new(
             Action::PreviousMarker,

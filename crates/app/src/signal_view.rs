@@ -16,7 +16,8 @@ use iced::mouse;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, LineDash, Path, Stroke, Text};
 use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
 use la_host::decoders::AnnotationRef;
-use la_host::plan::{FramePlan, FrameState, Segment};
+use la_host::markers::{End, Kind, Placement, Pointer, Resolved};
+use la_host::plan::{FramePlan, FrameState, PlanShape, Segment};
 use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::{Command, EdgeDirection, ZoomAnchor, ZoomFactor};
 use la_i18n::{Args, Key, Localizer};
@@ -27,6 +28,7 @@ use crate::lane_layout::{
     self, AUTO_MAX, BAR_WIDTH, Hit as LegendHit, LaneKind, LaneSpec, Layout, Zone,
 };
 pub use crate::lane_layout::{AXIS_HEIGHT, GUTTER};
+use crate::marker_marks;
 use crate::theme::Variant;
 
 const TEXT_SIZE: f32 = 13.0;
@@ -69,6 +71,15 @@ pub struct SignalView<'a> {
     pub selected: Option<(u32, AnnotationRef)>,
     /// A channel name is being edited: a press anywhere in the view accepts it.
     pub editing: bool,
+    /// The marker being placed with the mouse, if any.
+    pub placement: Option<Placement>,
+    /// What the pointer means to that placement; `None` while it is not over the signal area.
+    pub preview: Option<Resolved>,
+    /// The marker end being dragged, as the host knows it (a pair whose ends crossed swaps roles).
+    pub drag_end: Option<(u32, End)>,
+    /// The single marker a pair is being made from: a press on another single marker, in the
+    /// view as in the panel, is the other half.
+    pub joining: Option<u32>,
 }
 
 /// A press in the legend strip that has not been released yet.
@@ -138,8 +149,8 @@ pub struct ViewState {
     drag_from: Option<f32>,
     /// The view has been moved sideways since the button went down: the pointer is a hand.
     panning: bool,
-    /// The marker being dragged and the channel under the pointer.
-    drag_marker: Option<u32>,
+    /// The marker end being dragged.
+    drag_marker: Option<(u32, End)>,
     /// The last click on an annotation (a second one on it soon after is a double click).
     last_click: Option<(Instant, u32, AnnotationRef)>,
     /// How far the lanes are scrolled.
@@ -259,25 +270,119 @@ impl SignalView<'_> {
         });
     }
 
-    /// The sample under a pointer position (clamped to the window) and the channel of the lane
-    /// it is in (the first lane when the pointer is outside the lanes).
-    fn sample_and_channel(&self, position: Point, layout: &Layout) -> Option<(u64, u8)> {
-        let plan = self.plan;
-        let columns = plan.pixels.max(1) as f64;
-        let x = f64::from((position.x - GUTTER).max(0.0)).min(columns);
-        let sample = plan
-            .window
-            .start
-            .saturating_add((x / columns * plan.window.length as f64) as u64);
-        let index = (0..plan.channels.len())
-            .find(|i| {
-                layout
-                    .lane(*i)
-                    .is_some_and(|l| position.y >= l.top && position.y < l.bottom())
-            })
-            .unwrap_or(0);
-        let channel = plan.channels.get(index).map_or(0, |c| c.channel);
-        Some((sample, channel))
+    /// The channel whose lane the pointer is in; `None` over the ruler, the legend, between lanes,
+    /// over a decoder lane or outside the lanes.
+    fn lane_under(&self, position: Point, layout: &Layout) -> Option<u8> {
+        if position.x < GUTTER || position.y < AXIS_HEIGHT {
+            return None;
+        }
+        let index = (0..self.plan.channels.len()).find(|i| {
+            layout
+                .lane(*i)
+                .is_some_and(|l| position.y >= l.top && position.y < l.bottom())
+        })?;
+        self.plan.channels.get(index).map(|c| c.channel)
+    }
+
+    /// The pointer as the host takes it: pixels of the plan from the left of the signal area, and
+    /// the lane it is over.
+    fn host_pointer(&self, position: Point, width: f32, layout: &Layout) -> Pointer {
+        let scale = (width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+        Pointer {
+            x: (position.x - GUTTER).max(0.0) / scale,
+            lane: self.lane_under(position, layout),
+        }
+    }
+
+    /// The marker end under a press: its mark or its line.
+    fn marker_hit(&self, position: Point, scale: f32) -> Option<(u32, End)> {
+        let bottom = AXIS_HEIGHT;
+        let near = |x: f32, end: End| {
+            ((x - position.x).abs() <= marker_marks::LINE_HIT && position.y >= bottom)
+                || marker_marks::mark_bounds(x, bottom, end).contains(position)
+        };
+        for marker in self.plan.markers.iter().rev() {
+            match marker.shape {
+                PlanShape::Point { x } => {
+                    if near(GUTTER + x as f32 * scale, End::Point) {
+                        return Some((marker.id, End::Point));
+                    }
+                }
+                PlanShape::Interval { start_x, end_x } => {
+                    if near(GUTTER + end_x as f32 * scale, End::End) {
+                        return Some((marker.id, End::End));
+                    }
+                    if near(GUTTER + start_x as f32 * scale, End::Start) {
+                        return Some((marker.id, End::Start));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Where the marks of the fixed markers are in the ruler.
+    fn mark_rectangles(&self, scale: f32) -> Vec<Rectangle> {
+        let mut rectangles = Vec::new();
+        for marker in &self.plan.markers {
+            match marker.shape {
+                PlanShape::Point { x } => rectangles.push(marker_marks::mark_bounds(
+                    GUTTER + x as f32 * scale,
+                    AXIS_HEIGHT,
+                    End::Point,
+                )),
+                PlanShape::Interval { start_x, end_x } => {
+                    rectangles.push(marker_marks::mark_bounds(
+                        GUTTER + start_x as f32 * scale,
+                        AXIS_HEIGHT,
+                        End::Start,
+                    ));
+                    rectangles.push(marker_marks::mark_bounds(
+                        GUTTER + end_x as f32 * scale,
+                        AXIS_HEIGHT,
+                        End::End,
+                    ));
+                }
+            }
+        }
+        rectangles
+    }
+
+    /// The fixed markers: a solid line and a mark for each end, with the number in the mark.
+    fn draw_markers(&self, frame: &mut Frame, size: Size) {
+        let scale = (size.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+        let inside = |x: f32| x > GUTTER - 40.0 && x < size.width + 40.0;
+        for marker in &self.plan.markers {
+            let mut colour = self.variant.marker(marker.colour);
+            // While the other half of a pair is chosen, what cannot be chosen is shaded.
+            if let Some(first) = self.joining
+                && (marker.id == first || matches!(marker.shape, PlanShape::Interval { .. }))
+            {
+                colour.a = marker_marks::SHADED_ALPHA;
+            }
+            let ends: Vec<(f32, End)> = match marker.shape {
+                PlanShape::Point { x } => vec![(GUTTER + x as f32 * scale, End::Point)],
+                PlanShape::Interval { start_x, end_x } => vec![
+                    (GUTTER + start_x as f32 * scale, End::Start),
+                    (GUTTER + end_x as f32 * scale, End::End),
+                ],
+            };
+            for (x, end) in ends {
+                if !inside(x) {
+                    continue;
+                }
+                marker_marks::draw_line(
+                    frame,
+                    x,
+                    marker_marks::line_top(AXIS_HEIGHT, end),
+                    size.height,
+                    colour,
+                    marker.selected,
+                    false,
+                );
+                marker_marks::draw_mark(frame, x, AXIS_HEIGHT, end, colour, marker.number);
+            }
+        }
     }
 
     fn draw_plan(&self, frame: &mut Frame, size: Size, theme: &Theme, scroll: f32, shifts: &[f32]) {
@@ -399,6 +504,7 @@ impl SignalView<'_> {
             Size::new(size.width, AXIS_HEIGHT),
             palette.background,
         );
+        let marks = self.mark_rectangles(scale);
         for tick in &plan.axis.ticks {
             let x = GUTTER + tick.x as f32 * scale;
             let depth = if tick.major { 10.0 } else { 6.0 };
@@ -409,8 +515,20 @@ impl SignalView<'_> {
                 ),
                 Stroke::default().with_color(text_colour).with_width(1.0),
             );
+            // A label that a mark of a marker covers is left out: the mark is over the axis.
+            let content = self.localizer.format_duration(tick.seconds);
+            let label = Rectangle::new(
+                Point::new(x + 3.0, 4.0),
+                Size::new(
+                    content.chars().count() as f32 * (TEXT_SIZE - 1.0) * 0.62,
+                    TEXT_SIZE,
+                ),
+            );
+            if marks.iter().any(|mark| mark.intersects(&label)) {
+                continue;
+            }
             frame.fill_text(Text {
-                content: self.localizer.format_duration(tick.seconds),
+                content,
                 position: Point::new(x + 3.0, 4.0),
                 color: text_colour,
                 size: Pixels(TEXT_SIZE - 1.0),
@@ -424,27 +542,6 @@ impl SignalView<'_> {
             ),
             Stroke::default().with_color(hairline).with_width(1.0),
         );
-        for marker in &plan.markers {
-            let x = GUTTER + marker.x as f32 * scale;
-            let accent = palette.primary;
-            frame.stroke(
-                &Path::line(Point::new(x, AXIS_HEIGHT - 6.0), Point::new(x, size.height)),
-                Stroke::default().with_color(accent).with_width(1.5),
-            );
-            let label = if marker.name.is_empty() {
-                format!("{}", marker.id)
-            } else {
-                marker.name.clone()
-            };
-            frame.fill_text(Text {
-                content: label,
-                position: Point::new(x + 4.0, AXIS_HEIGHT - 8.0),
-                color: accent,
-                size: Pixels(TEXT_SIZE),
-                align_y: Vertical::Bottom,
-                ..Text::default()
-            });
-        }
         // A thin bar at the right edge of the legend when the lanes are taller than the area.
         if layout.max_offset() > 0.0 {
             let visible = (size.height - AXIS_HEIGHT).max(1.0);
@@ -715,17 +812,18 @@ impl canvas::Program<Message> for SignalView<'_> {
                 };
                 Some(canvas::Action::publish(Message::Run(command)).and_capture())
             }
+            // The right button cancels a placement; on a marker it opens its actions.
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
                 let position = cursor.position_in(bounds)?;
-                let layout = self.layout(bounds.height, state.scroll);
-                let (sample, channel) = self.sample_and_channel(position, &layout)?;
-                Some(
-                    canvas::Action::publish(Message::Run(Command::PlaceMarker {
-                        position: sample,
-                        channel,
-                    }))
-                    .and_capture(),
-                )
+                if self.placement.is_some() {
+                    return Some(
+                        canvas::Action::publish(Message::Run(Command::CancelPlacement))
+                            .and_capture(),
+                    );
+                }
+                let scale = (bounds.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+                let (id, _) = self.marker_hit(position, scale)?;
+                Some(canvas::Action::publish(Message::MarkerContext(id)).and_capture())
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = cursor.position_in(bounds)?;
@@ -781,6 +879,14 @@ impl canvas::Program<Message> for SignalView<'_> {
                     );
                 }
                 let scale = (bounds.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
+                // While a marker is being placed a click fixes it (and does nothing else).
+                if self.placement.is_some() {
+                    let pointer = self.host_pointer(position, bounds.width, &layout);
+                    return Some(
+                        canvas::Action::publish(Message::Run(Command::FixPlacement { pointer }))
+                            .and_capture(),
+                    );
+                }
                 // A click on an annotation selects it.
                 let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
                 let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
@@ -813,14 +919,26 @@ impl canvas::Program<Message> for SignalView<'_> {
                     };
                     return Some(canvas::Action::publish(Message::Run(command)).and_capture());
                 }
-                state.drag_marker = self
-                    .plan
-                    .markers
-                    .iter()
-                    .find(|m| (GUTTER + m.x as f32 * scale - position.x).abs() <= 4.0)
-                    .map(|m| m.id);
+                if let Some(first) = self.joining {
+                    // Choosing the other half of a pair: a single marker other than the first
+                    // is taken, everything else is ignored (no drag, no selection).
+                    return Some(match self.marker_hit(position, scale) {
+                        Some((id, End::Point)) if id != first => {
+                            canvas::Action::publish(Message::MarkerMenu(id)).and_capture()
+                        }
+                        _ => canvas::Action::capture(),
+                    });
+                }
+                state.drag_marker = self.marker_hit(position, scale);
                 state.drag_from = Some(position.x);
-                Some(canvas::Action::capture())
+                match state.drag_marker {
+                    // A press on a marker selects it and starts a drag of that end.
+                    Some((id, _)) => Some(
+                        canvas::Action::publish(Message::Run(Command::SelectMarker(Some(id))))
+                            .and_capture(),
+                    ),
+                    None => Some(canvas::Action::capture()),
+                }
             }
             // A drag that began in the legend strip: a border is dragged (the height follows the
             // pointer at once), or a lane is lifted and moved.
@@ -876,22 +994,44 @@ impl canvas::Program<Message> for SignalView<'_> {
             // redraw, or the line waits for the next timer tick. It also has to go away when the
             // pointer leaves.
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.drag_from.is_none() => {
+                // While a marker is being placed the application resolves the pointer (the snapping
+                // and the position are the host's) and hands the answer back in `preview`.
+                if self.placement.is_some() {
+                    let position = cursor.position_in(bounds).filter(|p| p.x >= GUTTER);
+                    let layout = self.layout(bounds.height, state.scroll);
+                    let pointer = position.map(|p| self.host_pointer(p, bounds.width, &layout));
+                    return Some(canvas::Action::publish(Message::PlacementPointer(
+                        pointer,
+                        Instant::now(),
+                    )));
+                }
                 Some(canvas::Action::request_redraw())
             }
             canvas::Event::Mouse(mouse::Event::CursorLeft) => {
+                if self.placement.is_some() {
+                    return Some(canvas::Action::publish(Message::PlacementPointer(
+                        None,
+                        Instant::now(),
+                    )));
+                }
                 Some(canvas::Action::request_redraw())
             }
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 let from = state.drag_from?;
                 let position = cursor.position_in(bounds)?;
-                if let Some(id) = state.drag_marker {
+                if let Some((id, end)) = state.drag_marker {
                     let layout = self.layout(bounds.height, state.scroll);
-                    let (sample, channel) = self.sample_and_channel(position, &layout)?;
+                    // A pair whose ends crossed has exchanged their roles: the host says which.
+                    let end = self
+                        .drag_end
+                        .filter(|(dragged, _)| *dragged == id)
+                        .map_or(end, |(_, role)| role);
+                    let pointer = self.host_pointer(position, bounds.width, &layout);
                     return Some(
-                        canvas::Action::publish(Message::Run(Command::MoveMarker {
+                        canvas::Action::publish(Message::Run(Command::MoveMarkerEnd {
                             id,
-                            position: sample,
-                            channel,
+                            end,
+                            pointer,
                         }))
                         .and_capture(),
                     );
@@ -910,7 +1050,11 @@ impl canvas::Program<Message> for SignalView<'_> {
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                 state.drag_from = None;
                 state.panning = false;
-                state.drag_marker = None;
+                if state.drag_marker.take().is_some() {
+                    return Some(
+                        canvas::Action::publish(Message::Run(Command::EndMarkerDrag)).and_capture(),
+                    );
+                }
                 let press = state.press.take();
                 let drag = state.drag.take();
                 state.shifts.clear();
@@ -995,7 +1139,18 @@ impl canvas::Program<Message> for SignalView<'_> {
             })
         };
         let mut overlay = Frame::new(renderer, size);
-        if let Some(position) = cursor.position_in(bounds) {
+        // The marks are drawn in the layer above the waveforms and the axis, because the text of
+        // a layer is drawn over its shapes: the labels of the axis must not be over the marks.
+        self.draw_markers(&mut overlay, size);
+        if self.placement.is_some() {
+            self.draw_placement(&mut overlay, size, state.scroll);
+        } else if let (Some((id, _)), Some(preview)) = (self.drag_end, self.preview) {
+            // The drag of a marker placed earlier snaps like a placement: show the ring too.
+            if let Some(marker) = self.plan.markers.iter().find(|m| m.id == id) {
+                let colour = self.variant.marker(marker.colour);
+                self.draw_snap(&mut overlay, size, state.scroll, colour, preview);
+            }
+        } else if let Some(position) = cursor.position_in(bounds) {
             self.draw_hover(&mut overlay, size, position, theme, state.scroll);
         }
         self.draw_lane_drag(&mut overlay, size, theme, state);
@@ -1153,6 +1308,91 @@ impl SignalView<'_> {
     /// The lane that is being moved, lifted under the pointer as a whole (its background, its
     /// bands and its signal, the full width of the view), and the line where it will land (the
     /// other lanes make room there, see `shifts`).
+    /// The transition the line has snapped to: a ring on its lane and a tick over the lane. Used by
+    /// a placement and by the drag of a marker that was placed earlier.
+    fn draw_snap(
+        &self,
+        frame: &mut Frame,
+        size: Size,
+        scroll: f32,
+        colour: Color,
+        preview: Resolved,
+    ) {
+        let Some(snapped) = preview.snapped else {
+            return;
+        };
+        let plan = self.plan;
+        let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
+        let layout = self.layout(size.height, scroll);
+        let lane = plan
+            .channels
+            .iter()
+            .position(|c| c.channel == snapped.channel)
+            .and_then(|index| layout.lane(index));
+        let Some(lane) = lane else {
+            return;
+        };
+        let offset = snapped.position as f64 - plan.window.start as f64;
+        let x = GUTTER
+            + (offset * plan.pixels.max(1) as f64 / plan.window.length.max(1) as f64) as f32
+                * scale;
+        let stroke = Stroke::default().with_color(colour).with_width(2.0);
+        frame.stroke(
+            &Path::line(Point::new(x, lane.top), Point::new(x, lane.bottom())),
+            stroke,
+        );
+        frame.stroke(
+            &Path::circle(Point::new(x, lane.top + lane.height / 2.0), 6.0),
+            stroke,
+        );
+    }
+
+    /// The marker being placed: its line, dotted, at the sample the pointer means, and its mark;
+    /// for a pair the half that is already fixed is drawn solid, and each half has the mark of the
+    /// role it would have (the start's square left of its line, the end's right of its line).
+    fn draw_placement(&self, frame: &mut Frame, size: Size, scroll: f32) {
+        let (Some(placement), Some(preview)) = (self.placement, self.preview) else {
+            return;
+        };
+        let plan = self.plan;
+        let colour = self.variant.marker(placement.colour);
+        let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
+        let x_of = |sample: u64| {
+            let offset = sample as f64 - plan.window.start as f64;
+            GUTTER
+                + (offset * plan.pixels.max(1) as f64 / plan.window.length.max(1) as f64) as f32
+                    * scale
+        };
+        let pointer_x = x_of(preview.position);
+        let draw_half = |frame: &mut Frame, x: f32, end: End, dotted: bool| {
+            marker_marks::draw_line(
+                frame,
+                x,
+                marker_marks::line_top(AXIS_HEIGHT, end),
+                size.height,
+                colour,
+                false,
+                dotted,
+            );
+            marker_marks::draw_mark(frame, x, AXIS_HEIGHT, end, colour, placement.number);
+        };
+        self.draw_snap(frame, size, scroll, colour, preview);
+        match (placement.kind, placement.first) {
+            (Kind::Single, _) => draw_half(frame, pointer_x, End::Point, true),
+            (Kind::Pair, None) => draw_half(frame, pointer_x, End::Start, true),
+            (Kind::Pair, Some(first)) => {
+                let fixed_x = x_of(first);
+                let (fixed_end, moving_end) = if preview.position >= first {
+                    (End::Start, End::End)
+                } else {
+                    (End::End, End::Start)
+                };
+                draw_half(frame, fixed_x, fixed_end, false);
+                draw_half(frame, pointer_x, moving_end, true);
+            }
+        }
+    }
+
     fn draw_lane_drag(&self, frame: &mut Frame, size: Size, theme: &Theme, state: &ViewState) {
         let Some(Drag::Lane { from, y }) = state.drag else {
             return;
@@ -1341,6 +1581,7 @@ mod tests {
     use super::*;
     use iced::widget::canvas::Program;
     use iced::{Point, Rectangle, mouse};
+    use la_host::plan::MarkerPlan;
     use la_host::window::ViewSize;
     use la_host::{Shell, ShellConfig};
 
@@ -1360,6 +1601,10 @@ mod tests {
             localizer: &localizer,
             selected: None,
             editing: false,
+            placement: None,
+            preview: None,
+            drag_end: None,
+            joining: None,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         // The width is reported first, as the view does on its first event.
@@ -1493,6 +1738,10 @@ mod tests {
             localizer: &localizer,
             selected: None,
             editing: false,
+            placement: None,
+            preview: None,
+            drag_end: None,
+            joining: None,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         let at = mouse::Cursor::Available(Point::new(400.0, 200.0));
@@ -1606,6 +1855,10 @@ mod tests {
             localizer: &localizer,
             selected: None,
             editing: false,
+            placement: None,
+            preview: None,
+            drag_end: None,
+            joining: None,
         };
         let bounds = Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0));
         state.reported_width = bounds.width - GUTTER;
@@ -1662,6 +1915,10 @@ mod tests {
             localizer,
             selected: None,
             editing: false,
+            placement: None,
+            preview: None,
+            drag_end: None,
+            joining: None,
         }
     }
 
@@ -2019,5 +2276,318 @@ mod tests {
             matches!(published.as_slice(), [Message::Run(Command::Zoom { .. })]),
             "{published:?}"
         );
+    }
+
+    // ---- markers: placing, dragging (specs/015-markers-rework, user stories 1 and 2) ----------
+
+    fn area() -> Rectangle {
+        Rectangle::new(Point::ORIGIN, iced::Size::new(900.0, 500.0))
+    }
+
+    /// Sends one event to a view over `area()`, with the pointer at `at`.
+    fn send_event(
+        view: &SignalView<'_>,
+        state: &mut ViewState,
+        event: canvas::Event,
+        at: Point,
+    ) -> Option<(Option<Message>, iced::window::RedrawRequest)> {
+        state.reported_width = area().width - GUTTER;
+        view.update(state, &event, area(), mouse::Cursor::Available(at))
+            .map(|action| {
+                let (message, redraw, _) = action.into_inner();
+                (message, redraw)
+            })
+    }
+
+    fn button_down(button: mouse::Button) -> canvas::Event {
+        canvas::Event::Mouse(mouse::Event::ButtonPressed(button))
+    }
+
+    fn pointer_moved(at: Point) -> canvas::Event {
+        canvas::Event::Mouse(mouse::Event::CursorMoved { position: at })
+    }
+
+    fn placing(kind: Kind) -> Option<Placement> {
+        Some(Placement {
+            kind,
+            first: None,
+            colour: 0,
+            number: 1,
+        })
+    }
+
+    #[test]
+    fn a_click_fixes_the_marker_while_one_is_being_placed() {
+        let (plan, _shell) = plan_with_channels();
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let mut view = view_of(&plan, &cache, &localizer);
+        view.placement = placing(Kind::Single);
+        let mut state = ViewState::default();
+        // The waveform area is 788 wide and the plan 788 columns: one column per pixel.
+        let at = Point::new(GUTTER + 188.0, 60.0);
+        let (message, _) =
+            send_event(&view, &mut state, button_down(mouse::Button::Left), at).unwrap();
+        let Some(Message::Run(Command::FixPlacement { pointer })) = message else {
+            panic!("{message:?}");
+        };
+        assert!((pointer.x - 188.0).abs() < 0.01, "{}", pointer.x);
+        assert_eq!(
+            pointer.lane,
+            Some(plan.channels[0].channel),
+            "the lane under the pointer"
+        );
+        // Over the ruler there is no lane, and the click still fixes it.
+        let (message, _) = send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            Point::new(GUTTER + 5.0, 10.0),
+        )
+        .unwrap();
+        let Some(Message::Run(Command::FixPlacement { pointer })) = message else {
+            panic!("{message:?}");
+        };
+        assert_eq!(pointer.lane, None);
+        // A click on the legend strip belongs to the legend, not to the placement.
+        let message = send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            Point::new(GUTTER - 50.0, 60.0),
+        )
+        .and_then(|(message, _)| message);
+        assert!(!matches!(
+            message,
+            Some(Message::Run(Command::FixPlacement { .. }))
+        ));
+    }
+
+    #[test]
+    fn the_right_button_cancels_a_placement_and_means_nothing_otherwise() {
+        let (plan, _shell) = plan_with_channels();
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let mut view = view_of(&plan, &cache, &localizer);
+        let mut state = ViewState::default();
+        let at = Point::new(GUTTER + 100.0, 60.0);
+        assert!(send_event(&view, &mut state, button_down(mouse::Button::Right), at).is_none());
+        view.placement = placing(Kind::Pair);
+        let (message, _) =
+            send_event(&view, &mut state, button_down(mouse::Button::Right), at).unwrap();
+        assert!(matches!(
+            message,
+            Some(Message::Run(Command::CancelPlacement))
+        ));
+    }
+
+    #[test]
+    fn the_pointer_is_reported_to_the_application_while_placing() {
+        let (plan, _shell) = plan_with_channels();
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let mut view = view_of(&plan, &cache, &localizer);
+        view.placement = placing(Kind::Single);
+        let mut state = ViewState::default();
+        let at = Point::new(GUTTER + 300.0, 60.0);
+        let (message, _) = send_event(&view, &mut state, pointer_moved(at), at).unwrap();
+        let Some(Message::PlacementPointer(Some(pointer), _)) = message else {
+            panic!("{message:?}");
+        };
+        assert!((pointer.x - 300.0).abs() < 0.01);
+        assert_eq!(pointer.lane, Some(plan.channels[0].channel));
+        // Over the legend there is no pointer for the signals; and leaving the view takes it away.
+        let legend = Point::new(20.0, 60.0);
+        let (message, _) = send_event(&view, &mut state, pointer_moved(legend), legend).unwrap();
+        assert!(matches!(message, Some(Message::PlacementPointer(None, _))));
+        let (message, _) = send_event(
+            &view,
+            &mut state,
+            canvas::Event::Mouse(mouse::Event::CursorLeft),
+            at,
+        )
+        .unwrap();
+        assert!(matches!(message, Some(Message::PlacementPointer(None, _))));
+        // Without a placement a move only asks for a redraw (the hover line).
+        view.placement = None;
+        let (message, redraw) = send_event(&view, &mut state, pointer_moved(at), at).unwrap();
+        assert!(message.is_none());
+        assert!(matches!(redraw, iced::window::RedrawRequest::NextFrame));
+    }
+
+    fn with_markers(plan: &FramePlan) -> FramePlan {
+        let mut plan = plan.clone();
+        plan.markers = vec![
+            MarkerPlan {
+                id: 1,
+                name: "T1".into(),
+                number: 1,
+                colour: 0,
+                comment: String::new(),
+                selected: false,
+                shape: PlanShape::Point { x: 200.0 },
+            },
+            MarkerPlan {
+                id: 2,
+                name: "P1".into(),
+                number: 1,
+                colour: 1,
+                comment: String::new(),
+                selected: false,
+                shape: PlanShape::Interval {
+                    start_x: 400.0,
+                    end_x: 600.0,
+                },
+            },
+        ];
+        plan
+    }
+
+    #[test]
+    fn a_press_on_a_marker_selects_it_and_a_drag_moves_that_end() {
+        let (plan, _shell) = plan_with_channels();
+        let plan = with_markers(&plan);
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let mut state = ViewState::default();
+        // On the line of the single marker, a little below the ruler.
+        let on_line = Point::new(GUTTER + 202.0, 60.0);
+        let (message, _) =
+            send_event(&view, &mut state, button_down(mouse::Button::Left), on_line).unwrap();
+        assert!(matches!(
+            message,
+            Some(Message::Run(Command::SelectMarker(Some(1))))
+        ));
+        assert_eq!(state.drag_marker, Some((1, End::Point)));
+        // Moving drags that end; the host decides where it lands.
+        let to = Point::new(GUTTER + 250.0, 60.0);
+        let (message, _) = send_event(&view, &mut state, pointer_moved(to), to).unwrap();
+        let Some(Message::Run(Command::MoveMarkerEnd { id, end, pointer })) = message else {
+            panic!("{message:?}");
+        };
+        assert_eq!((id, end), (1, End::Point));
+        assert!((pointer.x - 250.0).abs() < 0.01);
+        // The release ends the drag.
+        let (message, _) = send_event(
+            &view,
+            &mut state,
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            to,
+        )
+        .unwrap();
+        assert!(matches!(
+            message,
+            Some(Message::Run(Command::EndMarkerDrag))
+        ));
+        assert_eq!(state.drag_marker, None);
+    }
+
+    #[test]
+    fn while_a_pair_is_made_a_press_on_another_single_marker_is_the_second_half() {
+        let (plan, _shell) = plan_with_channels();
+        let plan = with_markers(&plan);
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let mut view = view_of(&plan, &cache, &localizer);
+        let on_single = Point::new(GUTTER + 202.0, 60.0);
+        let on_pair = Point::new(GUTTER + 400.0, 60.0);
+        // The first half is another marker: the press chooses this one and drags nothing.
+        view.joining = Some(99);
+        let mut state = ViewState::default();
+        let (message, _) = send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            on_single,
+        )
+        .unwrap();
+        assert!(
+            matches!(message, Some(Message::MarkerMenu(1))),
+            "{message:?}"
+        );
+        assert_eq!(state.drag_marker, None);
+        // A pair is not a half of a pair; the first marker is not its own other half.
+        let (message, _) =
+            send_event(&view, &mut state, button_down(mouse::Button::Left), on_pair).unwrap();
+        assert!(message.is_none());
+        assert_eq!(state.drag_marker, None);
+        view.joining = Some(1);
+        let (message, _) = send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            on_single,
+        )
+        .unwrap();
+        assert!(message.is_none());
+        assert_eq!(state.drag_marker, None);
+    }
+
+    #[test]
+    fn the_squares_of_a_pair_are_the_marks_of_its_start_and_its_end() {
+        let (plan, _shell) = plan_with_channels();
+        let plan = with_markers(&plan);
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let mut state = ViewState::default();
+        // The square of the start is left of its line, in the ruler; that of the end, right of it.
+        let start_square = Point::new(GUTTER + 400.0 - 6.0, AXIS_HEIGHT - 6.0);
+        send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            start_square,
+        )
+        .unwrap();
+        assert_eq!(state.drag_marker, Some((2, End::Start)));
+        let end_square = Point::new(GUTTER + 600.0 + 6.0, AXIS_HEIGHT - 6.0);
+        send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            end_square,
+        )
+        .unwrap();
+        assert_eq!(state.drag_marker, Some((2, End::End)));
+        // The wrong side of a line is not a mark.
+        let wrong = Point::new(GUTTER + 400.0 + 8.0, AXIS_HEIGHT - 6.0);
+        send_event(&view, &mut state, button_down(mouse::Button::Left), wrong).unwrap();
+        assert_eq!(state.drag_marker, None);
+    }
+
+    #[test]
+    fn after_a_pair_swapped_its_ends_the_drag_goes_on_with_the_role_the_host_gave() {
+        let (plan, _shell) = plan_with_channels();
+        let plan = with_markers(&plan);
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let mut view = view_of(&plan, &cache, &localizer);
+        let mut state = ViewState::default();
+        let end_line = Point::new(GUTTER + 600.0, 60.0);
+        send_event(
+            &view,
+            &mut state,
+            button_down(mouse::Button::Left),
+            end_line,
+        )
+        .unwrap();
+        assert_eq!(state.drag_marker, Some((2, End::End)));
+        view.drag_end = Some((2, End::Start));
+        let to = Point::new(GUTTER + 100.0, 60.0);
+        let (message, _) = send_event(&view, &mut state, pointer_moved(to), to).unwrap();
+        let Some(Message::Run(Command::MoveMarkerEnd { id, end, .. })) = message else {
+            panic!("{message:?}");
+        };
+        assert_eq!((id, end), (2, End::Start));
+    }
+
+    #[test]
+    fn a_press_away_from_the_markers_pans_the_view_as_before() {
+        let (plan, _shell) = plan_with_channels();
+        let plan = with_markers(&plan);
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let mut state = ViewState::default();
+        let away = Point::new(GUTTER + 700.0, 60.0);
+        let message = send_event(&view, &mut state, button_down(mouse::Button::Left), away)
+            .and_then(|(message, _)| message);
+        assert!(message.is_none());
+        assert_eq!(state.drag_marker, None);
+        assert!(state.drag_from.is_some());
     }
 }

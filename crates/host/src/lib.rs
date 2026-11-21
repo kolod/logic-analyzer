@@ -20,6 +20,7 @@ pub mod decoders;
 pub mod devices;
 pub mod error;
 pub mod layout_section;
+mod marker_ops;
 pub mod markers;
 pub mod notices;
 pub mod plan;
@@ -29,14 +30,15 @@ pub mod sessions;
 pub mod settings;
 mod shell;
 pub mod shortcuts;
+mod snap;
 mod state;
 pub mod status;
 pub mod view_section;
 pub mod window;
 
 pub use command::{
-    AnnotationTarget, Changes, Command, ConfigEdit, Decision, Guarded, NEEDS_PATH, Outcome,
-    PanStep, Tick, ZoomAnchor, ZoomDirection, ZoomFactor,
+    AnnotationTarget, Changes, Command, ConfigEdit, CropPlan, CropSide, Decision, Guarded,
+    NEEDS_PATH, Outcome, PanStep, Tick, ZoomAnchor, ZoomDirection, ZoomFactor,
 };
 pub use devices::SignalProfile;
 pub use sessions::RecentFile;
@@ -47,4 +49,4 @@ pub use state::{
 
 /// Version of the host API contract (`docs/host-api.md`). A change to commands, state fields,
 /// events or their meaning changes this value together with the document.
-pub const HOST_API_VERSION: &str = "1.2";
+pub const HOST_API_VERSION: &str = "2.0";

@@ -441,10 +441,7 @@ fn no_sequence_of_commands_discards_unsaved_data_without_a_decision() {
                 channel: rng.below(2) as u8,
                 name: "w".into(),
             },
-            14 => Command::PlaceMarker {
-                position: rng.below(2_000),
-                channel: 0,
-            },
+            14 => Command::BeginPlacement(la_host::markers::Kind::Single),
             _ => Command::RefreshDevices,
         };
         let discarding = matches!(command, Command::Decide(Decision::Discard));

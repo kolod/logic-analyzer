@@ -11,7 +11,7 @@ use la_host::axis::{AxisPlan, TickStep, build_ticks};
 use la_host::window::ViewWindow;
 
 fn axis(start: u64, length: u64, pixels: u32, rate: u64) -> AxisPlan {
-    build_ticks(&ViewWindow { start, length }, pixels, rate)
+    build_ticks(&ViewWindow { start, length }, pixels, rate, 0)
 }
 
 fn step(mantissa: u8, exponent: i32) -> TickStep {
@@ -126,5 +126,61 @@ fn ticks_are_never_closer_than_80_pixels_nor_far_apart_over_many_windows() {
                 }
             }
         }
+    }
+}
+
+// ---- time counted from a marker (specs/015-markers-rework, FR-011) ---------------------------
+
+fn axis_from(origin: u64, start: u64, length: u64, pixels: u32, rate: u64) -> AxisPlan {
+    build_ticks(&ViewWindow { start, length }, pixels, rate, origin)
+}
+
+#[test]
+fn the_ticks_count_from_the_origin_and_are_negative_before_it() {
+    // One second (1,000 samples at 1 kHz) on 800 pixels, the origin at 0.5 s.
+    let plan = axis_from(500, 0, 1_000, 800, 1_000);
+    assert_eq!(plan.step, step(1, -1));
+    let seconds: Vec<f64> = plan.ticks.iter().map(|t| t.seconds).collect();
+    assert_eq!(
+        seconds,
+        [-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    );
+    // The tick at zero is where the origin is: sample 500 is pixel 400; it is a major tick.
+    let zero = plan.ticks[5];
+    assert!((zero.x - 400.0).abs() < 1e-9, "{zero:?}");
+    assert!(zero.major);
+    // The first tick, -0.5 s, is the start of the capture.
+    assert!(plan.ticks[0].x.abs() < 1e-9);
+}
+
+#[test]
+fn an_origin_between_two_round_times_moves_the_ticks_with_it() {
+    // The origin at sample 530 (0.53 s): the ticks are at 0.53 s plus a multiple of 0.1 s.
+    let plan = axis_from(530, 0, 1_000, 800, 1_000);
+    let seconds: Vec<f64> = plan.ticks.iter().map(|t| t.seconds).collect();
+    assert_eq!(
+        seconds,
+        [-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4]
+    );
+    // -0.5 s from sample 530 is sample 30: pixel 24. Zero is sample 530: pixel 424.
+    assert!((plan.ticks[0].x - 24.0).abs() < 1e-9, "{:?}", plan.ticks[0]);
+    assert!((plan.ticks[5].x - 424.0).abs() < 1e-9);
+}
+
+#[test]
+fn an_origin_beyond_the_window_still_gives_the_right_labels() {
+    // The window is 600..800 of 1,000 samples; the origin is at 100: the labels are 0.5 s .. 0.7 s.
+    let plan = axis_from(100, 600, 200, 800, 1_000);
+    let first = plan.ticks.first().unwrap();
+    let last = plan.ticks.last().unwrap();
+    assert!(
+        first.seconds >= 0.5 - 1e-12 && last.seconds <= 0.7 + 1e-12,
+        "{first:?} {last:?}"
+    );
+    // Every tick is inside the window, and its position agrees with its label.
+    for tick in &plan.ticks {
+        assert!(tick.x >= -1e-9 && tick.x <= 800.0 + 1e-9, "{tick:?}");
+        let sample = 100.0 + tick.seconds * 1_000.0;
+        assert!(((sample - 600.0) * 4.0 - tick.x).abs() < 1e-6, "{tick:?}");
     }
 }

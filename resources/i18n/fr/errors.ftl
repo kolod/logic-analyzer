@@ -51,6 +51,7 @@ error-storage-invalid_channel_count = Le nombre de voies n'est pas pris en charg
 error-storage-invalid_gap = Une lacune de l'acquisition a été décrite de façon incorrecte. Tout ce qui a été acquis jusqu'ici est conservé. Veuillez le signaler avec le fichier journal.
 error-storage-invalid_limits = Les limites de mémoire ou de taille ne sont pas valides. Ouvrez les paramètres et saisissez des valeurs valides.
 error-storage-invalid_pixels = La vue n'a pas pu être dessinée à cette largeur. Redimensionnez la fenêtre ou modifiez le zoom, puis réessayez.
+error-storage-cancelled = L'opération a été annulée. Rien n'a été modifié.
 error-storage-invalid_restore = L'acquisition enregistrée ne respecte pas les règles des acquisitions et ne peut pas être ouverte. Si vous avez une copie de sauvegarde du fichier, ouvrez-la à la place.
 error-storage-invalid_sample_rate = La fréquence d'échantillonnage doit être supérieure à zéro. Saisissez une fréquence d'échantillonnage valide.
 error-storage-invalid_window = La partie de l'acquisition à afficher n'est pas valide. Sélectionnez une plage dont le début précède la fin.

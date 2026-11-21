@@ -38,9 +38,19 @@ pub const INVALID_GAP: &str = "storage.invalid_gap";
 pub const INVALID_RESTORE: &str = "storage.invalid_restore";
 /// A state that cannot be reached from external input; indicates a bug.
 pub const INTERNAL: &str = "storage.internal";
+/// A long operation (a crop) was cancelled by the user.
+pub const CANCELLED: &str = "storage.cancelled";
 
 pub(crate) fn invalid_restore(detail: impl Into<String>) -> Error {
     Error::new(ErrorKind::InvalidInput, INVALID_RESTORE, detail)
+}
+
+pub(crate) fn cancelled() -> Error {
+    Error::new(
+        ErrorKind::Cancelled,
+        CANCELLED,
+        "the operation was cancelled",
+    )
 }
 
 pub(crate) fn internal(what: &str) -> Error {

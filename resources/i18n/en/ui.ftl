@@ -18,6 +18,8 @@ status-capturing = Capturing
 status-saving = Saving
 # A session file is being opened.
 status-loading = Loading
+# Data of the capture is being deleted (a cut or a trim of the capture).
+status-cropping = Deleting data
 # Memory in use over the memory limit; both values are already formatted sizes.
 status-memory = { $used } / { $limit }
 # The capture reached its configured length.
@@ -146,8 +148,12 @@ menu-help-log = Show log location
 
 # The Markers menu.
 menu-markers = Markers
-# Place a marker at the pointer, or at the centre of the view.
-menu-markers-place = Place marker
+# Start placing a single marker: the next click on the signals fixes it.
+menu-markers-place-single = Place single marker
+# Start placing a pair marker: two clicks on the signals fix its two ends.
+menu-markers-place-pair = Place pair marker
+# Stop placing a marker; nothing is added.
+menu-markers-cancel = Cancel placement
 # Go to the previous marker.
 menu-markers-previous = Previous marker
 # Go to the next marker.
@@ -160,6 +166,74 @@ menu-markers-remove-all = Remove all markers
 menu-markers-snap = Snap to transitions
 # Title of the panel that lists the markers.
 panel-markers = Markers
+# Button that starts placing a single marker (a point in time).
+marker-single-add = Single marker
+# Button that starts placing a pair marker (an interval with a start and an end).
+marker-pair-add = Pair marker
+# Shown in the Markers view when there is no marker.
+marker-empty = No markers. Use the buttons above to add one.
+# Status line while a single marker is being placed.
+marker-placing-single = Click to place the marker. Esc cancels.
+# Status line while the first end of a pair marker is being placed.
+marker-placing-pair-first = Click to place the first end of the pair. Esc cancels.
+# Status line while the second end of a pair marker is being placed.
+marker-placing-pair-second = Click to place the second end. Esc cancels.
+# Status line while the view has zoomed in by itself so that an edge can be found.
+marker-zoomed-in = Zoomed in to find the edge. The view returns when you click or press Esc.
+# Shown in the Markers view when no more markers can be added.
+marker-limit = The limit of 64 markers is reached. Delete one to add another.
+# Tooltip of the button that opens the actions of a marker.
+# Button that deletes a marker.
+marker-delete = Delete
+# Placeholder of the field for the comment of a marker.
+marker-comment = Comment
+# Action of a single marker: it and the single marker that is clicked next become a pair.
+marker-make-pair = Make a pair
+# Shown while a pair is being made: the first single marker is chosen.
+marker-join-hint = Click the second single marker. Esc cancels.
+# Action of a single marker: time is counted from it.
+marker-action-origin = Count time from here
+# Action of the single marker that time is counted from: count from the start again.
+marker-action-origin-reset = Time counts from the start
+# Action of a single marker: delete the data to its left.
+marker-action-cut-left = Delete data to the left
+# Action of a single marker: delete the data to its right.
+marker-action-cut-right = Delete data to the right
+# Action of a single marker: scroll the view to it.
+marker-action-scroll = Scroll to it
+# Action of a pair marker: keep only the data between its ends.
+marker-action-trim = Trim to the pair
+# Action of a pair marker: zoom and scroll so that the pair fills the view.
+marker-action-fit = Fit the view to the pair
+# Action of a pair marker: replace it by two single markers.
+marker-action-split = Convert to two single markers
+# Why an action that deletes data is not available: a capture is running.
+marker-cut-disabled-running = Not possible while a capture is running
+# Why an action that deletes data is not available: there is nothing to delete.
+marker-cut-disabled-nothing = There is nothing to delete on that side
+# Notice: pairs that would have been left with one end were removed; the text is how many.
+marker-cut-pair-removed = Pairs left with only one end were removed: { $text }.
+# Title of the question before data of the capture is deleted.
+dialog-crop-title = Delete data?
+# Question: the data to the left of a single marker is deleted; lost and kept are durations.
+dialog-crop-left-body = The data to the left of the marker will be deleted: { $lost } ({ $percent }%). { $kept } will remain. This cannot be undone.
+# Question: the data to the right of a single marker is deleted.
+dialog-crop-right-body = The data to the right of the marker will be deleted: { $lost } ({ $percent }%). { $kept } will remain. This cannot be undone.
+# Question: only the data between the ends of a pair marker is kept.
+dialog-crop-pair-body = Only the data between the ends of the pair will be kept: { $kept }. { $lost } ({ $percent }%) will be deleted. This cannot be undone.
+# Button that confirms the deletion of data.
+dialog-crop-confirm = Delete
+# Title of the progress dialog while data of the capture is being deleted.
+dialog-cropping = Deleting data
+# Names of the eight colours of a marker, for the tooltips of the swatches.
+marker-colour-0 = Red
+marker-colour-1 = Amber
+marker-colour-2 = Green
+marker-colour-3 = Teal
+marker-colour-4 = Blue
+marker-colour-5 = Violet
+marker-colour-6 = Pink
+marker-colour-7 = Grey
 panel-capture = Capture
 panel-view-capture = Capture settings
 panel-view-decoders = Decoders
@@ -175,22 +249,6 @@ capture-channels = Channels to record
 capture-channels-all = All
 capture-channels-none = None
 capture-no-channel = No channel is chosen: choose at least one to start.
-# The default name of a marker; the argument is its number.
-marker-default = Marker { $number }
-# Tooltip of the button that moves the view to a marker.
-marker-go = Go to marker
-# Tooltip of the button that removes a marker.
-marker-remove = Remove
-# Tooltip of the button that makes a marker the first one of the measurement.
-marker-measure-first = First of the measurement
-# Tooltip of the button that makes a marker the second one of the measurement.
-marker-measure-second = Second of the measurement
-# Label of the time between two markers.
-measure-distance = Distance
-# Label of the frequency of the time between two markers.
-measure-frequency = Frequency
-# Hint shown when fewer than two markers are chosen for a measurement.
-measure-pick = Choose two markers to measure the time between them.
 
 ### Session files
 

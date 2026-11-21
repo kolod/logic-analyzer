@@ -12,6 +12,7 @@ publish = false
 # this to "abort".
 [profile.dev]
 panic = "unwind"
+debug = "line-tables-only"
 
 [profile.release]
 panic = "unwind"

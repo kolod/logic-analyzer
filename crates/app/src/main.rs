@@ -6,10 +6,13 @@
 mod app;
 mod decoder_view;
 mod dialogs;
+mod dwell;
 mod fonts;
 mod frame_log;
 mod icons;
 mod lane_layout;
+mod marker_marks;
+mod marker_view;
 mod side_panel;
 mod signal_view;
 mod theme;

@@ -20,13 +20,15 @@ use crate::command::{
 use crate::decoders::{DecoderRuntime, DecoderState, catalogue};
 use crate::devices::{ConfigDraft, fresh_seed, problems};
 use crate::error;
-use crate::markers::{Markers, MeasurementText, measurement, measurement_text, nearest_transition};
+use crate::marker_ops;
+use crate::markers::{
+    MarkerText, Markers, Pointer, Resolved, Shape, ZoomTarget, measurement, measurement_text,
+};
 use crate::notices::{Notice, NoticeContent, NoticeId, NoticeList, Severity, notice_text};
 use crate::plan::{
-    ChannelView, FramePlan, MarkerPlan, build_plan, real_edge_after, real_edge_before,
+    ChannelView, FramePlan, MarkerPlan, PlanShape, build_plan, real_edge_after, real_edge_before,
 };
 use crate::presentation::Presentation;
-use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
 use crate::sessions::Operation;
 use crate::settings::{RealSettingsFs, Settings, SettingsFs};
 use crate::state::{Activity, EdgeDirection, State, Unsaved, Versions};
@@ -100,6 +102,8 @@ pub struct Shell {
     pub(crate) running: Option<Running>,
     pub(crate) operation: Option<Operation>,
     pub(crate) decoders: DecoderRuntime,
+    /// While set, a cut waits before it copies anything (tests: a cut that is under way).
+    pub(crate) crop_hold: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(feature = "test-support")]
     pub(crate) session_fs: Arc<dyn la_session::harness::FileSystem>,
     #[cfg(feature = "test-support")]
@@ -185,6 +189,9 @@ impl Shell {
             progress: None,
             presentation: Presentation::default(),
             markers: Markers::new(),
+            placement: None,
+            snap_zoom: None,
+            drag: None,
             session_path: None,
             operation: None,
             session_extras: Vec::new(),
@@ -214,6 +221,7 @@ impl Shell {
             running: None,
             operation: None,
             decoders,
+            crop_hold: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             #[cfg(feature = "test-support")]
             session_fs: Arc::new(la_session::harness::RealFileSystem),
             #[cfg(feature = "test-support")]
@@ -341,6 +349,15 @@ impl Shell {
             Vec::new()
         };
         let mut plan = build_plan(capture.map(|c| &c.snapshot), &window, pixels, &channels);
+        // Time counted from a marker: the ticks and their labels follow the origin.
+        if let Some(capture) = capture.filter(|_| self.state.markers.origin != 0) {
+            plan.axis = crate::axis::build_ticks(
+                &window,
+                pixels,
+                capture.snapshot.sample_rate_hz(),
+                self.state.markers.origin,
+            );
+        }
         if capture.is_some() && window.length > 0 {
             let shown: Vec<u8> = channels.iter().map(|c| c.channel).collect();
             let (lanes, overlays) = self.decoder_plans(&window, pixels, &shown);
@@ -349,30 +366,97 @@ impl Shell {
         }
         if capture.is_some() && window.length > 0 {
             let scale = f64::from(pixels) / window.length as f64;
+            let at = |position: u64| position.saturating_sub(window.start) as f64 * scale;
+            let before = |position: u64| -(window.start.saturating_sub(position) as f64 * scale);
+            let x = |position: u64| {
+                if position >= window.start {
+                    at(position)
+                } else {
+                    before(position)
+                }
+            };
             plan.markers = self
                 .state
                 .markers
                 .list
                 .iter()
-                .filter(|m| m.position >= window.start && m.position < window.end())
+                .filter(|m| match m.shape {
+                    Shape::Point(p) => p >= window.start && p < window.end(),
+                    Shape::Interval { start, end } => start < window.end() && end >= window.start,
+                })
                 .map(|m| MarkerPlan {
                     id: m.id,
-                    position: m.position,
-                    x: m.position.saturating_sub(window.start) as f64 * scale,
-                    name: m.name.clone(),
+                    name: m.name(),
+                    number: m.number,
+                    colour: m.colour,
+                    comment: m.comment.clone(),
+                    selected: self.state.markers.selected == Some(m.id),
+                    shape: match m.shape {
+                        Shape::Point(p) => PlanShape::Point { x: x(p) },
+                        Shape::Interval { start, end } => PlanShape::Interval {
+                            start_x: x(start),
+                            end_x: x(end),
+                        },
+                    },
                 })
                 .collect();
         }
         plan
     }
 
-    /// The distance and frequency between the two selected markers, in the current language.
+    /// The window to zoom to when the pointer rests where many edges lie within the snapping
+    /// distance, so that the one wanted can be told from its neighbours; `None` when there is no
+    /// such crowd or the view is already that close. Cheap and total; it changes nothing.
     #[must_use]
-    pub fn measurement_text(&self) -> Option<MeasurementText> {
-        let capture = self.state.capture.as_ref()?;
-        let (a, b) = self.state.markers.measured_positions()?;
-        let m = measurement(capture.snapshot.sample_rate_hz(), a, b)?;
-        Some(measurement_text(&self.localizer, &m))
+    pub fn crowded_zoom_target(&self, pointer: Pointer) -> Option<ZoomTarget> {
+        marker_ops::crowded_zoom_target(&self.state, pointer)
+    }
+
+    /// What a pointer over the signal area means to a marker being placed or moved: the sample
+    /// under it and, once snapping is in, the transition it snaps to. Cheap and total; it changes
+    /// nothing.
+    #[must_use]
+    pub fn resolve_pointer(&self, pointer: Pointer) -> Resolved {
+        marker_ops::resolve(&self.state, pointer)
+    }
+
+    /// The texts of every marker in the current language: its times relative to the origin of
+    /// time and, for a pair, the duration and the frequency of that duration.
+    #[must_use]
+    pub fn marker_texts(&self) -> Vec<MarkerText> {
+        let Some(capture) = self.state.capture.as_ref() else {
+            return Vec::new();
+        };
+        let rate = capture.snapshot.sample_rate_hz();
+        if rate == 0 {
+            return Vec::new();
+        }
+        let origin = self.state.markers.origin as f64;
+        let time = |position: u64| {
+            self.localizer
+                .format_duration((position as f64 - origin) / rate as f64)
+        };
+        self.state
+            .markers
+            .list
+            .iter()
+            .map(|m| {
+                let (start, end) = (m.shape.start(), m.shape.end());
+                let pair = matches!(m.shape, Shape::Interval { .. });
+                let measured = pair
+                    .then(|| measurement(rate, start, end))
+                    .flatten()
+                    .map(|measured| measurement_text(&self.localizer, &measured));
+                MarkerText {
+                    id: m.id,
+                    name: m.name(),
+                    time_a: time(start),
+                    time_b: pair.then(|| time(end)),
+                    duration: measured.as_ref().map(|t| t.distance.clone()),
+                    frequency: measured.and_then(|t| t.frequency),
+                }
+            })
+            .collect()
     }
 
     /// Collects what happened in the background since the last call: device changes, capture
@@ -528,7 +612,8 @@ impl Shell {
                 | Command::SetWindowGeometry(_)
                 | Command::Pan { .. }
                 | Command::Zoom { .. }
-                | Command::MoveMarker { .. }
+                | Command::MoveMarkerEnd { .. }
+                | Command::PlacementZoomTo { .. }
         ) {
             tracing::debug!(target: "la_host", command = name, "command");
         } else {
@@ -538,6 +623,8 @@ impl Shell {
         let result = catch_unwind(AssertUnwindSafe(|| self.execute(&mut working, command)));
         match result {
             Ok(Ok(Executed::Changed(changes))) => {
+                // A marker that is gone cannot be dragged any more.
+                let changes = changes | marker_ops::drop_stale_drag(&mut working);
                 if !changes.is_empty() {
                     working.version = working.version.saturating_add(1);
                     working.versions.bump(changes);
@@ -555,7 +642,7 @@ impl Shell {
                     .unsaved_choice
                     .as_deref()
                     .and_then(Decision::from_setting)
-                    .filter(|_| !matches!(guarded, Guarded::RemoveDecoder(_)))
+                    .filter(|_| !matches!(guarded, Guarded::RemoveDecoder(_) | Guarded::Crop(_)))
                     // Only Save and Discard can be remembered: a remembered Cancel would silently
                     // stop quitting, closing and opening. A stale word in the file asks instead.
                     .filter(|decision| *decision != Decision::Cancel);
@@ -590,6 +677,11 @@ impl Shell {
     fn execute(&mut self, state: &mut State, command: Command) -> Result<Executed, Reject> {
         if self.operation.is_some() && command.waits_for_operation() {
             return Err(Reject::Ignored(error::INVALID_COMMAND));
+        }
+        // A zoom or a move of the view by the user's hand: the view is theirs, not the one an
+        // automatic zoom of a crowded zone would put back.
+        if marker_ops::changes_window_by_hand(&command) {
+            state.snap_zoom = None;
         }
         let changed = |changes: Changes| Ok(Executed::Changed(changes));
         match command {
@@ -880,36 +972,48 @@ impl Shell {
                 state.follow_latest = follow;
                 changed(Changes::WINDOW)
             }
-            Command::PlaceMarker { position, channel } => {
-                let (snapshot_length, position) = marker_target(state, position, channel)?;
-                let _ = snapshot_length;
-                if state.markers.place(position).is_none() {
-                    return Err(Reject::Ignored(error::INVALID_COMMAND));
-                }
-                mark_dirty(state);
-                changed(Changes::MARKERS)
+            // Placing, moving and the actions of the markers: their stories fill these in; until then
+            // they are not allowed (`specs/015-markers-rework/tasks.md`).
+            Command::BeginPlacement(kind) => {
+                marker_ops::begin_placement(state, kind).map(Executed::Changed)
             }
-            Command::MoveMarker {
-                id,
-                position,
-                channel,
-            } => {
-                if state.markers.get(id).is_none() {
-                    return Err(Reject::Ignored(error::INVALID_COMMAND));
-                }
-                let (_, position) = marker_target(state, position, channel)?;
-                if let Some(marker) = state.markers.get_mut(id) {
-                    marker.position = position;
-                }
-                mark_dirty(state);
-                changed(Changes::MARKERS)
+            Command::CancelPlacement => marker_ops::cancel_placement(state).map(Executed::Changed),
+            Command::FixPlacement { pointer } => {
+                marker_ops::fix_placement(state, pointer).map(Executed::Changed)
             }
-            Command::RenameMarker { id, name } => {
-                let Some(marker) = state.markers.get_mut(id) else {
+            Command::MoveMarkerEnd { id, end, pointer } => {
+                marker_ops::move_marker_end(state, id, end, pointer).map(Executed::Changed)
+            }
+            Command::EndMarkerDrag => marker_ops::end_marker_drag(state).map(Executed::Changed),
+            Command::ScrollToMarker(id) => {
+                marker_ops::scroll_to_marker(state, id).map(Executed::Changed)
+            }
+            Command::SetMarkerColour { id, colour } => {
+                marker_ops::set_marker_colour(state, id, colour).map(Executed::Changed)
+            }
+            Command::SetMarkerComment { id, comment } => {
+                marker_ops::set_marker_comment(state, id, &comment).map(Executed::Changed)
+            }
+            Command::SetTimeOrigin(id) => {
+                marker_ops::set_time_origin(state, id).map(Executed::Changed)
+            }
+            Command::ResetTimeOrigin => marker_ops::reset_time_origin(state).map(Executed::Changed),
+            Command::SplitPair(id) => marker_ops::split_pair(state, id).map(Executed::Changed),
+            Command::MakePair { first, second } => {
+                marker_ops::make_pair(state, first, second).map(Executed::Changed)
+            }
+            // The automatic zoom, the data cuts and the fit come with their stories.
+            Command::PlacementZoomTo { start, length } => {
+                marker_ops::placement_zoom_to(state, start, length).map(Executed::Changed)
+            }
+            Command::CutLeft(_) | Command::CutRight(_) | Command::TrimToPair(_) => {
+                marker_ops::crop_question(self, state, &command)
+            }
+            Command::FitToPair(id) => marker_ops::fit_to_pair(state, id).map(Executed::Changed),
+            Command::SelectMarker(id) => {
+                if !state.markers.select(id) {
                     return Err(Reject::Ignored(error::INVALID_COMMAND));
-                };
-                marker.name = sanitize_text(&name, MAX_NAME_CHARS);
-                mark_dirty(state);
+                }
                 changed(Changes::MARKERS)
             }
             Command::RemoveMarker(id) => {
@@ -923,25 +1027,6 @@ impl Shell {
                 state.markers.clear();
                 mark_dirty(state);
                 changed(Changes::MARKERS)
-            }
-            Command::SelectMarkers { first, second } => {
-                if !state.markers.select(first, second) {
-                    return Err(Reject::Ignored(error::INVALID_COMMAND));
-                }
-                changed(Changes::MARKERS)
-            }
-            Command::GoToMarker(id) => {
-                let position = state
-                    .markers
-                    .get(id)
-                    .map(|m| m.position)
-                    .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
-                let limits =
-                    capture_limits_of(state).ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
-                state.window = current_window(state, &limits).reveal(&limits, position);
-                state.auto_fit = false;
-                state.follow_latest = false;
-                changed(Changes::WINDOW)
             }
             Command::SetSnap(snap) => {
                 state.snap = snap;
@@ -1082,6 +1167,23 @@ impl Shell {
         let Some(guarded) = state.pending_decision.clone() else {
             return Err(Reject::Ignored(error::INVALID_COMMAND));
         };
+        if let Guarded::Crop(plan) = guarded {
+            // The confirmation of a cut: Delete is the answer `Discard`.
+            state.pending_decision = None;
+            return match decision {
+                Decision::Cancel => Ok(Executed::Changed(Changes::DECISION)),
+                Decision::Save => {
+                    state.pending_decision = Some(Guarded::Crop(plan));
+                    Err(Reject::Ignored(error::INVALID_COMMAND))
+                }
+                Decision::Discard => {
+                    let Executed::Changed(started) = self.begin_crop(state, plan)? else {
+                        return Err(Reject::Ignored(error::INVALID_COMMAND));
+                    };
+                    Ok(Executed::Changed(Changes::DECISION | started))
+                }
+            };
+        }
         if let Guarded::RemoveDecoder(id) = guarded {
             // A question about decoders only: the capture and what is running stay as they are.
             return match decision {
@@ -1213,6 +1315,9 @@ impl Shell {
         });
         sync_presentation(state);
         state.markers = Markers::new();
+        state.placement = None;
+        state.snap_zoom = None;
+        state.drag = None;
         state.activity = Activity::Capturing;
         state.unsaved = Unsaved::Running;
         state.auto_fit = true;
@@ -1287,35 +1392,6 @@ pub(crate) fn revalidate(state: &mut State) {
         .unwrap_or_default();
 }
 
-/// Where a marker dropped at `position` ends up: clamped to the capture and, when snapping is
-/// on, moved to the nearest transition of `channel` within about twelve pixels. Returns the
-/// capture length too.
-fn marker_target(state: &State, position: u64, channel: u8) -> Result<(u64, u64), Reject> {
-    let capture = state
-        .capture
-        .as_ref()
-        .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
-    let length = capture.snapshot.length();
-    if length == 0 {
-        return Err(Reject::Ignored(error::INVALID_COMMAND));
-    }
-    let mut position = position.min(length.saturating_sub(1));
-    if state.snap {
-        let limits = window_limits(length, plan_pixels(state));
-        let window = current_window(state, &limits);
-        let radius = window
-            .length
-            .saturating_mul(12)
-            .checked_div(u64::from(limits.pixels.max(1)))
-            .unwrap_or(1)
-            .max(1);
-        if let Some(near) = nearest_transition(&capture.snapshot, channel, position, radius) {
-            position = near.min(length.saturating_sub(1));
-        }
-    }
-    Ok((length, position))
-}
-
 /// The default presentation of a capture: every channel in index order, the recorded ones shown.
 pub(crate) fn default_presentation(capture: &CaptureView) -> Presentation {
     Presentation::defaults(
@@ -1370,7 +1446,7 @@ pub(crate) fn sync_presentation(state: &mut State) {
 }
 
 /// The pixel width the window limits use.
-fn plan_pixels(state: &State) -> u32 {
+pub(crate) fn plan_pixels(state: &State) -> u32 {
     state.view_size.pixels.clamp(1, MAX_PLAN_PIXELS)
 }
 
@@ -1413,6 +1489,9 @@ fn edit_presentation(
 /// Removes the capture and everything about it.
 pub(crate) fn clear_capture(state: &mut State) {
     state.markers = Markers::new();
+    state.placement = None;
+    state.snap_zoom = None;
+    state.drag = None;
     state.session_path = None;
     state.session_extras.clear();
     state.capture = None;

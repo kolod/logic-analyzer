@@ -49,7 +49,10 @@ fn every_message_of_every_language_formats_without_a_problem() {
             .uint("min", 1)
             .uint("max", 2)
             .text("version", "0.1.0")
-            .text("text", "t");
+            .text("text", "t")
+            .trusted("lost", "1")
+            .trusted("kept", "2")
+            .uint("percent", 3);
         for id in &ids {
             let text = l.message(
                 &Key::from_static(Box::leak(id.clone().into_boxed_str())),

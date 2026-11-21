@@ -118,6 +118,10 @@ name: String, colour: Colour, visible: bool }` where the vector order is the dis
 
 ## Marker
 
+> **Superseded by feature 015** (`015-markers-rework`): markers are single or pair markers with a
+> number, a colour and a comment, and there is no chosen pair for a measurement. The text below is
+> what feature 006 built.
+
 `Marker { id: u32, position: u64, name: String }` (samples; name sanitized as above, may be empty).
 Positions are clamped to the capture (`position < length`, or `0` for empty captures). Ids are
 unique and never reused within a session file. Measurement uses the two markers the user selects

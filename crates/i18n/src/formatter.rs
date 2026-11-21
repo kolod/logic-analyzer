@@ -166,6 +166,16 @@ impl Formatter {
     }
 
     pub(crate) fn duration(&self, seconds: f64) -> String {
+        // A time before a point of reference (the axis counts from a marker) is negative: the
+        // sign is written in front of the text of its size. A negative zero has no sign.
+        if seconds.is_finite() && seconds < 0.0 {
+            let size = self.quantity(quantity::duration(-seconds));
+            return if size == MARKER {
+                size
+            } else {
+                format!("-{size}")
+            };
+        }
         self.quantity(quantity::duration(seconds))
     }
 

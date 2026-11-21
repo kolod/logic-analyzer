@@ -51,6 +51,7 @@ error-storage-invalid_channel_count = No se admite esa cantidad de canales. Elij
 error-storage-invalid_gap = Se describió incorrectamente un hueco de la captura. Todo lo capturado hasta ahora se conserva. Infórmelo adjuntando el archivo de registro.
 error-storage-invalid_limits = Los límites de memoria o de tamaño no son válidos. Abra la configuración e introduzca valores válidos.
 error-storage-invalid_pixels = No se pudo dibujar la vista con ese ancho. Cambie el tamaño de la ventana o el zoom y pruebe de nuevo.
+error-storage-cancelled = Se canceló la operación. No se cambió nada.
 error-storage-invalid_restore = La captura guardada no cumple las reglas de las capturas y no se puede abrir. Si tiene una copia de seguridad del archivo, ábrala en su lugar.
 error-storage-invalid_sample_rate = La frecuencia de muestreo debe ser mayor que cero. Introduzca una frecuencia de muestreo válida.
 error-storage-invalid_window = La parte de la captura que se debe mostrar no es válida. Seleccione un rango que empiece antes de terminar.

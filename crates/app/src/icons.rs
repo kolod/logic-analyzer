@@ -20,6 +20,10 @@ pub enum Icon {
     Markers,
     /// A waste bin: remove.
     Trash,
+    /// A pentagon arrow pointing down: a single marker.
+    SingleMarker,
+    /// Two squares on two lines: a pair marker.
+    PairMarker,
     /// A cog: the settings.
     Settings,
     /// An arrow that points right: a collapsed block.
@@ -68,34 +72,64 @@ fn paths(icon: Icon) -> Vec<(Path, bool)> {
             let pole = Path::line(Point::new(5.0, 2.0), Point::new(5.0, 18.0));
             let flag = Path::new(|b| {
                 b.move_to(Point::new(5.0, 3.0));
-                b.line_to(Point::new(16.0, 6.5));
+                b.line_to(Point::new(16.0, 7.0));
                 b.line_to(Point::new(5.0, 10.0));
                 b.close();
             });
             vec![(pole, false), (flag, true)]
         }
+        Icon::SingleMarker => {
+            let line = Path::line(Point::new(10.0, 12.0), Point::new(10.0, 19.0));
+            let arrow = Path::new(|b| {
+                b.move_to(Point::new(4.0, 2.0));
+                b.line_to(Point::new(16.0, 2.0));
+                b.line_to(Point::new(16.0, 8.0));
+                b.line_to(Point::new(10.0, 13.0));
+                b.line_to(Point::new(4.0, 8.0));
+                b.close();
+            });
+            vec![(line, false), (arrow, true)]
+        }
+        Icon::PairMarker => vec![
+            (
+                Path::line(Point::new(7.0, 2.0), Point::new(7.0, 19.0)),
+                false,
+            ),
+            (
+                Path::line(Point::new(13.0, 2.0), Point::new(13.0, 19.0)),
+                false,
+            ),
+            (
+                Path::rectangle(Point::new(2.0, 2.0), Size::new(5.0, 5.0)),
+                true,
+            ),
+            (
+                Path::rectangle(Point::new(13.0, 2.0), Size::new(5.0, 5.0)),
+                true,
+            ),
+        ],
         Icon::Trash => {
             let line = |x0: f32, y0: f32, x1: f32, y1: f32| {
                 (Path::line(Point::new(x0, y0), Point::new(x1, y1)), false)
             };
             let handle = Path::new(|b| {
-                b.move_to(Point::new(7.5, 5.0));
-                b.line_to(Point::new(7.5, 2.5));
-                b.line_to(Point::new(12.5, 2.5));
-                b.line_to(Point::new(12.5, 5.0));
+                b.move_to(Point::new(7.0, 5.0));
+                b.line_to(Point::new(7.0, 3.0));
+                b.line_to(Point::new(13.0, 3.0));
+                b.line_to(Point::new(13.0, 5.0));
             });
             let body = Path::new(|b| {
-                b.move_to(Point::new(4.5, 5.0));
-                b.line_to(Point::new(5.8, 17.5));
-                b.line_to(Point::new(14.2, 17.5));
-                b.line_to(Point::new(15.5, 5.0));
+                b.move_to(Point::new(5.0, 5.0));
+                b.line_to(Point::new(6.0, 17.0));
+                b.line_to(Point::new(14.0, 17.0));
+                b.line_to(Point::new(15.0, 5.0));
             });
             vec![
-                line(2.5, 5.0, 17.5, 5.0),
+                line(3.0, 5.0, 17.0, 5.0),
                 (handle, false),
                 (body, false),
-                line(8.4, 8.0, 8.4, 15.0),
-                line(11.6, 8.0, 11.6, 15.0),
+                line(8.0, 8.0, 8.0, 15.0),
+                line(12.0, 8.0, 12.0, 15.0),
             ]
         }
         Icon::Settings => {
@@ -151,14 +185,15 @@ impl canvas::Program<Message> for IconView {
         };
         let mut frame = Frame::new(renderer, bounds.size());
         // The icon is centred in the space it is given.
-        let dx = ((bounds.width - SIZE) / 2.0).max(0.0);
-        let dy = ((bounds.height - SIZE) / 2.0).max(0.0);
+        // On whole pixels, so that the edges of the shapes fall between pixels and stay sharp.
+        let dx = ((bounds.width - SIZE) / 2.0).max(0.0).round();
+        let dy = ((bounds.height - SIZE) / 2.0).max(0.0).round();
         frame.translate(iced::Vector::new(dx, dy));
         for (path, filled) in paths(self.icon) {
             if filled {
                 frame.fill(&path, colour);
             } else {
-                frame.stroke(&path, Stroke::default().with_color(colour).with_width(1.6));
+                frame.stroke(&path, Stroke::default().with_color(colour).with_width(2.0));
             }
         }
         vec![frame.into_geometry()]
@@ -176,6 +211,8 @@ mod tests {
             Icon::Decoders,
             Icon::Markers,
             Icon::Trash,
+            Icon::SingleMarker,
+            Icon::PairMarker,
             Icon::Settings,
             Icon::ChevronRight,
             Icon::ChevronDown,

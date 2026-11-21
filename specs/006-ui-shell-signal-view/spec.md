@@ -37,8 +37,9 @@ Terms used in this document:
 - **Capture**: the signal data of one acquisition (or of one opened file) shown in the view.
 - **Visible window**: the span of time currently shown; **zoom** changes its length, **pan** moves
   it.
-- **Marker**: a vertical line the user places at a point in time to read the time of that point
-  and the distance between two such points.
+- **Marker**: a dotted vertical line the user places at a point in time. There are two kinds, a
+  single marker and a pair marker (an interval); what they are and do is defined by feature 015
+  (`015-markers-rework`), which replaced the one kind this feature built.
 - **Dense activity**: a pixel column in which more than one transition falls; it must look different
   from an empty or single-transition column so that glitches are never hidden.
 - **Simulated**: data produced by the virtual device; it is labelled as such everywhere it is shown
@@ -127,32 +128,11 @@ the glitch is visible at every zoom level as either a transition or a dense-acti
 
 ### User Story 3 - Measure time with markers (Priority: P2)
 
-The user places a marker on a point in time and a second marker on another; the view shows the time
-of each and the distance between them, with the equivalent frequency, formatted for their language.
-Markers can be dragged, snapped to the nearest transition, renamed and removed, and the user can jump
-the view to a marker.
-
-**Why this priority**: measuring pulse widths and periods is what a logic analyzer is used for after
-looking at the waveform; it depends on the view of stories 1 and 2.
-
-**Independent Test**: place two markers on a virtual-device capture whose period is known by
-construction, and check the displayed times, the distance and the frequency against the known values
-in several languages.
-
-**Acceptance Scenarios**:
-
-1. **Given** a capture on screen, **When** the user places a marker, **Then** a vertical line with
-   its time label appears at that point and stays attached to that point in time while the user zooms
-   and pans.
-2. **Given** two markers, **When** the user reads the measurement, **Then** the distance in time and
-   the frequency of that distance are shown with the number, unit and decimal conventions of the
-   selected language.
-3. **Given** snapping is on, **When** the user drops a marker near a transition, **Then** it jumps
-   to the exact time of the nearest transition on the channel under the pointer.
-4. **Given** markers exist, **When** the user removes one or all of them, **Then** they disappear
-   and the measurement disappears with them, and nothing else changes.
-5. **Given** a marker that is off screen, **When** the user chooses "go to marker", **Then** the view
-   moves so the marker is visible.
+*Superseded by feature 015 (`015-markers-rework`).* Feature 006 built one kind of marker, two of which
+could be chosen for a measurement. Feature 015 replaced it with single markers and pair markers; the
+user stories, scenarios and requirements of markers (placing, dragging, snapping, naming, removing,
+going to a marker, measuring) are defined there. What this feature still owns is the signal view
+that draws the markers and the session file section that saves them (FR-018).
 
 ---
 
@@ -230,7 +210,7 @@ the expected ones.
    dialog is shown, **Then** no text is cut off, overlaps another element or forces a control out of
    reach; long text wraps or the control grows, and where space truly runs out the full text is
    available on hover or focus.
-5. **Given** a capture with channel names, a description and a marker measurement, **When** the
+5. **Given** a capture with channel names, a description and a pair marker's duration, **When** the
    language changes, **Then** the names and description stay exactly as the user typed them while
    units, numbers and surrounding text change.
 6. **Given** an interface text for which a translation is missing, **When** it is shown, **Then** the
@@ -368,13 +348,13 @@ one localized message, no crash, no loss of the displayed data, and a log entry 
 
 **Markers and measurement**
 
-- **FR-016**: The user MUST be able to place, drag, snap to the nearest transition, rename, remove and
-  jump to markers; each marker MUST stay attached to its time while the user zooms and pans.
-- **FR-017**: With two markers the application MUST show the time of each, the distance between them
-  and the corresponding frequency, formatted with the selected language's conventions through the
-  localization foundation, and at a precision that never claims more than the sample period resolves.
-- **FR-018**: Markers MUST be saved with the capture in the session file, and a file written without
-  markers MUST still open.
+- **FR-016** *(superseded by feature 015, FR-001 to FR-021)*: Markers of two kinds, single and pair,
+  placed, dragged, snapped, coloured, commented, removed and acted upon as defined by feature 015; each
+  marker MUST stay attached to its time while the user zooms and pans.
+- **FR-017** *(superseded by feature 015, FR-014)*: The duration and frequency of a pair marker are
+  shown as feature 015 defines.
+- **FR-018** *(content amended by feature 015, FR-022 to FR-024)*: Markers MUST be saved with the
+  capture in the session file, and a file written without markers MUST still open.
 
 **Sessions**
 
@@ -458,8 +438,8 @@ one localized message, no crash, no loss of the displayed data, and a log entry 
 - **Capture view model**: the current capture plus how it is displayed (visible window, channel order,
   names, colours, visibility, follow-latest on or off).
 - **Channel presentation**: per channel, the user's name, colour, order position and visibility.
-- **Marker**: a time position, a name and an identity; a pair of markers yields a measurement
-  (distance, frequency).
+- **Marker** *(superseded by feature 015)*: a single marker (one time position) or a pair marker (two,
+  yielding a duration and a frequency), each with a number, a colour and a comment.
 - **Message**: a notice for the user made of a stable code or key, its arguments and its severity;
   the shell groups repeats and keeps the recent ones.
 - **Settings**: the user's persistent choices — language, memory limit, theme, window geometry, recent

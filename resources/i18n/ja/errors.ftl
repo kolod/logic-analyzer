@@ -51,6 +51,7 @@ error-storage-invalid_channel_count = このチャンネル数には対応して
 error-storage-invalid_gap = キャプチャの欠落区間の指定が正しくありません。ここまでにキャプチャしたデータは保持されています。ログファイルを添えて報告してください。
 error-storage-invalid_limits = メモリまたはサイズの制限値が正しくありません。設定を開いて、正しい値を入力してください。
 error-storage-invalid_pixels = この幅ではビューを描画できませんでした。ウィンドウのサイズまたはズームを変更して、もう一度お試しください。
+error-storage-cancelled = 操作をキャンセルしました。何も変更されていません。
 error-storage-invalid_restore = 保存されたキャプチャがキャプチャの規則に従っていないため、開けません。ファイルのバックアップコピーがある場合は、そちらを開いてください。
 error-storage-invalid_sample_rate = サンプルレートは 0 より大きい必要があります。正しいサンプルレートを入力してください。
 error-storage-invalid_window = 表示するキャプチャの範囲が正しくありません。開始が終了より前になる範囲を選択してください。

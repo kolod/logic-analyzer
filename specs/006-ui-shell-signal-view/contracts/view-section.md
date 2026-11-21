@@ -15,6 +15,11 @@ At most one `VIEW` section per file. The writer emits it only when the state dif
 (a capture with default names, colours, order, no markers and no remembered window has no `VIEW`
 section, so such files stay exactly as feature 003 wrote them except for the minor number).
 
+> **Superseded in part by feature 015**: the marker records (`marker_count` to `selected_second`)
+> below describe the one kind of marker of this feature. Feature 015 (`015-markers-rework`) replaces
+> them with records for single and pair markers, their colours, comments and numbering, and adds the
+> time origin; its plan defines the new layout. The rest of the payload is unchanged.
+
 ## Payload (all integers little-endian varints in the canonical form of feature 003; `u8` is one byte)
 
 ```text

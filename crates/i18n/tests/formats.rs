@@ -178,9 +178,44 @@ fn durations_use_one_unit_below_a_minute_and_parts_above() {
                 "{language:?} {seconds} s"
             );
         }
-        for bad in [f64::NAN, f64::INFINITY, -1.0] {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert_eq!(l.format_duration(bad), "\u{2013}", "{language:?}");
         }
+    }
+}
+
+/// The axis counts time from a marker, so a time before it is negative (spec 015, research R7).
+#[test]
+fn negative_durations_carry_a_sign_and_the_unit_of_their_size() {
+    for language in Language::ALL {
+        let l = Localizer::new(language);
+        let s = style(language);
+        let d = s.decimal;
+        let table: [(f64, String); 4] = [
+            (
+                -1.5e-3,
+                format!("-{}", with(&s, &format!("1{d}5"), s.time[2])),
+            ),
+            (
+                -2.3e-6,
+                format!("-{}", with(&s, &format!("2{d}3"), s.time[1])),
+            ),
+            (-42.0, format!("-{}", with(&s, "42", s.time[3]))),
+            (-0.0, with(&s, "0", s.time[3])),
+        ];
+        for (seconds, expected) in table {
+            assert_eq!(
+                l.format_duration(seconds),
+                expected,
+                "{language:?} {seconds} s"
+            );
+        }
+        // A negative zero and a positive zero read the same, without a sign.
+        assert_eq!(
+            l.format_duration(-0.0),
+            l.format_duration(0.0),
+            "{language:?}"
+        );
     }
 }
 

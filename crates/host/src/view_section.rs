@@ -1,7 +1,9 @@
 //! The `VIEW` section of a session file: how the capture was shown (channel names, colours,
-//! order and visibility, markers, the window).
+//! order and visibility, markers of both kinds with the time origin, the window).
 //!
-//! The format is `specs/006-ui-shell-signal-view/contracts/view-section.md`. The reader treats
+//! The format is `specs/015-markers-rework/contracts/view-section-2.md` (payload version 2; the
+//! channel and window parts are those of `specs/006-ui-shell-signal-view/contracts/view-section.md`).
+//! Payloads of version 1 are not read: they are rejected like any invalid payload. The reader treats
 //! every byte as untrusted and accepts only the canonical form, so an accepted payload always
 //! re-encodes to the same bytes. Rejection never fails the opening of a file: the caller shows
 //! the capture with defaults and a warning.
@@ -9,21 +11,26 @@
 use la_core::Result;
 
 use crate::error;
-use crate::markers::{MAX_MARKERS, Marker, Markers};
+use crate::markers::{
+    Kind, MARKER_COLOURS, MAX_COMMENT_CHARS, MAX_MARKERS, Marker, Markers, Shape,
+};
 use crate::presentation::{ChannelStyle, Colour, PALETTE_SIZE, Presentation};
 use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
 
 /// The section tag.
 pub const TAG: &str = "VIEW";
 /// The version of the payload this code reads and writes.
-pub const VERSION: u8 = 1;
+pub const VERSION: u8 = 2;
 /// The longest name in bytes.
 pub const MAX_NAME_BYTES: u64 = 256;
+/// The longest comment in bytes (80 characters of at most 4 bytes).
+pub const MAX_COMMENT_BYTES: u64 = 320;
 /// The most channels a payload can describe.
 pub const MAX_CHANNELS: u64 = 32;
 
 const FLAG_VISIBLE: u8 = 0b01;
 const FLAG_CUSTOM_COLOUR: u8 = 0b10;
+const MARKER_FLAG_PAIR: u8 = 0b1;
 
 /// What the payload is checked against: the capture it belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,7 +46,7 @@ pub struct Bounds {
 pub struct ViewState {
     /// Names, colours, order and visibility; `None` when none are stored (the defaults apply).
     pub presentation: Option<Presentation>,
-    /// The markers and the measured pair.
+    /// The markers of both kinds, the numbering state and the time origin.
     pub markers: Markers,
     /// The remembered window as `(start, length)`; `None` when there is none.
     pub window: Option<(u64, u64)>,
@@ -70,11 +77,15 @@ fn put_varint(mut value: u64, out: &mut Vec<u8>) {
     }
 }
 
-fn put_name(name: &str, out: &mut Vec<u8>) {
-    // The host keeps names within the limit; this guard makes a longer one harmless.
-    let clean = sanitize_text(name, MAX_NAME_CHARS);
+fn put_text(text: &str, max_chars: usize, out: &mut Vec<u8>) {
+    // The host keeps text within the limit; this guard makes a longer one harmless.
+    let clean = sanitize_text(text, max_chars);
     put_varint(clean.len() as u64, out);
     out.extend_from_slice(clean.as_bytes());
+}
+
+fn put_name(name: &str, out: &mut Vec<u8>) {
+    put_text(name, MAX_NAME_CHARS, out);
 }
 
 /// The payload of `state`. Deterministic: the same state gives the same bytes.
@@ -104,15 +115,31 @@ pub fn encode(state: &ViewState) -> Vec<u8> {
     put_varint(state.markers.list.len() as u64, &mut out);
     for marker in &state.markers.list {
         put_varint(u64::from(marker.id), &mut out);
-        put_varint(marker.position, &mut out);
-        put_name(&marker.name, &mut out);
+        let (flags, start, end) = match marker.shape {
+            Shape::Point(p) => (0, p, None),
+            Shape::Interval { start, end } => (MARKER_FLAG_PAIR, start, Some(end)),
+        };
+        out.push(flags);
+        put_varint(u64::from(marker.number), &mut out);
+        out.push(marker.colour);
+        put_varint(start, &mut out);
+        if let Some(end) = end {
+            put_varint(end, &mut out);
+        }
+        put_text(&marker.comment, MAX_COMMENT_CHARS, &mut out);
     }
-    for slot in state.markers.selected {
-        put_varint(
-            slot.map_or(0, |id| u64::from(id).saturating_add(1)),
-            &mut out,
-        );
-    }
+    put_varint(u64::from(state.markers.last_id()), &mut out);
+    let [next_single, next_pair] = state.markers.next_numbers();
+    put_varint(u64::from(next_single), &mut out);
+    put_varint(u64::from(next_pair), &mut out);
+    put_varint(state.markers.origin, &mut out);
+    put_varint(
+        state
+            .markers
+            .selected
+            .map_or(0, |id| u64::from(id).saturating_add(1)),
+        &mut out,
+    );
     let (start, length) = state.window.unwrap_or((0, 0));
     put_varint(start, &mut out);
     put_varint(length, &mut out);
@@ -171,21 +198,31 @@ impl<'a> Reader<'a> {
         invalid("a varint is longer than 10 bytes")
     }
 
-    fn name(&mut self) -> Result<String> {
+    /// Text of at most `max_bytes` bytes and `max_chars` characters, already in the form the
+    /// writer produces.
+    fn text(&mut self, max_bytes: u64, max_chars: usize, what: &str) -> Result<String> {
         let len = self.varint()?;
-        if len > MAX_NAME_BYTES {
-            return invalid("a name is too long");
+        if len > max_bytes {
+            return invalid(&format!("{what} is too long"));
         }
         let raw = self.bytes(len)?;
         let Ok(text) = std::str::from_utf8(raw) else {
-            return invalid("a name is not valid UTF-8");
+            return invalid(&format!("{what} is not valid UTF-8"));
         };
         // Only text that is already in the form the writer produces is accepted, so that an
         // accepted payload re-encodes to identical bytes.
-        if sanitize_text(text, MAX_NAME_CHARS) != text {
-            return invalid("a name is not in its sanitized form");
+        if sanitize_text(text, max_chars) != text {
+            return invalid(&format!("{what} is not in its sanitized form"));
         }
         Ok(text.to_owned())
+    }
+
+    fn name(&mut self) -> Result<String> {
+        self.text(MAX_NAME_BYTES, MAX_NAME_CHARS, "a name")
+    }
+
+    fn comment(&mut self) -> Result<String> {
+        self.text(MAX_COMMENT_BYTES, MAX_COMMENT_CHARS, "a comment")
     }
 }
 
@@ -247,30 +284,90 @@ fn read_markers(r: &mut Reader<'_>, bounds: Bounds) -> Result<Markers> {
         if list.iter().any(|m| m.id == id) {
             return invalid("a marker id repeats");
         }
-        let position = r.varint()?;
-        if position >= limit {
+        let flags = r.byte()?;
+        if flags & !MARKER_FLAG_PAIR != 0 {
+            return invalid("a reserved marker flag bit is set");
+        }
+        let number = r.varint()?;
+        let number = u32::try_from(number).or_else(|_| invalid("a marker number does not fit"))?;
+        if number == 0 {
+            return invalid("a marker number is 0");
+        }
+        let colour = r.byte()?;
+        if colour >= MARKER_COLOURS {
+            return invalid("a marker colour is out of range");
+        }
+        let first = r.varint()?;
+        if first >= limit {
             return invalid("a marker is beyond the capture");
         }
-        list.push(Marker {
+        let shape = if flags & MARKER_FLAG_PAIR != 0 {
+            let second = r.varint()?;
+            if second >= limit {
+                return invalid("a marker is beyond the capture");
+            }
+            if second < first {
+                return invalid("a pair ends before it starts");
+            }
+            Shape::Interval {
+                start: first,
+                end: second,
+            }
+        } else {
+            Shape::Point(first)
+        };
+        let marker = Marker {
             id,
-            position,
-            name: r.name()?,
-        });
+            number,
+            colour,
+            comment: r.comment()?,
+            shape,
+        };
+        if list
+            .iter()
+            .any(|m| m.kind() == marker.kind() && m.number == marker.number)
+        {
+            return invalid("a marker number repeats within its kind");
+        }
+        list.push(marker);
     }
-    let mut selected = [None, None];
-    for slot in &mut selected {
+    let last_id = r.varint()?;
+    let last_id = u32::try_from(last_id).or_else(|_| invalid("the last marker id does not fit"))?;
+    if list.iter().any(|m| m.id > last_id) {
+        return invalid("the last marker id is below an id in use");
+    }
+    let mut next = [0_u32; 2];
+    for (slot, kind) in next.iter_mut().zip([Kind::Single, Kind::Pair]) {
         let value = r.varint()?;
-        if value == 0 {
-            continue;
+        let value =
+            u32::try_from(value).or_else(|_| invalid("a next marker number does not fit"))?;
+        let highest = list
+            .iter()
+            .filter(|m| m.kind() == kind)
+            .map(|m| m.number)
+            .max()
+            .unwrap_or(0);
+        if value == 0 || value <= highest {
+            return invalid("a next marker number is not above the numbers in use");
         }
-        let id = u32::try_from(value.saturating_sub(1))
-            .or_else(|_| invalid("a selected marker id does not fit"))?;
-        if !list.iter().any(|m| m.id == id) {
-            return invalid("a selected marker does not exist");
-        }
-        *slot = Some(id);
+        *slot = value;
     }
-    Ok(Markers::restore(list, selected))
+    let origin = r.varint()?;
+    if origin >= limit {
+        return invalid("the time origin is beyond the capture");
+    }
+    let selected = match r.varint()? {
+        0 => None,
+        value => {
+            let id = u32::try_from(value.saturating_sub(1))
+                .or_else(|_| invalid("the selected marker id does not fit"))?;
+            if !list.iter().any(|m| m.id == id) {
+                return invalid("the selected marker does not exist");
+            }
+            Some(id)
+        }
+    };
+    Ok(Markers::restore(list, selected, origin, last_id, next))
 }
 
 /// Reads a payload belonging to a capture with the given `bounds`.
@@ -288,7 +385,7 @@ pub fn decode(payload: &[u8], bounds: Bounds) -> Result<Decoded> {
         return Ok(Decoded::Newer);
     }
     if version != VERSION {
-        return invalid("the section version is not 1");
+        return invalid("the section version is not 2");
     }
     let presentation = read_presentation(&mut r, bounds)?;
     let markers = read_markers(&mut r, bounds)?;

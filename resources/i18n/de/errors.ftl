@@ -51,6 +51,7 @@ error-storage-invalid_channel_count = Die Anzahl der Kanäle wird nicht unterst�
 error-storage-invalid_gap = Eine Lücke in der Aufnahme wurde fehlerhaft beschrieben. Alles bisher Aufgenommene bleibt erhalten. Bitte melden Sie es mit der Protokolldatei.
 error-storage-invalid_limits = Die Speicher- oder Größenbegrenzungen sind ungültig. Öffnen Sie die Einstellungen und geben Sie gültige Werte ein.
 error-storage-invalid_pixels = Die Ansicht konnte in dieser Breite nicht gezeichnet werden. Ändern Sie die Fenstergröße oder den Zoom und versuchen Sie es erneut.
+error-storage-cancelled = Der Vorgang wurde abgebrochen. Es wurde nichts geändert.
 error-storage-invalid_restore = Die gespeicherte Aufnahme hält die Regeln für Aufnahmen nicht ein und kann nicht geöffnet werden. Wenn Sie eine Sicherungskopie der Datei haben, öffnen Sie stattdessen diese.
 error-storage-invalid_sample_rate = Die Abtastrate muss größer als null sein. Geben Sie eine gültige Abtastrate ein.
 error-storage-invalid_window = Der anzuzeigende Teil der Aufnahme ist ungültig. Wählen Sie einen Bereich, dessen Anfang vor seinem Ende liegt.

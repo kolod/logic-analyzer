@@ -237,6 +237,49 @@ impl ViewWindow {
         .clamp(limits)
     }
 
+    /// The window of the same length whose centre is `sample`, as near as the capture allows (a
+    /// window never extends beyond the capture).
+    #[must_use]
+    pub fn centre_on(self, limits: &WindowLimits, sample: u64) -> Self {
+        Self {
+            start: sample.saturating_sub(self.length / 2),
+            length: self.length,
+        }
+        .clamp(limits)
+    }
+
+    /// The window that shows the samples from `a` to `b` (in either order) with a margin of
+    /// `margin_px` pixels on each side, so that something `margin_px` wide drawn beside each end
+    /// fits. Where the capture ends before the margin does, that side gets what the capture has.
+    /// Never narrower than the zoom limit allows.
+    ///
+    /// The margin is in pixels, so it depends on the zoom it produces: with `n = b - a` samples and
+    /// `W` pixels, the window of `L` samples has `margin_px · L / W` samples of margin on each
+    /// side and `L = n + 2 · margin_px · L / W`, that is `L = n · W / (W - 2 · margin_px)`.
+    #[must_use]
+    pub fn fit_range(limits: &WindowLimits, a: u64, b: u64, margin_px: u32) -> Self {
+        let (low, high) = (a.min(b), a.max(b));
+        let span = high.saturating_sub(low);
+        let pixels = u64::from(limits.pixels);
+        let room = pixels.saturating_sub(u64::from(margin_px).saturating_mul(2));
+        if room == 0 || span == 0 {
+            return Self::zoom_to(limits, low, high);
+        }
+        // Rounded up, so the margin is never a hair under `margin_px`.
+        let wanted = u128::from(span)
+            .saturating_mul(u128::from(pixels))
+            .div_ceil(u128::from(room));
+        let length = u64::try_from(wanted)
+            .unwrap_or(u64::MAX)
+            .max(limits.min_length());
+        let margin = length.saturating_sub(span) / 2;
+        Self {
+            start: low.saturating_sub(margin),
+            length,
+        }
+        .clamp(limits)
+    }
+
     /// Moves the window, if needed, so that `sample` is visible (centred when it was outside).
     #[must_use]
     pub fn reveal(self, limits: &WindowLimits, sample: u64) -> Self {
