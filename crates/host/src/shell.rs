@@ -623,6 +623,8 @@ impl Shell {
         let result = catch_unwind(AssertUnwindSafe(|| self.execute(&mut working, command)));
         match result {
             Ok(Ok(Executed::Changed(changes))) => {
+                // A marker that is gone cannot be dragged any more.
+                let changes = changes | marker_ops::drop_stale_drag(&mut working);
                 if !changes.is_empty() {
                     working.version = working.version.saturating_add(1);
                     working.versions.bump(changes);

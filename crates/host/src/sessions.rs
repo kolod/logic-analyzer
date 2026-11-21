@@ -460,6 +460,7 @@ impl Shell {
         state.markers = markers;
         state.placement = None;
         state.snap_zoom = None;
+        state.drag = None;
         let (decoder_extras, decoder_notices) =
             self.apply_decoder_sections(state, deco_section, dann_section, bounds);
         extras.extend(decoder_extras);

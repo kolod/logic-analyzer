@@ -201,6 +201,24 @@ pub(crate) fn restore_view(state: &mut State) {
     state.follow_latest = saved.follow_latest;
 }
 
+/// Ends a drag whose marker is gone (removed, joined into a pair, replaced by a session that was
+/// opened meanwhile), and puts back the view an automatic zoom replaced if nothing else needs it.
+/// The changes it made, none if the drag was fine.
+pub(crate) fn drop_stale_drag(state: &mut State) -> Changes {
+    if !state
+        .drag
+        .is_some_and(|(id, _)| state.markers.get(id).is_none())
+    {
+        return Changes::NONE;
+    }
+    state.drag = None;
+    if state.placement.is_some() || state.snap_zoom.is_none() {
+        return Changes::MARKERS;
+    }
+    restore_view(state);
+    Changes::MARKERS | Changes::WINDOW
+}
+
 /// Whether a command moves or zooms the view by the user's hand (an automatic zoom is then no
 /// longer the view to put back: the view is the user's).
 pub(crate) fn changes_window_by_hand(command: &Command) -> bool {

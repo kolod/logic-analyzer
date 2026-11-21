@@ -207,6 +207,47 @@ fn dragging_an_end_of_a_pair_past_the_other_swaps_the_roles_and_the_host_says_wh
 // ---- removing and selecting -------------------------------------------------------------------
 
 #[test]
+fn a_drag_ends_when_its_marker_is_removed_or_joined_into_a_pair() {
+    let (_dir, mut shell) = shell_with_capture("cmd-drag-gone");
+    let other = place_single(&mut shell, 100);
+    let drag = |shell: &mut Shell, id: u32| {
+        done(
+            shell,
+            Command::MoveMarkerEnd {
+                id,
+                end: End::Point,
+                pointer: over(310),
+            },
+        );
+        assert_eq!(shell.state().drag, Some((id, End::Point)));
+    };
+    // Removed.
+    let id = place_single(&mut shell, 300);
+    drag(&mut shell, id);
+    done(&mut shell, Command::RemoveMarker(id));
+    assert_eq!(shell.state().drag, None, "removed");
+    check(&shell);
+    // Joined into a pair (the dragged one is a half of it).
+    let id = place_single(&mut shell, 300);
+    drag(&mut shell, id);
+    done(
+        &mut shell,
+        Command::MakePair {
+            first: id,
+            second: other,
+        },
+    );
+    assert_eq!(shell.state().drag, None, "joined");
+    check(&shell);
+    // Everything removed.
+    let id = place_single(&mut shell, 300);
+    drag(&mut shell, id);
+    done(&mut shell, Command::RemoveAllMarkers);
+    assert_eq!(shell.state().drag, None, "all removed");
+    check(&shell);
+}
+
+#[test]
 fn removing_keeps_the_numbering_and_the_rest() {
     let (_dir, mut shell) = shell_with_capture("cmd-remove");
     let a = place_single(&mut shell, 100);
