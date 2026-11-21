@@ -139,7 +139,8 @@ impl<'a> Panel<'a> {
         };
         let mut summary = entry.time_a.clone();
         if let (Some(end), Some(duration)) = (&entry.time_b, &entry.duration) {
-            summary = format!("{summary} \u{2192} {end}  \u{394} {duration}");
+            // The times on one line, the delta on the next.
+            summary = format!("{summary} \u{2192} {end}\n\u{394} {duration}");
             if let Some(frequency) = &entry.frequency {
                 summary = format!("{summary}  ({frequency})");
             }
