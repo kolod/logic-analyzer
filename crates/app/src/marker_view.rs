@@ -176,7 +176,6 @@ impl<'a> Panel<'a> {
 
     fn row_of(&self, marker: &Marker) -> Element<'static, Message> {
         let id = marker.id;
-        let selected = self.state.markers.selected == Some(id);
         let colour = self.variant.marker(marker.colour);
         let name = self
             .text_of(id)
@@ -208,11 +207,7 @@ impl<'a> Panel<'a> {
             swatch(colour, false, press.clone()),
             // A press on the marker selects it and opens or closes its actions.
             button(label)
-                .style(if selected {
-                    button::primary
-                } else {
-                    button::text
-                })
+                .style(button::text)
                 .width(Fill)
                 .padding(3)
                 .on_press_maybe(press),
@@ -401,12 +396,18 @@ impl<'a> Panel<'a> {
             if self.open == Some(marker.id) {
                 block = block.push(self.actions_of(marker));
             }
-            list = list.push(
-                container(block)
-                    .padding(4)
-                    .width(Fill)
-                    .style(container::bordered_box),
-            );
+            // The selected marker is told by a stronger outline, not by a background.
+            let selected = state.markers.selected == Some(marker.id);
+            list = list.push(container(block).padding(4).width(Fill).style(
+                move |theme: &Theme| {
+                    let mut style = container::bordered_box(theme);
+                    if selected {
+                        style.border.color = theme.palette().primary;
+                        style.border.width = 2.0;
+                    }
+                    style
+                },
+            ));
         }
         list.into()
     }

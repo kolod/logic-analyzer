@@ -72,6 +72,7 @@ pointer and selects the marker.
 - The two buttons share the width of the view in one line, with a gap below them. A new marker gets the next of the eight colours (colour 0 for the first, and round again after the eighth).
 - The buttons are at the top and always visible. The one of the kind being placed is shown pressed; pressing
   it again cancels.
+- The selected marker has a thicker outline in the accent colour (its row has no background of its own).
 - One row per marker, in the order of `ordered()`: the kind's mark icon, the name, a colour swatch (opens
   the colours), the comment (truncated; full text in the tooltip), the time (a single) or the duration and
   the frequency (a pair). There is no `⋯` button and no bin: a click on the row selects the marker (and
@@ -80,7 +81,7 @@ pointer and selects the marker.
 - Making a pair: the action "Make a pair" of a single marker (enabled when there is another single marker)
   closes the list and shows "Click the second single marker. Esc cancels." at the top of the view; the
   next click on a single marker other than the first, in the list or on its mark or line in the signal view, sends `MakePair` (nothing is selected or dragged in the view meanwhile). While it waits, the rows of pairs
-  and of the first marker are shaded and ignore clicks. Esc, or the loss of the first marker, cancels.
+  and of the first marker are shaded and ignore clicks, and in the signal view their lines and marks are drawn faint (30 %). Esc, or the loss of the first marker, cancels.
 - Empty list: the text "No markers. Use the buttons above to add one."
 
 ## The action list (a click on the row and the right click on a mark)

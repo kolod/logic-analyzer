@@ -353,7 +353,13 @@ impl SignalView<'_> {
         let scale = (size.width - GUTTER).max(1.0) / self.plan.pixels.max(1) as f32;
         let inside = |x: f32| x > GUTTER - 40.0 && x < size.width + 40.0;
         for marker in &self.plan.markers {
-            let colour = self.variant.marker(marker.colour);
+            let mut colour = self.variant.marker(marker.colour);
+            // While the other half of a pair is chosen, what cannot be chosen is shaded.
+            if let Some(first) = self.joining
+                && (marker.id == first || matches!(marker.shape, PlanShape::Interval { .. }))
+            {
+                colour.a = marker_marks::SHADED_ALPHA;
+            }
             let ends: Vec<(f32, End)> = match marker.shape {
                 PlanShape::Point { x } => vec![(GUTTER + x as f32 * scale, End::Point)],
                 PlanShape::Interval { start_x, end_x } => vec![

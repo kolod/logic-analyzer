@@ -26,6 +26,8 @@ pub const SQUARE_HEIGHT: f32 = 14.0;
     expect(dead_code, reason = "the gap that MARK_MARGIN_PX of the host includes")
 )]
 pub const GAP: f32 = 4.0;
+/// How opaque a marker is while it cannot be chosen (the other half of a pair is being chosen).
+pub const SHADED_ALPHA: f32 = 0.3;
 /// The width of a solid marker line.
 pub const LINE_WIDTH: f32 = 1.0;
 /// The width of the line of the selected marker.
@@ -166,7 +168,11 @@ pub fn draw_mark(frame: &mut Frame, x: f32, bottom: f32, end: End, colour: Color
     frame.fill_text(iced::widget::canvas::Text {
         content: text,
         position: number_centre(x, bottom, end),
-        color: crate::theme::channel_button_text(colour),
+        // As faint as the mark, when it is shaded.
+        color: Color {
+            a: colour.a,
+            ..crate::theme::channel_button_text(colour)
+        },
         size: iced::Pixels(size),
         align_x: iced::alignment::Horizontal::Center.into(),
         align_y: iced::alignment::Vertical::Center,
