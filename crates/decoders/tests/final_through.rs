@@ -40,6 +40,7 @@ static DESCRIPTOR: Descriptor = Descriptor {
     input: Input::Signals,
     outputs: &["held"],
     generator: false,
+    lane_rows: 3,
 };
 
 /// What a test decoder says about its progress.

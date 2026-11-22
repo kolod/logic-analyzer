@@ -56,26 +56,38 @@ period from the signal (see "Synchronising").
 
 ## What it produces
 
-| What | Lane | Overlay |
-|------|------|---------|
-| start, repeated start, stop | a point (`Start`, `Repeated start`, `Stop`) | a dot on SDA |
-| every sampled bit, acknowledge included | | an arrow on SCL at the rising edge (the text is the bit, or ACK/NAK) |
-| an address | a range from the first bit to the acknowledge edge: `Address 0x50 (write)` (for 10 bits, both bytes) | |
-| a data byte | a range: `Data 0x12` | |
-| an acknowledge bit | a point `ACK` or `NAK` (an error where it is one) | |
-| a transaction | a range from its start to its stop: `Write to 0x50` or `Read from 0x50`, named after its first part | |
+The lane has two bands of solid blocks (feature 016, `specs/016-i2c-lane-blocks/contracts/i2c-lane.md`).
+`T` is the bus period; a bit occupies the period centred on the rising edge of SCL at which it is read
+(`T / 2` rounded down before the edge, the rest after it). Blocks of the upper band do not overlap (the
+earlier is cut where the later begins).
 
-Marks on the signals name no colour: they take the colour of their signal. Errors, in red:
+| What | Band | Where | Colour | Text |
+|------|------|-------|--------|------|
+| start | upper | from half a period before the falling edge of SDA to the block after it (at least half a period after the edge; the clock may fall late) | blue | `Start` |
+| repeated start | upper | from the end of the block before it (the acknowledge) to the block after it (at least half a period after the falling edge of SDA) | blue | `Repeated start` |
+| an address | upper | the eight bits (for 10 bits, a block for each byte, both naming the address) | orange (write), yellow (read) | `Address 0x50 (write)` |
+| a data byte | upper | the eight bits | orange (write), yellow (read) | `Data 0x12` |
+| an acknowledge bit | upper | the one period of the bit | green (ACK), red (NAK) | `ACK`, `NAK` |
+| stop | upper | from the end of the last block (at most `T`) to the rising edge of SDA | blue | `Stop` |
+| a transaction | lower | from the start of its start block to the end of its stop block | green, red if it has an error | `Write to 0x50: 0x12 0x34` or `Read from 0x50: 0x01`, named after its first part, with the data bytes that went over the bus (a bar between the parts at a repeated start, a cut sign when they are too many for the text); the interface shows the shorter `Write to 0x50` when the long text does not fit |
+
+A block shows its text only if all of it fits. On the signals: a dot on SDA at every start and stop and an
+arrow on SCL at the rising edge of every bit (the text is the bit, or ACK/NAK); marks on the signals name
+no colour: they take the colour of their signal. The controller's NAK of the last byte it reads is a red
+NAK block but is not an error, and the packet stays green.
+
+Errors (a block with a heavy outline; the packet is red when any of them is in it):
 
 | Error | Where |
 |-------|-------|
-| `Address 0x50 not acknowledged`, `Data 0x12 not acknowledged` | the acknowledge point |
-| `Byte cut short after 3 bits` | from the first bit that was read to the stop, the start that cut it, or the end of the capture |
-| `Empty transaction: no address` | a start followed by a stop with no clock pulse between them |
-| `Samples lost here` | the gap, when a transaction was in progress |
+| `Address 0x50 not acknowledged`, `Data 0x12 not acknowledged` | the text of the SCL arrow of the acknowledge bit; the NAK block is red |
+| `Byte cut short after 3 bits` | an upper block over the bits that were read, in the colour of its byte |
+| `Empty transaction: no address` | the packet block of a start followed by a stop with no clock pulse between them |
+| `Samples lost here` | a red upper block over the gap, when a transaction was in progress |
 
 A transaction that is not finished when the capture ends (or when samples were lost, or a start cut a
-byte) is drawn as a range to that point, `Incomplete transaction`, which is **not** an error.
+byte) is a packet block to the end of its last block, `Incomplete transaction`: grey while nothing in it
+was an error, red if something was.
 
 ## Options
 

@@ -380,10 +380,14 @@ impl Shell {
         let mut dann_section: Option<&Section> = None;
         let layout = layout_tag();
         let mut heights: Vec<(u8, u16)> = Vec::new();
+        let mut decoder_heights: Vec<(u32, u16)> = Vec::new();
         for section in session.extras() {
             if Some(&section.tag) == layout.as_ref() {
                 match crate::layout_section::decode(&section.payload, bounds.channels) {
-                    Ok(crate::layout_section::Decoded::Heights(list)) => heights = list,
+                    Ok(crate::layout_section::Decoded::Heights { channels, decoders }) => {
+                        heights = channels;
+                        decoder_heights = decoders;
+                    }
                     Ok(crate::layout_section::Decoded::Newer) => {
                         // Kept untouched; the capture shows with automatic heights.
                         extras.push(section.clone());
@@ -463,6 +467,12 @@ impl Shell {
         state.drag = None;
         let (decoder_extras, decoder_notices) =
             self.apply_decoder_sections(state, deco_section, dann_section, bounds);
+        // The heights of the lanes of the instances that were restored.
+        for (instance, height) in decoder_heights {
+            if state.decoders.instance(instance).is_some() {
+                state.presentation.set_decoder_height(instance, height);
+            }
+        }
         extras.extend(decoder_extras);
         notices |= decoder_notices;
         state.session_extras = extras;

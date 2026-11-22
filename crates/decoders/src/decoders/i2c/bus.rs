@@ -14,14 +14,19 @@
 //!   set-up pulse of it). The bit is the level SDA had at the rising edge. Nine bits are a byte and
 //!   its acknowledge.
 //!
+//! The lane is written as blocks (`specs/016-i2c-lane-blocks/contracts/i2c-lane.md`): the parts of a
+//! packet in the upper band, each on the bit cells of the bus period, and the whole packet in the
+//! lower band. A block of the upper band is held until the next one is known, so that the earlier is
+//! cut where the later begins and none overlaps.
+//!
 //! All arithmetic is checked or saturating and nothing is indexed.
 
 use la_storage::Gap;
 
 use super::items::{self, Event};
 use super::text::{self, Display};
-use crate::input::{Level, SignalReader};
-use crate::model::{Annotation, Kind, Target, Text};
+use crate::input::{Edge, Level, SignalReader};
+use crate::model::{Annotation, Kind, Style, Target, Text};
 use crate::run::{DecodeError, Sink};
 
 /// The most edges one call looks at (research R2), so that a call takes milliseconds.
@@ -41,12 +46,19 @@ struct Pending {
     high: u16,
     /// The rising edge of SCL of the first bit of the header byte.
     first: u64,
+    /// The rising edge of SCL of its eighth bit.
+    last: u64,
+    /// The rising edge of SCL of its acknowledge bit.
+    ack: u64,
 }
 
 /// The transaction in progress.
 #[derive(Debug, Clone, Copy)]
 struct Transaction {
-    start: u64,
+    /// Where the block of the whole packet begins (the beginning of its start block).
+    from: u64,
+    /// A part of it was an error (a NAK that is one, a byte cut short, lost samples).
+    errored: bool,
     /// The next byte is an address (after a start or a repeated start).
     expect_address: bool,
     /// The address of the first part, once known.
@@ -73,9 +85,23 @@ enum Kind10 {
         read: bool,
         ten_bit: bool,
         start: u64,
+        /// The header byte of a 10-bit address, whose low byte this is.
+        header: Option<Pending>,
     },
     /// A data byte.
     Data,
+}
+
+/// A block of the upper band waiting for the one after it.
+#[derive(Debug, Clone)]
+struct Held {
+    from: u64,
+    to: u64,
+    /// A start: it reaches the block after it, whatever lies between (the clock may fall late).
+    stretch: bool,
+    text: Text,
+    style: Style,
+    error: bool,
 }
 
 /// The byte in progress.
@@ -84,6 +110,8 @@ struct Byte {
     value: u16,
     count: u8,
     first: u64,
+    /// The rising edge of SCL of the last bit read.
+    last: u64,
 }
 
 /// The bus state machine.
@@ -105,7 +133,23 @@ pub struct Bus {
     transaction: Option<Transaction>,
     byte: Byte,
     pulse: Option<Pulse>,
+    /// The number of positions of the capture (blocks are cut at its end).
+    length: u64,
+    /// The block of the upper band that waits for the next one.
+    held: Option<Held>,
+    /// Where the last block of the upper band ended.
+    last_end: u64,
+    /// The data bytes of the transaction in progress as they are shown in its block (the bytes after
+    /// an address, with a bar where a repeated start separates two parts), as many as fit in an
+    /// argument of a text.
+    data_text: String,
+    /// More bytes went over the bus than `data_text` holds.
+    data_cut: bool,
 }
+
+/// The longest `data_text`, in bytes, leaving room for the sign that says it is cut (an argument of
+/// a text is at most 64 bytes).
+const DATA_TEXT_LIMIT: usize = 54;
 
 fn put(
     sink: &mut Sink,
@@ -145,7 +189,169 @@ impl Bus {
             transaction: None,
             byte: Byte::default(),
             pulse: None,
+            length: u64::MAX,
+            held: None,
+            last_end: 0,
+            data_text: String::new(),
+            data_cut: false,
         }
+    }
+
+    /// Adds a data byte, as shown, to the text of the transaction's block.
+    fn note_data(&mut self, shown: &str) {
+        let separator = usize::from(!self.data_text.is_empty());
+        if self.data_cut
+            || self
+                .data_text
+                .len()
+                .saturating_add(separator)
+                .saturating_add(shown.len())
+                > DATA_TEXT_LIMIT
+        {
+            self.data_cut = true;
+            return;
+        }
+        if separator == 1 {
+            self.data_text.push(' ');
+        }
+        self.data_text.push_str(shown);
+    }
+
+    /// The data of the transaction that ended, for its block, and the state ready for the next one.
+    fn take_data(&mut self) -> Option<String> {
+        let mut text = std::mem::take(&mut self.data_text);
+        if std::mem::take(&mut self.data_cut) {
+            text.push_str(" \u{2026}");
+        }
+        (!text.is_empty()).then_some(text)
+    }
+
+    /// Half a bus period, rounded down: how far a bit's cell reaches before its rising edge.
+    fn before(&self) -> u64 {
+        self.period / 2
+    }
+
+    /// The rest of the bus period: how far it reaches after the rising edge.
+    fn after(&self) -> u64 {
+        self.period.saturating_sub(self.before())
+    }
+
+    /// The block of a bit read at the rising edge `at`: `(from, to)`.
+    fn cell(&self, at: u64) -> (u64, u64) {
+        (
+            at.saturating_sub(self.before()),
+            at.saturating_add(self.after()),
+        )
+    }
+
+    /// Writes a block to the lane, cut at the end of the capture; nothing for an empty one.
+    fn emit_block(
+        &self,
+        sink: &mut Sink,
+        from: u64,
+        to: u64,
+        ts: (Text, Style),
+        error: bool,
+    ) -> Result<(), DecodeError> {
+        let to = to.min(self.length);
+        if from >= to {
+            return Ok(());
+        }
+        put(
+            sink,
+            Kind::Range {
+                start: from,
+                end: to,
+            },
+            Target::Lane,
+            ts,
+            error,
+        )
+    }
+
+    /// A block of the upper band: the one before it is cut where this one begins and written.
+    fn push_part(
+        &mut self,
+        sink: &mut Sink,
+        from: u64,
+        to: u64,
+        ts: (Text, Style),
+        error: bool,
+    ) -> Result<(), DecodeError> {
+        self.push(sink, from, to, ts, error, false)
+    }
+
+    /// A start or a repeated start: as `push_part`, and it will be stretched to the block after it.
+    fn push_start(
+        &mut self,
+        sink: &mut Sink,
+        from: u64,
+        to: u64,
+        ts: (Text, Style),
+    ) -> Result<(), DecodeError> {
+        self.push(sink, from, to, ts, false, true)
+    }
+
+    fn push(
+        &mut self,
+        sink: &mut Sink,
+        from: u64,
+        to: u64,
+        (text, style): (Text, Style),
+        error: bool,
+        stretch: bool,
+    ) -> Result<(), DecodeError> {
+        if let Some(held) = self.held.take() {
+            // A block is cut where the next begins; a start also reaches it when it lies further on.
+            let end = if held.stretch {
+                from.max(held.from)
+            } else {
+                held.to.min(from)
+            };
+            self.emit_block(sink, held.from, end, (held.text, held.style), held.error)?;
+        }
+        self.last_end = to;
+        self.held = Some(Held {
+            from,
+            to,
+            stretch,
+            text,
+            style,
+            error,
+        });
+        Ok(())
+    }
+
+    /// Writes the block that is waiting (nothing follows it).
+    fn release(&mut self, sink: &mut Sink) -> Result<(), DecodeError> {
+        if let Some(held) = self.held.take() {
+            self.emit_block(
+                sink,
+                held.from,
+                held.to,
+                (held.text, held.style),
+                held.error,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// The header byte of a 10-bit address whose low byte never came: its blocks, as far as they go.
+    fn flush_header(&mut self, sink: &mut Sink) -> Result<(), DecodeError> {
+        let Some(transaction) = &mut self.transaction else {
+            return Ok(());
+        };
+        let Some(header) = transaction.pending.take() else {
+            return Ok(());
+        };
+        let shown = self.display.address(header.high << 8, false, true);
+        let (from, to) = (
+            header.first.saturating_sub(self.before()),
+            header.last.saturating_add(self.after()),
+        );
+        self.push_part(sink, from, to, text::address(false, shown), false)?;
+        let (from, to) = self.cell(header.ack);
+        self.push_part(sink, from, to, text::acknowledge(true), false)
     }
 
     /// Everything before this position has been processed.
@@ -166,6 +372,7 @@ impl Bus {
         target: u64,
         sink: &mut Sink,
     ) -> Result<(), DecodeError> {
+        self.length = reader.length();
         if self.cursor >= target {
             return Ok(());
         }
@@ -245,42 +452,56 @@ impl Bus {
         to: u64,
         sink: &mut Sink,
     ) -> Result<(), DecodeError> {
+        // Edges of one sample are processed SCL first, whatever the order of the roles of the
+        // descriptor (which is the order the two lists are shown in): an SDA edge waits for an SCL
+        // edge of the same sample.
+        let mut waiting: Option<Edge> = None;
         for edge in reader.edges(from, to) {
-            // An edge at the first position after a gap compares with an unknown level.
-            if self.resynced_at == Some(edge.position) {
-                continue;
+            if let Some(held) = waiting.take() {
+                if edge.position == held.position && edge.role == "scl" {
+                    self.edge(edge, sink)?;
+                    self.edge(held, sink)?;
+                    continue;
+                }
+                self.edge(held, sink)?;
             }
-            match edge.role {
-                "scl" => self.scl_edge(edge.position, edge.rising, sink)?,
-                "sda" => self.sda_edge(edge.position, edge.rising, sink)?,
-                _ => {}
+            if edge.role == "sda" {
+                waiting = Some(edge);
+            } else {
+                self.edge(edge, sink)?;
             }
         }
+        if let Some(held) = waiting {
+            self.edge(held, sink)?;
+        }
         Ok(())
+    }
+
+    /// One edge of one of the two lines.
+    fn edge(&mut self, edge: Edge, sink: &mut Sink) -> Result<(), DecodeError> {
+        // An edge at the first position after a gap compares with an unknown level.
+        if self.resynced_at == Some(edge.position) {
+            return Ok(());
+        }
+        match edge.role {
+            "scl" => self.scl_edge(edge.position, edge.rising, sink),
+            "sda" => self.sda_edge(edge.position, edge.rising, sink),
+            _ => Ok(()),
+        }
     }
 
     /// Samples were lost: what is in progress ends (as an error where something was in progress)
     /// and the bus must be found idle again.
     fn gap_begins(&mut self, at: u64, end: u64, sink: &mut Sink) -> Result<(), DecodeError> {
-        if let Some(transaction) = self.transaction.take() {
-            put(
-                sink,
-                Kind::Range { start: at, end },
-                Target::Lane,
-                text::gap(),
-                true,
-            )?;
-            if transaction.address.is_some() {
-                put(
-                    sink,
-                    Kind::Range {
-                        start: transaction.start,
-                        end: at,
-                    },
-                    Target::Lane,
-                    text::incomplete(),
-                    false,
-                )?;
+        if self.transaction.is_some() {
+            self.flush_header(sink)?;
+            self.push_part(sink, at, end, text::gap(), true)?;
+            self.release(sink)?;
+            if let Some(transaction) = self.transaction.take() {
+                if transaction.address.is_some() {
+                    // Lost samples are an error: the packet in progress is red.
+                    self.emit_block(sink, transaction.from, at, text::incomplete(true), true)?;
+                }
             }
         }
         self.byte = Byte::default();
@@ -293,48 +514,46 @@ impl Bus {
     }
 
     /// The pass ends at `at`: what is in progress is shown as it is (a byte that was begun is cut
-    /// short, the transaction is unfinished, which is not an error).
+    /// short, the transaction is unfinished: red if it already had an error, else grey).
     ///
     /// # Errors
     ///
     /// The limit of the sink was reached.
-    pub fn flush(&mut self, at: u64, sink: &mut Sink) -> Result<(), DecodeError> {
-        let Some(transaction) = self.transaction.take() else {
-            return Ok(());
-        };
-        self.cut_byte(at, sink)?;
+    pub fn flush(&mut self, _at: u64, sink: &mut Sink) -> Result<(), DecodeError> {
+        if self.transaction.is_none() {
+            return self.release(sink);
+        }
+        self.flush_header(sink)?;
+        let read = self.transaction.is_some_and(|t| t.read);
+        let cut = self.cut_byte(read, sink)?;
+        self.release(sink)?;
         self.pulse = None;
-        if transaction.address.is_some() {
-            put(
-                sink,
-                Kind::Range {
-                    start: transaction.start,
-                    end: at,
-                },
-                Target::Lane,
-                text::incomplete(),
-                false,
-            )?;
+        if let Some(transaction) = self.transaction.take() {
+            if transaction.address.is_some() {
+                let to = self.last_end.max(transaction.from.saturating_add(1));
+                self.emit_block(
+                    sink,
+                    transaction.from,
+                    to,
+                    text::incomplete(transaction.errored || cut),
+                    transaction.errored || cut,
+                )?;
+            }
         }
         Ok(())
     }
 
-    /// A byte that was begun and not finished ends at `at`: an error over the bits that were read.
-    fn cut_byte(&mut self, at: u64, sink: &mut Sink) -> Result<(), DecodeError> {
+    /// A byte that was begun and not finished is a block over the bits that were read (an error);
+    /// returns whether there was one.
+    fn cut_byte(&mut self, read: bool, sink: &mut Sink) -> Result<bool, DecodeError> {
         let byte = std::mem::take(&mut self.byte);
         if byte.count == 0 {
-            return Ok(());
+            return Ok(false);
         }
-        put(
-            sink,
-            Kind::Range {
-                start: byte.first,
-                end: at,
-            },
-            Target::Lane,
-            text::byte_cut(byte.count),
-            true,
-        )
+        let from = byte.first.saturating_sub(self.before());
+        let to = byte.last.saturating_add(self.after());
+        self.push_part(sink, from, to, text::byte_cut(byte.count, read), true)?;
+        Ok(true)
     }
 
     fn update_idle(&mut self, at: u64) {
@@ -390,27 +609,24 @@ impl Bus {
             return Ok(());
         }
         self.synced = true;
+        self.flush_header(sink)?;
         // Between bytes a start inside a transaction is a repeated start; in the middle of a byte
         // it cuts the byte short and begins a new transaction.
         let between_bytes = self.byte.count == 0;
         if !between_bytes {
-            self.cut_byte(at, sink)?;
+            let read = self.transaction.is_some_and(|t| t.read);
+            let cut = self.cut_byte(read, sink)?;
             if let Some(old) = self.transaction.take() {
                 if old.address.is_some() {
-                    put(
-                        sink,
-                        Kind::Range {
-                            start: old.start,
-                            end: at,
-                        },
-                        Target::Lane,
-                        text::incomplete(),
-                        false,
-                    )?;
+                    let to = self.last_end.max(old.from.saturating_add(1));
+                    let bad = old.errored || cut;
+                    self.emit_block(sink, old.from, to, text::incomplete(bad), bad)?;
                 }
             }
         }
         self.byte = Byte::default();
+        let mut from = at.saturating_sub(self.before());
+        let to = at.saturating_add(self.after());
         let repeated = match &mut self.transaction {
             Some(transaction) if between_bytes => {
                 transaction.expect_address = true;
@@ -418,11 +634,23 @@ impl Bus {
             }
             _ => false,
         };
+        // A start with no stop before it (a repeated start, as when a memory is read) begins where the
+        // block before it, the acknowledge, ends.
+        if repeated && self.last_end < from {
+            from = self.last_end;
+        }
         let (text, style) = if repeated {
+            // The data before and after a repeated start are told apart by a bar.
+            if !self.data_text.is_empty() && !self.data_cut {
+                self.data_text.push_str(" |");
+            }
             text::repeated_start()
         } else {
+            self.data_text.clear();
+            self.data_cut = false;
             self.transaction = Some(Transaction {
-                start: at,
+                from,
+                errored: false,
                 expect_address: true,
                 address: None,
                 first_read: false,
@@ -433,7 +661,7 @@ impl Bus {
             });
             text::start()
         };
-        put(sink, Kind::Point { at }, Target::Lane, (text, style), false)?;
+        self.push_start(sink, from, to, (text, style))?;
         let kind = if repeated {
             items::REPEATED_START
         } else {
@@ -455,19 +683,30 @@ impl Bus {
     }
 
     fn stop(&mut self, at: u64, sink: &mut Sink) -> Result<(), DecodeError> {
-        let Some(transaction) = self.transaction.take() else {
+        if self.transaction.is_none() {
             // A stop with nothing to stop (before the first start, or after a stop).
+            return Ok(());
+        }
+        self.flush_header(sink)?;
+        let Some(transaction) = self.transaction.take() else {
             return Ok(());
         };
         let cut = self.byte.count > 0;
-        self.cut_byte(at, sink)?;
+        self.cut_byte(transaction.read, sink)?;
         let direction = match (transaction.address, transaction.read) {
             (None, _) => items::UNKNOWN,
             (Some(_), true) => items::READ,
             (Some(_), false) => items::WRITE,
         };
         sink.emit(Event::condition(items::STOP, direction).item(at, at.saturating_add(1)))?;
-        put(sink, Kind::Point { at }, Target::Lane, text::stop(), false)?;
+        // The stop block: the period that ends at the rising edge of SDA, but not before the end of
+        // the block before it.
+        let mut from = self.last_end.max(at.saturating_sub(self.period));
+        if from >= at {
+            from = at.saturating_sub(self.period);
+        }
+        // The stop block waits for what follows: a start less than a period later cuts it short.
+        self.push_part(sink, from, at, text::stop(), false)?;
         put(
             sink,
             Kind::Point { at },
@@ -475,14 +714,13 @@ impl Bus {
             text::event_dot(text::stop_text()),
             false,
         )?;
+        let bad = transaction.errored || cut;
+        let data = self.take_data();
         if let Some(address) = transaction.address {
-            put(
+            self.emit_block(
                 sink,
-                Kind::Range {
-                    start: transaction.start,
-                    end: at.saturating_add(1),
-                },
-                Target::Lane,
+                transaction.from,
+                at,
                 text::transaction(
                     transaction.first_read,
                     self.display.address(
@@ -490,21 +728,17 @@ impl Bus {
                         transaction.first_read,
                         transaction.first_ten_bit,
                     ),
+                    data,
+                    bad,
                 ),
-                false,
+                bad,
             )?;
-        } else if !cut {
+        } else if cut {
+            // A byte that was an address was cut short by the stop.
+            self.emit_block(sink, transaction.from, at, text::incomplete(true), true)?;
+        } else {
             // A start and a stop with no clock pulse between them.
-            put(
-                sink,
-                Kind::Range {
-                    start: transaction.start,
-                    end: at.saturating_add(1),
-                },
-                Target::Lane,
-                text::empty(),
-                true,
-            )?;
+            self.emit_block(sink, transaction.from, at, text::empty(), true)?;
         }
         Ok(())
     }
@@ -515,6 +749,7 @@ impl Bus {
             if self.byte.count == 0 {
                 self.byte.first = pulse.at;
             }
+            self.byte.last = pulse.at;
             self.byte.value = (self.byte.value << 1) | u16::from(pulse.bit);
             self.byte.count = self.byte.count.saturating_add(1);
             return put(
@@ -531,18 +766,17 @@ impl Bus {
         // The ninth bit: the acknowledge (low is ACK).
         let ack = !pulse.bit;
         let byte = std::mem::take(&mut self.byte);
-        put(
-            sink,
-            Kind::Edge {
-                at: pulse.at,
-                rising: true,
-            },
-            Target::Channel(self.scl_channel),
-            text::ack_arrow(ack),
-            false,
-        )?;
-        let Some(transaction) = &mut self.transaction else {
-            return Ok(());
+        let Some(mut transaction) = self.transaction.take() else {
+            return put(
+                sink,
+                Kind::Edge {
+                    at: pulse.at,
+                    rising: true,
+                },
+                Target::Channel(self.scl_channel),
+                text::ack_arrow(ack),
+                false,
+            );
         };
         let item_end = pulse.at.saturating_add(1);
         let acknowledgement = if ack { items::ACK } else { items::NAK };
@@ -553,6 +787,7 @@ impl Bus {
                 read: false,
                 ten_bit: true,
                 start: pending.first,
+                header: Some(pending),
             }
         } else if transaction.expect_address {
             let header = byte.value >> 3 == 0b1_1110;
@@ -567,6 +802,7 @@ impl Bus {
                     read: false,
                     ten_bit: true,
                     start: byte.first,
+                    header: None,
                 }
             } else if let (true, true, Some(known)) = (header, read, transaction.ten_bit_address) {
                 if known >> 8 == high {
@@ -576,6 +812,7 @@ impl Bus {
                         read: true,
                         ten_bit: true,
                         start: byte.first,
+                        header: None,
                     }
                 } else {
                     Kind10::Address {
@@ -583,6 +820,7 @@ impl Bus {
                         read,
                         ten_bit: false,
                         start: byte.first,
+                        header: None,
                     }
                 }
             } else {
@@ -591,25 +829,33 @@ impl Bus {
                     read,
                     ten_bit: false,
                     start: byte.first,
+                    header: None,
                 }
             }
         } else {
             Kind10::Data
         };
-        let (error, point) = match what {
+        let byte_from = byte.first.saturating_sub(self.before());
+        let byte_to = byte.last.saturating_add(self.after());
+        let (ack_from, ack_to) = self.cell(pulse.at);
+        // The error text of an unacknowledged bit goes on the arrow of that bit.
+        let (error, arrow) = match what {
             Kind10::Header { high } => {
                 transaction.pending = Some(Pending {
                     high,
                     first: byte.first,
+                    last: byte.last,
+                    ack: pulse.at,
                 });
                 transaction.expect_address = false;
-                (false, text::acknowledge(true))
+                (false, text::ack_arrow(true))
             }
             Kind10::Address {
                 address,
                 read,
                 ten_bit,
                 start,
+                header,
             } => {
                 transaction.expect_address = false;
                 transaction.read = read;
@@ -622,13 +868,18 @@ impl Bus {
                     transaction.ten_bit_address = Some(address);
                 }
                 let shown = self.display.address(address, read, ten_bit);
-                put(
+                if let Some(header) = header {
+                    // The header byte of a 10-bit address and its acknowledge, now that the address is known.
+                    let from = header.first.saturating_sub(self.before());
+                    let to = header.last.saturating_add(self.after());
+                    self.push_part(sink, from, to, text::address(read, shown.clone()), false)?;
+                    let (from, to) = self.cell(header.ack);
+                    self.push_part(sink, from, to, text::acknowledge(true), false)?;
+                }
+                self.push_part(
                     sink,
-                    Kind::Range {
-                        start,
-                        end: item_end,
-                    },
-                    Target::Lane,
+                    byte_from,
+                    byte_to,
                     text::address(read, shown.clone()),
                     false,
                 )?;
@@ -643,26 +894,27 @@ impl Bus {
                     }
                     .item(start, item_end),
                 )?;
-                let point = if ack {
-                    text::acknowledge(true)
-                } else {
-                    text::address_nak(shown)
-                };
-                (!ack, point)
+                self.push_part(sink, ack_from, ack_to, text::acknowledge(ack), !ack)?;
+                (
+                    !ack,
+                    if ack {
+                        text::ack_arrow(true)
+                    } else {
+                        text::address_nak(shown)
+                    },
+                )
             }
             Kind10::Data => {
                 // A NAK is an error after a byte written to a target; the controller's own NAK of
                 // a byte it reads is how a read ends.
                 let error = !ack && !transaction.read;
                 let shown = self.display.byte(byte.value);
-                put(
+                self.note_data(&shown);
+                self.push_part(
                     sink,
-                    Kind::Range {
-                        start: byte.first,
-                        end: item_end,
-                    },
-                    Target::Lane,
-                    text::data(shown.clone()),
+                    byte_from,
+                    byte_to,
+                    text::data(transaction.read, shown.clone()),
                     false,
                 )?;
                 sink.emit(
@@ -680,19 +932,27 @@ impl Bus {
                     }
                     .item(byte.first, item_end),
                 )?;
-                let point = if !error {
-                    text::acknowledge(ack)
-                } else {
-                    text::data_nak(shown)
-                };
-                (error, point)
+                self.push_part(sink, ack_from, ack_to, text::acknowledge(ack), error)?;
+                (
+                    error,
+                    if error {
+                        text::data_nak(shown)
+                    } else {
+                        text::ack_arrow(ack)
+                    },
+                )
             }
         };
+        transaction.errored |= error;
+        self.transaction = Some(transaction);
         put(
             sink,
-            Kind::Point { at: pulse.at },
-            Target::Lane,
-            point,
+            Kind::Edge {
+                at: pulse.at,
+                rising: true,
+            },
+            Target::Channel(self.scl_channel),
+            arrow,
             error,
         )
     }

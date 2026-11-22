@@ -3,6 +3,8 @@
 //! The presentation is the user's choice, kept apart from the signal data: the capture is never
 //! changed by it. Names are user text: they are sanitized for display and never translated.
 
+use std::collections::BTreeMap;
+
 use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
 
 /// The number of colours of the built-in palette.
@@ -44,6 +46,12 @@ pub struct ChannelStyle {
 pub struct Presentation {
     /// One entry per channel of the capture, in display order.
     pub channels: Vec<ChannelStyle>,
+    /// The height the user gave the lane of a decoder instance (absent: automatic), by instance.
+    /// Kept in the session file with the heights of the channels.
+    pub decoder_heights: BTreeMap<u32, u16>,
+    /// Where the user put the lane of a decoder instance among the shown lanes, by instance (absent:
+    /// after the channels, in stack order). Like the order of the channels, not saved.
+    pub decoder_slots: BTreeMap<u32, u16>,
 }
 
 impl Presentation {
@@ -60,7 +68,10 @@ impl Presentation {
                 height: 0,
             })
             .collect();
-        Self { channels }
+        Self {
+            channels,
+            ..Self::default()
+        }
     }
 
     /// Makes the list exactly `channel_count` long. What the user set for the channels that stay
@@ -146,6 +157,29 @@ impl Presentation {
         for style in &mut self.channels {
             style.height = 0;
         }
+        self.decoder_heights.clear();
+    }
+
+    /// Sets the height of the lane of a decoder instance: 0 is automatic, anything else is limited to
+    /// `MIN_HEIGHT..=MAX_HEIGHT`.
+    pub fn set_decoder_height(&mut self, instance: u32, height: u16) {
+        if height == 0 {
+            self.decoder_heights.remove(&instance);
+        } else {
+            self.decoder_heights
+                .insert(instance, height.clamp(MIN_HEIGHT, MAX_HEIGHT));
+        }
+    }
+
+    /// Forgets what the user chose for the lane of a decoder instance that is gone.
+    pub fn forget_decoder(&mut self, instance: u32) {
+        self.decoder_heights.remove(&instance);
+        self.decoder_slots.remove(&instance);
+    }
+
+    /// Makes every lane of a decoder follow the channels again.
+    pub fn clear_decoder_slots(&mut self) {
+        self.decoder_slots.clear();
     }
 
     /// Moves the entry at position `from` of the order to position `to`. `false` if either is

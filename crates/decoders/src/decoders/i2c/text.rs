@@ -10,6 +10,10 @@ const MSG_REPEATED_START: &str = "ann-i2c-repeated-start";
 const MSG_STOP: &str = "ann-i2c-stop";
 const MSG_TRANSACTION_WRITE: &str = "ann-i2c-transaction-write";
 const MSG_TRANSACTION_READ: &str = "ann-i2c-transaction-read";
+/// The same with the data of the transaction after the address; the interface shows it when it fits
+/// and the plain one (the key without `-long`) when it does not.
+const MSG_TRANSACTION_WRITE_LONG: &str = "ann-i2c-transaction-write-long";
+const MSG_TRANSACTION_READ_LONG: &str = "ann-i2c-transaction-read-long";
 const MSG_ADDRESS_WRITE: &str = "ann-i2c-address-write";
 const MSG_ADDRESS_READ: &str = "ann-i2c-address-read";
 const MSG_DATA: &str = "ann-i2c-data";
@@ -22,25 +26,39 @@ const MSG_DATA_NAK: &str = "ann-i2c-error-data-nak";
 const MSG_EMPTY: &str = "ann-i2c-error-empty";
 const MSG_GAP: &str = "ann-i2c-error-gap";
 
-/// The colours of the lane (indexes of the palette). The marks on the signals name none: they take
+/// The colours of the blocks of the lane (indexes of the palette of eight annotation colours, see
+/// `specs/016-i2c-lane-blocks/contracts/i2c-lane.md`). The marks on the signals name none: they take
 /// the colour of their signal.
-const COLOUR_TRANSACTION: u8 = 5;
-const COLOUR_ADDRESS: u8 = 0;
-const COLOUR_DATA: u8 = 1;
-const COLOUR_EVENT: u8 = 3;
-const COLOUR_ACK: u8 = 2;
-/// The colour of errors.
-const COLOUR_ERROR: u8 = 4;
+const BLUE: u8 = 4;
+const YELLOW: u8 = 1;
+const ORANGE: u8 = 6;
+const GREEN: u8 = 2;
+const RED: u8 = 0;
+const GREY: u8 = 7;
 
 fn message(key: &'static str, args: Vec<String>) -> Text {
     Text::Message { key, args }
 }
 
-fn lane(colour: u8, shape: Shape) -> Style {
+/// The style of a block of the upper band (a part of a packet).
+fn part(colour: u8) -> Style {
     Style {
         colour: Some(colour),
-        shape,
+        shape: Shape::Part,
     }
+}
+
+/// The style of a block of the lower band (a whole packet).
+fn whole(colour: u8) -> Style {
+    Style {
+        colour: Some(colour),
+        shape: Shape::Whole,
+    }
+}
+
+/// The colour of an address or data block: orange for a write, yellow for a read.
+const fn direction_colour(read: bool) -> u8 {
+    if read { YELLOW } else { ORANGE }
 }
 
 /// A style that leaves the colour to the signal the mark is on.
@@ -112,28 +130,19 @@ impl Display {
     }
 }
 
-/// Start, as a lane point.
+/// Start, as a blue block.
 pub fn start() -> (Text, Style) {
-    (
-        message(MSG_START, Vec::new()),
-        lane(COLOUR_EVENT, Shape::Flag),
-    )
+    (message(MSG_START, Vec::new()), part(BLUE))
 }
 
-/// Repeated start, as a lane point.
+/// Repeated start, as a blue block.
 pub fn repeated_start() -> (Text, Style) {
-    (
-        message(MSG_REPEATED_START, Vec::new()),
-        lane(COLOUR_EVENT, Shape::Flag),
-    )
+    (message(MSG_REPEATED_START, Vec::new()), part(BLUE))
 }
 
-/// Stop, as a lane point.
+/// Stop, as a blue block.
 pub fn stop() -> (Text, Style) {
-    (
-        message(MSG_STOP, Vec::new()),
-        lane(COLOUR_EVENT, Shape::Flag),
-    )
+    (message(MSG_STOP, Vec::new()), part(BLUE))
 }
 
 /// The dot on SDA for a start, a repeated start or a stop: the text of the event, the colour of SDA.
@@ -156,41 +165,40 @@ pub fn stop_text() -> Text {
     message(MSG_STOP, Vec::new())
 }
 
-/// The range of a whole transaction, named after its first part.
-pub fn transaction(read: bool, address: String) -> (Text, Style) {
-    let key = if read {
-        MSG_TRANSACTION_READ
-    } else {
-        MSG_TRANSACTION_WRITE
+/// The block of a whole transaction, named after its first part and with the data that went over the
+/// bus when there are some: red when it has an error.
+pub fn transaction(read: bool, address: String, data: Option<String>, bad: bool) -> (Text, Style) {
+    let (key, args) = match (read, data) {
+        (true, Some(data)) => (MSG_TRANSACTION_READ_LONG, vec![address, data]),
+        (false, Some(data)) => (MSG_TRANSACTION_WRITE_LONG, vec![address, data]),
+        (true, None) => (MSG_TRANSACTION_READ, vec![address]),
+        (false, None) => (MSG_TRANSACTION_WRITE, vec![address]),
     };
-    (
-        message(key, vec![address]),
-        lane(COLOUR_TRANSACTION, Shape::Bar),
-    )
+    (message(key, args), whole(if bad { RED } else { GREEN }))
 }
 
-/// The range of an address byte.
+/// The block of an address byte (eight bits).
 pub fn address(read: bool, value: String) -> (Text, Style) {
     let key = if read {
         MSG_ADDRESS_READ
     } else {
         MSG_ADDRESS_WRITE
     };
-    (message(key, vec![value]), lane(COLOUR_ADDRESS, Shape::Bar))
+    (message(key, vec![value]), part(direction_colour(read)))
 }
 
-/// The range of a data byte.
-pub fn data(value: String) -> (Text, Style) {
-    (
-        message(MSG_DATA, vec![value]),
-        lane(COLOUR_DATA, Shape::Bar),
-    )
+/// The block of a data byte (eight bits).
+pub fn data(read: bool, value: String) -> (Text, Style) {
+    (message(MSG_DATA, vec![value]), part(direction_colour(read)))
 }
 
-/// The point of an acknowledge bit.
+/// The block of an acknowledge bit: green for an ACK, red for a NAK.
 pub fn acknowledge(ack: bool) -> (Text, Style) {
     let key = if ack { MSG_ACK } else { MSG_NAK };
-    (message(key, Vec::new()), lane(COLOUR_ACK, Shape::Dot))
+    (
+        message(key, Vec::new()),
+        part(if ack { GREEN } else { RED }),
+    )
 }
 
 /// The arrow on SCL at a sampled data bit: the bit, as literal text.
@@ -207,47 +215,41 @@ pub fn ack_arrow(ack: bool) -> (Text, Style) {
     (message(key, Vec::new()), signal(Shape::Arrow))
 }
 
-/// The range of a transaction that was not finished (not an error).
-pub fn incomplete() -> (Text, Style) {
+/// The block of a transaction that was not finished: red when it already had an error, else grey.
+pub fn incomplete(bad: bool) -> (Text, Style) {
     (
         message(MSG_INCOMPLETE, Vec::new()),
-        lane(COLOUR_TRANSACTION, Shape::Bar),
+        whole(if bad { RED } else { GREY }),
     )
 }
 
-/// The error range of a byte that was cut short after `bits` bits.
-pub fn byte_cut(bits: u8) -> (Text, Style) {
+/// The error block of a byte that was cut short after `bits` bits, in the colour its byte would have.
+pub fn byte_cut(bits: u8, read: bool) -> (Text, Style) {
     (
         message(MSG_BYTE_CUT, vec![bits.to_string()]),
-        lane(COLOUR_ERROR, Shape::Bar),
+        part(direction_colour(read)),
     )
 }
 
-/// The error point of an address that was not acknowledged.
+/// The text of an address that was not acknowledged, on the arrow of its acknowledge bit.
 pub fn address_nak(address: String) -> (Text, Style) {
     (
         message(MSG_ADDRESS_NAK, vec![address]),
-        lane(COLOUR_ERROR, Shape::Cross),
+        signal(Shape::Arrow),
     )
 }
 
-/// The error point of a written byte that was not acknowledged.
+/// The text of a written byte that was not acknowledged, on the arrow of its acknowledge bit.
 pub fn data_nak(value: String) -> (Text, Style) {
-    (
-        message(MSG_DATA_NAK, vec![value]),
-        lane(COLOUR_ERROR, Shape::Cross),
-    )
+    (message(MSG_DATA_NAK, vec![value]), signal(Shape::Arrow))
 }
 
-/// The error range of a transaction with no address.
+/// The error block of a transaction with no address.
 pub fn empty() -> (Text, Style) {
-    (
-        message(MSG_EMPTY, Vec::new()),
-        lane(COLOUR_ERROR, Shape::Bar),
-    )
+    (message(MSG_EMPTY, Vec::new()), whole(RED))
 }
 
-/// The error range of lost samples.
+/// The error block of lost samples.
 pub fn gap() -> (Text, Style) {
-    (message(MSG_GAP, Vec::new()), lane(COLOUR_ERROR, Shape::Bar))
+    (message(MSG_GAP, Vec::new()), part(RED))
 }

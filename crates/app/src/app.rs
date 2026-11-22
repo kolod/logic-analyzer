@@ -608,26 +608,6 @@ impl App {
         app
     }
 
-    /// The positions in the order of all channels (`MoveChannel`) for a lane dragged from the lane
-    /// `from` to the lane `to` of the lanes that are shown: the moved channel goes where the channel
-    /// of the target lane is.
-    fn presentation_move(&self, from: usize, to: usize) -> Option<(usize, usize)> {
-        let order: Vec<u8> = self
-            .shell
-            .state()
-            .presentation
-            .channels
-            .iter()
-            .map(|c| c.index)
-            .collect();
-        let position = |lane: usize| {
-            let channel = self.plan.channels.get(lane)?.channel;
-            order.iter().position(|c| *c == channel)
-        };
-        let (from, to) = (position(from)?, position(to)?);
-        (from != to).then_some((from, to))
-    }
-
     fn t(&self, key: &'static str) -> String {
         self.shell.text(&Key::from_static(key), &Args::new())
     }
@@ -1265,10 +1245,7 @@ impl App {
                     iced::widget::operation::select_all(NAME_EDITOR),
                 ])
             }
-            Message::MoveLane { from, to } => match self.presentation_move(from, to) {
-                Some((from, to)) => self.run(Command::MoveChannel { from, to }),
-                None => Task::none(),
-            },
+            Message::MoveLane { from, to } => self.run(Command::MoveLane { from, to }),
             Message::SidePanel(view) => self.run(Command::SetSidePanel(view)),
             Message::ChannelNameInput(text) => {
                 if let Some(edit) = &mut self.editing {
@@ -2148,36 +2125,6 @@ impl App {
                     .style(text::danger),
             );
         }
-        if let Some(selection) = &state.decoders.selection {
-            let details = &selection.details;
-            list = list.push(text(self.t("decoder-selected")).size(13));
-            list = list.push(text(details.text.clone()).size(13));
-            list = list.push(
-                text(
-                    localizer.message(
-                        &Key::from_static("decoder-detail-position"),
-                        &Args::new()
-                            .uint("first", details.start)
-                            .uint("second", details.end),
-                    ),
-                )
-                .size(12),
-            );
-            list = list.push(
-                text(localizer.message(
-                    &Key::from_static("decoder-detail-length"),
-                    &Args::new().text("value", &details.duration),
-                ))
-                .size(12),
-            );
-            if details.error {
-                list = list.push(
-                    text(self.t("decoder-detail-error"))
-                        .size(12)
-                        .style(text::danger),
-                );
-            }
-        }
         // No frame around the panel: each decoder has its own.
         container(scrollable(list))
             .width(Fill)
@@ -2269,32 +2216,15 @@ impl App {
         if folded {
             return block.into();
         }
-        block = block.push(
-            checkbox(instance.setup.lane_visible)
-                .label(self.t("decoder-lane-show"))
-                .size(14)
-                .on_toggle(move |visible| Message::Run(Command::ShowDecoderLane { id, visible })),
-        );
+        // The lane is always shown, and a pass runs by itself whenever a channel or an option
+        // changes: all that is left to offer is stopping one that runs.
         if !instance.ready {
             block = block.push(text(self.t("decoder-needs-channels")).size(12));
-        } else {
-            // Stop a pass that runs; run a new one when nothing does.
-            let running = instance.state == InstanceState::Running;
+        } else if instance.state == InstanceState::Running {
             block = block.push(
-                button(
-                    text(self.t(if running {
-                        "decoder-cancel"
-                    } else {
-                        "decoder-run"
-                    }))
-                    .size(12),
-                )
-                .padding([2, 8])
-                .on_press(Message::Run(if running {
-                    Command::CancelDecoder(id)
-                } else {
-                    Command::RunDecoder(id)
-                })),
+                button(text(self.t("decoder-cancel")).size(12))
+                    .padding([2, 8])
+                    .on_press(Message::Run(Command::CancelDecoder(id))),
             );
         }
         if let Some(entry) = entry {
@@ -2862,13 +2792,6 @@ impl App {
             cache: &self.cache,
             variant: self.variant,
             localizer: self.shell.localizer(),
-            selected: self
-                .shell
-                .state()
-                .decoders
-                .selection
-                .as_ref()
-                .map(|s| (s.instance, s.annotation)),
             editing: self.editing.is_some(),
             placement: self.shell.state().placement,
             preview: self.placement_preview,
@@ -3443,7 +3366,7 @@ mod tests {
         let name = app.shell.state().decoders.catalogue[0].name.clone();
         let _ = app.update(Message::Run(Command::AddDecoder { decoder: id }));
         let instance = app.shell.state().decoders.instances[0].id;
-        let properties = app.t("decoder-lane-show");
+        let properties = app.t("decoder-needs-channels");
         let find = |app: &App, label: &str| {
             let mut ui = iced_test::Simulator::with_size(
                 crate::fonts::settings(),
@@ -3897,14 +3820,10 @@ mod tests {
         let _turn = render_turn();
         let mut app = app_with_capture("lane-move");
         // Four lanes of the first four channels; all 32 channels are in the order.
-        assert_eq!(app.presentation_move(0, 3), Some((0, 3)));
-        assert_eq!(app.presentation_move(2, 2), None);
-        assert_eq!(app.presentation_move(0, 9), None);
         // Channel 3 goes to the top of the order: the lanes are now 3, 0, 1, 2.
         let _ = app.update(Message::Run(Command::MoveChannel { from: 3, to: 0 }));
-        assert_eq!(app.presentation_move(0, 3), Some((0, 3)));
-        assert_eq!(app.presentation_move(3, 0), Some((3, 0)));
-        let _ = app.update(Message::MoveLane { from: 3, to: 0 });
+        // The lane at the top is carried to the bottom of the four.
+        let _ = app.update(Message::MoveLane { from: 0, to: 3 });
         let order: Vec<u8> = app
             .shell
             .state()
@@ -3914,7 +3833,19 @@ mod tests {
             .take(4)
             .map(|c| c.index)
             .collect();
-        assert_eq!(order, [2, 3, 0, 1]);
+        assert_eq!(order, [0, 1, 2, 3]);
+        // A move outside the lanes does nothing.
+        let _ = app.update(Message::MoveLane { from: 0, to: 99 });
+        let again: Vec<u8> = app
+            .shell
+            .state()
+            .presentation
+            .channels
+            .iter()
+            .take(4)
+            .map(|c| c.index)
+            .collect();
+        assert_eq!(again, [0, 1, 2, 3]);
     }
 
     #[test]
@@ -5116,12 +5047,7 @@ mod tests {
                 iced::Size::new(280.0, 400.0),
                 app.decoders_panel(),
             );
-            for key in [
-                "panel-decoders",
-                "decoder-lane-show",
-                "decoder-run",
-                "decoder-state-finished",
-            ] {
+            for key in ["panel-decoders", "decoder-state-finished"] {
                 let label = app.t(key);
                 assert!(
                     ui.find(label.as_str()).is_ok() || key == "decoder-state-finished",

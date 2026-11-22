@@ -25,7 +25,8 @@ built and verified without capture hardware, using the virtual device.
 | 013 | `013-driver-weact` (merged) | WeAct LogicAnalyzer driver, same requirements. | 004 |
 | 014 | `014-gui-improvements` (merged) | Interface rework (no change to the host API contract of decoding or storage), in one feature or split in two when planning: see the list under "GUI improvements" below. | 006, 007, 008 |
 | 015 | `015-markers-rework` (merged) | Two kinds of marker, single (T) and pair (P), replacing the one kind of 006: lines with a pentagon-arrow or two squares, placed with the mouse and snapped to transitions, colours, comments, time origin, cutting and trimming the data, fit and scroll to a marker, duration and frequency of a pair; the Markers panel with two add buttons. | 006, 014 |
-| 016+ | as needed | More decoders (SPI, UART, 1-Wire, ...), raw data export, `.sr` import/export, packaging (Windows installer, `.deb`). | — |
+| 016 | `016-i2c-lane-blocks` | The lane of the I2C decoder as two bands of solid blocks: the parts of a packet (start, address, data, ack/nak, stop) above, the whole packet below, green or red; decoder API 1.2 (block shapes, rows of a lane). | 008 |
+| 017+ | as needed | More decoders (SPI, UART, 1-Wire, ...), raw data export, `.sr` import/export, packaging (Windows installer, `.deb`). | — |
 
 ## Notes on the order
 

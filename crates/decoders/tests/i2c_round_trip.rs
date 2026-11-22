@@ -163,31 +163,185 @@ fn ten_thousand_seeds() {
 // Planted errors, truncated captures and start-up (spec 008, user story 3, task T023).
 // ---------------------------------------------------------------------------------------------
 
-use common::i2c::Decoded;
+use common::i2c::{Decoded, GREEN, GREY, HALF, ORANGE, RED, YELLOW};
 use la_decoders::generators::i2c::{PlantedError, expected_errors};
 use la_decoders::model::{Item, Payload};
 
-/// The errors the decoder reported, in the form of the planted ones.
-fn reported(decoded: &Decoded) -> Vec<PlantedError> {
-    let mut list: Vec<PlantedError> = decoded
-        .lane()
-        .iter()
-        .filter(|e| e.error)
-        .map(|e| match e.key.as_str() {
+/// The errors the decoder reported, in the form of the planted ones: the text of an unacknowledged
+/// bit is on the arrow of that bit (SCL), a byte cut short is a block of the lane that ends where the
+/// next stop begins (or at the end of the capture, `length`). The red blocks that only repeat an error
+/// (the NAK block, the packet) are checked by [`check_packets`].
+fn reported(decoded: &Decoded, length: u64) -> Vec<PlantedError> {
+    let mut list: Vec<PlantedError> = Vec::new();
+    for e in decoded.overlay(SCL).iter().filter(|e| e.error) {
+        list.push(match e.key.as_str() {
             "ann-i2c-error-address-nak" => PlantedError::AddressNak { at: e.positions[0] },
             "ann-i2c-error-data-nak" => PlantedError::DataNak { at: e.positions[0] },
-            "ann-i2c-error-byte-cut" => PlantedError::ByteCut {
-                start: e.positions[0],
-                end: e.positions[1],
-            },
+            other => panic!(
+                "an error on an arrow that was not planted: {other} at {:?}",
+                e.positions
+            ),
+        });
+    }
+    let lane = decoded.lane();
+    for e in lane.iter().filter(|e| e.error) {
+        match e.key.as_str() {
+            "ann-i2c-error-byte-cut" => {
+                let end = lane
+                    .iter()
+                    .filter(|b| b.key == "ann-i2c-stop" && b.positions[1] > e.positions[0])
+                    .map(|b| b.positions[1])
+                    .min()
+                    .unwrap_or(length);
+                list.push(PlantedError::ByteCut {
+                    start: e.positions[0] + HALF,
+                    end,
+                });
+            }
+            // The blocks that repeat the error of a NAK or of a cut byte.
+            "ann-i2c-nak"
+            | "ann-i2c-transaction-write"
+            | "ann-i2c-transaction-read"
+            | "ann-i2c-transaction-write-long"
+            | "ann-i2c-transaction-read-long"
+            | "ann-i2c-incomplete" => {}
             other => panic!(
                 "an error that was not planted: {other} at {:?}",
                 e.positions
             ),
-        })
-        .collect();
+        }
+    }
     list.sort_by_key(PlantedError::position);
     list
+}
+
+/// SC-001: a packet block is red exactly when an error lies inside it, and green or grey otherwise;
+/// the controller's NAK that ends a read is red without being an error.
+fn check_packets(decoded: &Decoded, length: u64, seed: u64) {
+    let errors = reported(decoded, length);
+    for packet in decoded
+        .lane()
+        .iter()
+        .filter(|e| matches!(&e.block, Some((band, _)) if band == "whole"))
+    {
+        let (from, to) = (packet.positions[0], packet.positions[1]);
+        let inside = errors.iter().any(|e| {
+            let at = e.position();
+            at >= from && at < to
+        });
+        let (_, colour) = packet.block.clone().unwrap();
+        assert_eq!(
+            packet.error, inside,
+            "seed {seed}: the packet {from}..{to} has the wrong error flag"
+        );
+        let wanted = if inside {
+            RED
+        } else if packet.key == "ann-i2c-incomplete" {
+            GREY
+        } else {
+            GREEN
+        };
+        assert_eq!(colour, wanted, "seed {seed}: the packet {from}..{to}");
+    }
+}
+
+/// The blocks of the upper band that the items of a decode call for (research R2, `T` = 16): the
+/// address and data blocks and their acknowledge blocks, the starts and the stops. 10-bit addresses
+/// span two bytes in one item and are left to the hand-built tests.
+fn check_blocks(decoded: &Decoded, items: &[Item], seed: u64) {
+    let lane = decoded.lane();
+    // No two blocks of the upper band overlap, and each lies inside the packet block below it.
+    let mut parts: Vec<&common::i2c::Expected> = lane
+        .iter()
+        .filter(|e| matches!(&e.block, Some((band, _)) if band == "part"))
+        .collect();
+    parts.sort_by_key(|e| e.positions[0]);
+    for pair in parts.windows(2) {
+        assert!(
+            pair[0].positions[1] <= pair[1].positions[0],
+            "seed {seed}: {:?} overlaps {:?}",
+            pair[0].positions,
+            pair[1].positions
+        );
+    }
+    let packets: Vec<&common::i2c::Expected> = lane
+        .iter()
+        .filter(|e| matches!(&e.block, Some((band, _)) if band == "whole"))
+        .collect();
+    for block in &parts {
+        assert!(
+            packets
+                .iter()
+                .any(|w| w.positions[0] <= block.positions[0]
+                    && block.positions[1] <= w.positions[1]),
+            "seed {seed}: {:?} {} lies in no packet",
+            block.positions,
+            block.key
+        );
+    }
+    let has = |from: u64, to: u64, colour: u8, key: &str| {
+        lane.iter().any(|e| {
+            e.key == key
+                && e.positions == vec![from, to]
+                && e.block == Some(("part".to_owned(), colour))
+        })
+    };
+    for item in items {
+        let Payload::Bytes(b) = &item.payload else {
+            continue;
+        };
+        let ten_bit = b[3] & 1 == 1;
+        let colour = if b[1] == 1 { YELLOW } else { ORANGE };
+        match b[0] {
+            1 | 2 => {
+                let key = if b[0] == 1 {
+                    "ann-i2c-start"
+                } else {
+                    "ann-i2c-repeated-start"
+                };
+                assert!(
+                    lane.iter()
+                        .any(|e| e.key == key && e.positions[1] == item.start + HALF),
+                    "seed {seed}: no {key} block at {}",
+                    item.start
+                );
+            }
+            3 | 4 if !ten_bit => {
+                let key = if b[0] == 3 {
+                    if b[1] == 1 {
+                        "ann-i2c-address-read"
+                    } else {
+                        "ann-i2c-address-write"
+                    }
+                } else {
+                    "ann-i2c-data"
+                };
+                let ack = item.end - 1;
+                assert!(
+                    has(item.start - HALF, ack - HALF, colour, key),
+                    "seed {seed}: no {key} block for the item at {}",
+                    item.start
+                );
+                let ack_key = if b[2] == 1 {
+                    "ann-i2c-nak"
+                } else {
+                    "ann-i2c-ack"
+                };
+                let ack_colour = if b[2] == 1 { RED } else { GREEN };
+                assert!(
+                    has(ack - HALF, ack + HALF, ack_colour, ack_key),
+                    "seed {seed}: no {ack_key} block at {ack}"
+                );
+            }
+            5 => assert!(
+                lane.iter()
+                    .any(|e| e.key == "ann-i2c-stop" && e.positions[1] == item.start),
+                "seed {seed}: no stop block ending at {}",
+                item.start
+            ),
+            _ => {}
+        }
+    }
 }
 
 fn planted(setup: &Setup, seed: u64, length: u64) -> Vec<PlantedError> {
@@ -214,7 +368,9 @@ fn planted_errors_are_reported_where_they_were_planted_and_nowhere_else() {
             "seed {seed}"
         );
         let wanted = planted(&setup, seed, length as u64);
-        assert_eq!(reported(&decoded), wanted, "seed {seed}");
+        assert_eq!(reported(&decoded, length as u64), wanted, "seed {seed}");
+        check_packets(&decoded, length as u64, seed);
+        check_blocks(&decoded, &decoded.items, seed);
         total += wanted.len();
     }
     assert!(
@@ -259,7 +415,7 @@ fn a_capture_cut_at_any_point_gives_the_items_completed_before_it_and_no_other_e
             assert_eq!(decoded.items, items, "seed {seed} length {length}");
             // Every error is a planted one, or a byte cut short by the end of the capture.
             let wanted = planted(&setup, seed, length as u64);
-            for error in reported(&decoded) {
+            for error in reported(&decoded, length as u64) {
                 let cut_by_the_end =
                     matches!(error, PlantedError::ByteCut { end, .. } if end == length as u64);
                 assert!(
@@ -269,7 +425,7 @@ fn a_capture_cut_at_any_point_gives_the_items_completed_before_it_and_no_other_e
             }
             for error in &wanted {
                 assert!(
-                    reported(&decoded).contains(error),
+                    reported(&decoded, length as u64).contains(error),
                     "seed {seed} length {length}: {error:?} not reported"
                 );
             }
@@ -314,7 +470,7 @@ fn a_start_up_before_the_interface_is_set_up_leaves_no_trace_and_shifts_everythi
             "seed {seed}: something before the end of the start-up"
         );
         assert_eq!(
-            reported(&decoded),
+            reported(&decoded, length as u64),
             planted(&with, seed, length as u64),
             "seed {seed}"
         );
@@ -338,10 +494,11 @@ fn ten_bit_addresses_round_trip_with_and_without_errors() {
         let items = expected(&setup, seed, length as u64);
         assert_eq!(decoded.items, items, "seed {seed}");
         assert_eq!(
-            reported(&decoded),
+            reported(&decoded, length as u64),
             planted(&setup, seed, length as u64),
             "seed {seed}"
         );
+        check_packets(&decoded, length as u64, seed);
         ten_bit_items += items
             .iter()
             .filter(|i| matches!(&i.payload, Payload::Bytes(b) if b[0] == 3 && b[3] == 1))

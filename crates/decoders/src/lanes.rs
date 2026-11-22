@@ -199,6 +199,8 @@ struct Piece {
     last: u32,
     id: u64,
     error: bool,
+    /// The row a block of a band must be in (decoder API 1.2), `None` for any free row.
+    band: Option<usize>,
 }
 
 fn piece(entry: &Entry, window: &Window) -> Piece {
@@ -227,6 +229,7 @@ fn piece(entry: &Entry, window: &Window) -> Piece {
                 last,
                 id: entry.id,
                 error: annotation.error,
+                band: annotation.style.shape.band(),
             };
         }
     }
@@ -251,6 +254,7 @@ fn piece(entry: &Entry, window: &Window) -> Piece {
         last: column,
         id: entry.id,
         error: annotation.error,
+        band: annotation.style.shape.band(),
     }
 }
 
@@ -356,7 +360,10 @@ fn count_by_column(
 }
 
 /// First-fit packing of spans and marks into rows by column; what does not fit is counted in the
-/// dense cell of its first column.
+/// dense cell of its first column. A block of a band (`Part`, `Whole`) is not packed: it goes to the
+/// row of its band whatever the columns of its neighbours (the decoder keeps the blocks of a band from
+/// overlapping, and two that meet inside one column are told apart by their exact positions); a lane
+/// that has such blocks has all its rows even when a band is empty.
 fn pack(
     mut pieces: Vec<Piece>,
     rows: usize,
@@ -364,18 +371,30 @@ fn pack(
     dense: &mut BTreeMap<u32, (u64, u64)>,
 ) {
     pieces.sort_by_key(|p| (p.first, p.id));
+    let banded = pieces.iter().any(|p| p.band.is_some());
     // The last column used in each row, plus one (0 when the row is empty).
     let mut used: Vec<u32> = Vec::new();
+    fn open_row(used: &mut Vec<u32>, result: &mut Plan, at_least: usize) {
+        while used.len() <= at_least {
+            used.push(0);
+            result.rows.push(Vec::new());
+        }
+    }
     for p in pieces {
-        let row = used.iter().position(|end| *end <= p.first);
-        let row = match row {
-            Some(row) => Some(row),
-            None if used.len() < rows => {
-                used.push(0);
-                result.rows.push(Vec::new());
-                Some(used.len().saturating_sub(1))
+        let row = if let Some(band) = p.band {
+            let band = band.min(rows.saturating_sub(1));
+            open_row(&mut used, result, band);
+            Some(band)
+        } else {
+            match used.iter().position(|end| *end <= p.first) {
+                Some(row) => Some(row),
+                None if used.len() < rows => {
+                    let next = used.len();
+                    open_row(&mut used, result, next);
+                    Some(next)
+                }
+                None => None,
             }
-            None => None,
         };
         match row {
             Some(row) => {
@@ -385,6 +404,11 @@ fn pack(
                 }
             }
             None => add_dense(dense, p.first, 1, usize::from(p.error)),
+        }
+    }
+    if banded && !result.rows.is_empty() {
+        while result.rows.len() < rows {
+            result.rows.push(Vec::new());
         }
     }
 }

@@ -4,6 +4,8 @@
 //! list of decoders, the configuration dialog, the lane and the saved setup from it, so a new
 //! decoder needs nothing else (spec SC-012). Texts are referred to by static message keys.
 
+/// The most rows a decoder's lane can have.
+pub const MAX_LANE_ROWS: usize = 3;
 /// The most signal roles a decoder can have.
 pub const MAX_SIGNALS: usize = 16;
 /// The most options a decoder can have.
@@ -91,6 +93,9 @@ pub struct Descriptor {
     pub outputs: &'static [&'static str],
     /// Whether a generator exists for it.
     pub generator: bool,
+    /// The rows of spans and marks of its lane, 1 to [`MAX_LANE_ROWS`] (decoder API 1.2); a decoder that
+    /// draws blocks of the two bands says 2.
+    pub lane_rows: u8,
 }
 
 /// Whether `text` is a well-formed identifier: ASCII lowercase letters, digits, `.` and `_`, at
@@ -153,6 +158,9 @@ impl Descriptor {
         }
         if self.version == 0 {
             return Err("version starts at 1".to_owned());
+        }
+        if self.lane_rows == 0 || usize::from(self.lane_rows) > MAX_LANE_ROWS {
+            return Err(format!("the rows of the lane are 1 to {MAX_LANE_ROWS}"));
         }
         if self.signals.len() > MAX_SIGNALS {
             return Err(format!("more than {MAX_SIGNALS} signals"));

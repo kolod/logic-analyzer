@@ -40,9 +40,7 @@ impl Class {
         } else if matches!(
             key,
             "decoders-add"
-                | "decoder-run"
                 | "decoder-cancel"
-                | "decoder-lane-show"
                 | "decoder-source"
                 | "decoder-source-capture"
                 | "decoder-channel-none"

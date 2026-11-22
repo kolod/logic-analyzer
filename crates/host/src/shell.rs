@@ -1063,6 +1063,16 @@ impl Shell {
             Command::SetChannelHeight { channel, height } => {
                 edit_presentation(state, |p| p.set_height(channel, height))
             }
+            Command::SetDecoderLaneHeight { instance, height } => {
+                if state.decoders.instance(instance).is_none() {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                edit_presentation(state, |p| {
+                    p.set_decoder_height(instance, height);
+                    true
+                })
+            }
+            Command::MoveLane { from, to } => self.move_lane(state, from, to),
             Command::SetSidePanel(view) => {
                 state.side_panel = view;
                 state.settings.side_panel = Some(view.as_setting().to_owned());

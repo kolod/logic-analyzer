@@ -392,6 +392,7 @@ fn the_writer_is_deterministic_whatever_order_the_state_was_built_in() {
                     height: 0,
                 })
                 .collect(),
+            ..Presentation::default()
         }),
         markers,
         window: Some((1, 100)),

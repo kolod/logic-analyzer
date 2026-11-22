@@ -370,6 +370,8 @@ ann-i2c-stop = Stop
 ann-i2c-transaction-write = Write to { $value }
 # Annotation: a whole transaction that reads. $value is the address of the target, such as 0x50.
 ann-i2c-transaction-read = Read from { $value }
+ann-i2c-transaction-write-long = Write to { $value }: { $second }
+ann-i2c-transaction-read-long = Read from { $value }: { $second }
 # Annotation: the address byte of a write. $value is the address, such as 0x50.
 ann-i2c-address-write = Address { $value } (write)
 # Annotation: the address byte of a read. $value is the address, such as 0x50.
@@ -412,20 +414,14 @@ decoder-needs-channels = Choose the channels to start decoding.
 decoder-channel-none = (none)
 decoder-channel-unavailable = { $name } (not recorded)
 decoder-channels-unrecorded = A channel of this decoder is not recorded, so the decoder does not run.
-decoder-lane-show = Show the lane
 decoder-annotations = Annotations: { $number }
 decoder-incomplete = Incomplete results
-decoder-selected = Selected annotation
-decoder-detail-length = Length: { $value }
-decoder-detail-error = Reports a problem in the signal
-decoder-detail-position = Position: { $first } to { $second }
 
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Plant deliberate errors in the simulated signals
 decoder-generator-rate = About one byte in this many is cut short
 
 ### Decoders: running, cancelling and the memory limit
-decoder-run = Run again
 decoder-cancel = Cancel
 settings-decoder-memory = Memory limit of decoder results
 settings-decoder-memory-note = Shared by all decoders. Applies to the next pass.

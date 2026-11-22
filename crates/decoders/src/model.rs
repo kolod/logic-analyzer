@@ -33,6 +33,23 @@ pub enum Shape {
     Flag,
     /// A cross.
     Cross,
+    /// A range drawn as a solid block in the **upper** band of a lane (decoder API 1.2).
+    Part,
+    /// A range drawn as a solid block in the **lower** band of a lane (decoder API 1.2).
+    Whole,
+}
+
+impl Shape {
+    /// The row of a lane that a block shape belongs to (0 upper, 1 lower); `None` for the other shapes,
+    /// which are packed into any free row.
+    #[must_use]
+    pub const fn band(self) -> Option<usize> {
+        match self {
+            Self::Part => Some(0),
+            Self::Whole => Some(1),
+            _ => None,
+        }
+    }
 }
 
 /// How an annotation is drawn: an optional index into the fixed colour palette and a shape.
@@ -222,6 +239,10 @@ impl Annotation {
             }
         }
         if self.style.colour.is_some_and(|c| c >= COLOURS) {
+            return Err(Refusal::Style);
+        }
+        // A block of a band is a range; a point or an edge has nothing to fill.
+        if self.style.shape.band().is_some() && !matches!(self.kind, Kind::Range { .. }) {
             return Err(Refusal::Style);
         }
         match &self.text {

@@ -192,7 +192,7 @@ fn the_i2c_decoder_is_in_the_catalogue_and_reads_a_capture_of_a_bus() {
         .find(|c| c.id == ID)
         .expect("the decoder is registered");
     let roles: Vec<&str> = entry.signals.iter().map(|s| s.role.as_str()).collect();
-    assert_eq!(roles, ["scl", "sda"]);
+    assert_eq!(roles, ["sda", "scl"], "data first, then the clock");
     assert!(entry.has_generator);
 
     done(
@@ -229,6 +229,25 @@ fn the_i2c_decoder_is_in_the_catalogue_and_reads_a_capture_of_a_bus() {
     });
     assert_eq!(plan.lanes.len(), 1);
     assert_eq!(plan.lanes[0].name, "I2C");
+    // The lane has the two rows the decoder asks for: the parts of the packets above, whole packets
+    // below.
+    let rows = &plan.lanes[0].plan.rows;
+    assert_eq!(rows.len(), 2);
+    let shape_of = |cell: &la_decoders::lanes::Cell| match cell {
+        la_decoders::lanes::Cell::Span(s) => s.style.shape,
+        la_decoders::lanes::Cell::Mark(m) => m.style.shape,
+    };
+    assert!(
+        rows[0]
+            .iter()
+            .all(|c| shape_of(c) == la_decoders::model::Shape::Part)
+    );
+    assert!(
+        rows[1]
+            .iter()
+            .all(|c| shape_of(c) == la_decoders::model::Shape::Whole)
+    );
+    assert_eq!(rows[1].len(), 2);
     let overlay_channels: Vec<u8> = plan.overlays.iter().map(|o| o.channel).collect();
     assert!(overlay_channels.contains(&SCL) && overlay_channels.contains(&SDA));
 
@@ -420,16 +439,27 @@ fn ten_million_samples_decode_without_holding_the_interface() {
 // Errors on request through the generator options the application edits (spec 008, T027).
 // ---------------------------------------------------------------------------------------------
 
-/// The positions of the errors in the lane.
+/// The positions of the errors: the arrow of an unacknowledged bit that is an error (at its rising
+/// edge), and the first bit of a byte that was cut short (its block begins half a period of 16
+/// samples before it). The red blocks that repeat an error (the NAK block, the packet) are not
+/// counted twice.
 fn error_positions(shell: &Shell, id: u32) -> Vec<u64> {
     let results = shell.decoder_results(id).unwrap();
-    let mut list: Vec<u64> = results
-        .lane
+    let mut list: Vec<u64> = results.overlays[&SCL]
         .window(0, u64::MAX)
         .iter()
         .filter(|e| e.annotation.error)
         .map(|e| e.start())
         .collect();
+    for entry in results.lane.window(0, u64::MAX) {
+        let is_cut = matches!(
+            &entry.annotation.text,
+            Text::Message { key, .. } if *key == "ann-i2c-error-byte-cut"
+        );
+        if entry.annotation.error && is_cut {
+            list.push(entry.start() + 8);
+        }
+    }
     list.sort_unstable();
     list
 }
@@ -625,5 +655,42 @@ fn a_decoder_on_a_channel_that_is_not_recorded_does_not_run() {
     assert!(
         !instance.ready,
         "a decoder on a channel that is not recorded must wait"
+    );
+}
+
+/// The text of a block has a short form: the same message without `-long`.
+#[test]
+fn a_long_text_has_a_short_form_and_other_texts_have_none() {
+    use la_decoders::model::Text;
+    use la_host::decoders::{annotation_text, annotation_text_short};
+    let localizer = la_i18n::Localizer::new(la_i18n::Language::En);
+    let long = Text::Message {
+        key: "ann-i2c-transaction-write-long",
+        args: vec!["0x50".to_owned(), "0x12 0x34".to_owned()],
+    };
+    // The formatter wraps each argument in invisible isolating marks.
+    let plain = |text: String| -> String {
+        text.chars()
+            .filter(|c| !('\u{2066}'..='\u{2069}').contains(c))
+            .collect()
+    };
+    assert_eq!(
+        plain(annotation_text(&localizer, &long)),
+        "Write to 0x50: 0x12 0x34"
+    );
+    assert_eq!(
+        annotation_text_short(&localizer, &long)
+            .map(plain)
+            .as_deref(),
+        Some("Write to 0x50")
+    );
+    let plain = Text::Message {
+        key: "ann-i2c-transaction-read",
+        args: vec!["0x50".to_owned()],
+    };
+    assert_eq!(annotation_text_short(&localizer, &plain), None);
+    assert_eq!(
+        annotation_text_short(&localizer, &Text::Literal("x".into())),
+        None
     );
 }

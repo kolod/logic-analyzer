@@ -162,6 +162,7 @@ static ALL_KINDS: Descriptor = Descriptor {
     input: Input::Signals,
     outputs: &["byte"],
     generator: false,
+    lane_rows: 3,
 };
 static READER: Descriptor = Descriptor {
     id: "test.reader",
@@ -173,6 +174,7 @@ static READER: Descriptor = Descriptor {
     input: Input::Items("byte"),
     outputs: &[],
     generator: false,
+    lane_rows: 3,
 };
 
 fn registry() -> Registry {

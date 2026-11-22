@@ -11,7 +11,7 @@ use iced::widget::canvas::{Frame, Path, Stroke, Text};
 use iced::{Color, Pixels, Point, Size, Theme};
 use la_decoders::lanes::{Cell, DenseCell, MarkCell, Plan, SpanCell};
 use la_decoders::model::{Shape, Style, Target};
-use la_host::decoders::{AnnotationRef, annotation_text};
+use la_host::decoders::{AnnotationRef, annotation_text, annotation_text_short};
 use la_host::plan::FramePlan;
 use la_i18n::Localizer;
 
@@ -23,6 +23,32 @@ const TEXT_SIZE: f32 = 12.0;
 const PICK: f32 = 5.0;
 /// Height of the strip of dense cells at the bottom of a lane.
 const STRIP: f32 = 5.0;
+/// The width of the bar at the left edge of a decoder lane (that of a channel's colour bar).
+const LANE_BAR_WIDTH: f32 = crate::lane_layout::BAR_WIDTH;
+/// The palette index of the grey of that bar.
+const GREY_INDEX: u8 = 7;
+/// The margin above and below the rows of a decoder lane.
+const LANE_MARGIN: f32 = 3.0;
+/// The height of a row of a decoder lane that is as high as its rows need.
+const ROW_HEIGHT: f32 = 24.0;
+
+/// The height of each row of a lane `lane` high with `rows` rows and a strip of `strip` at the
+/// bottom: the rows share what the margins leave, so a higher lane gives higher rows and nothing is
+/// left over below the last one.
+#[must_use]
+pub fn row_height(lane: f32, rows: usize, strip: f32) -> f32 {
+    (lane - 2.0 * LANE_MARGIN - strip) / rows.max(1) as f32
+}
+
+/// The height of a decoder lane of `rows` rows when the user gave it none: just what its rows need,
+/// with a small margin above and below.
+#[must_use]
+pub fn fitting_height(rows: usize) -> u16 {
+    let height = 2.0 * LANE_MARGIN + rows.max(1) as f32 * ROW_HEIGHT;
+    // The height is a few dozen pixels: far inside the range of `u16`.
+    height as u16
+}
+
 /// Height of the area where an overlay draws, at the top of a channel lane.
 pub const OVERLAY_BAND: f32 = 14.0;
 
@@ -32,8 +58,6 @@ pub struct Look<'a> {
     pub variant: Variant,
     /// The language of the annotation texts.
     pub localizer: &'a Localizer,
-    /// The selected annotation, if any.
-    pub selected: Option<(u32, AnnotationRef)>,
     /// The theme (for the danger colour).
     pub theme: &'a Theme,
 }
@@ -92,6 +116,10 @@ fn draw_shape(frame: &mut Frame, shape: Shape, edge: Option<bool>, x: f32, y: f3
             );
             frame.fill_rectangle(Point::new(x, y - r), Size::new(r, r), colour);
         }
+        // A block narrower than a column is a thin filled bar of its colour.
+        Shape::Part | Shape::Whole => {
+            frame.fill_rectangle(Point::new(x - 1.0, y - r), Size::new(2.0, 2.0 * r), colour);
+        }
         Shape::Cross => {
             frame.stroke(
                 &Path::line(Point::new(x - r, y - r), Point::new(x + r, y + r)),
@@ -122,7 +150,7 @@ pub fn marks_legible(plan: &Plan, width: f32) -> bool {
         .rows
         .iter()
         .flatten()
-        .filter(|cell| matches!(cell, Cell::Mark(_)))
+        .filter(|cell| matches!(cell, Cell::Mark(m) if m.style.shape.band().is_none()))
         .count();
     marks as f32 * MIN_MARK_SPACING <= width
 }
@@ -147,6 +175,52 @@ pub fn span_label(text: &str, width: f32) -> Option<String> {
 }
 
 /// The left edge of a cell in pixels.
+/// The room a block keeps free at each end of its text, in logical pixels.
+const BLOCK_PADDING: f32 = 4.0;
+
+/// The text of a block `width` pixels wide: the whole text if all of it fits inside with a margin,
+/// else nothing (a block never shows a cut or an overflowing text).
+#[must_use]
+pub fn block_label(text: &str, width: f32) -> Option<String> {
+    // The invisible isolating marks the formatter puts around arguments take no room.
+    let visible = text
+        .chars()
+        .filter(|c| !('\u{2066}'..='\u{2069}').contains(c))
+        .count();
+    let needed = visible as f32 * CHAR_WIDTH + 2.0 * BLOCK_PADDING;
+    (!text.is_empty() && needed <= width).then(|| text.to_owned())
+}
+
+/// The relative luminance of a colour (WCAG 2).
+fn luminance(colour: Color) -> f32 {
+    let channel = |c: f32| {
+        if c <= 0.039_28 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(colour.r) + 0.7152 * channel(colour.g) + 0.0722 * channel(colour.b)
+}
+
+/// The contrast ratio of two colours (WCAG 2), from 1 to 21.
+#[must_use]
+pub fn contrast(a: Color, b: Color) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// The colour of a text on a `fill`: black or white, whichever reads better.
+#[must_use]
+pub fn contrast_text(fill: Color) -> Color {
+    let (black, white) = (Color::BLACK, Color::WHITE);
+    if contrast(fill, black) >= contrast(fill, white) {
+        black
+    } else {
+        white
+    }
+}
+
 fn left_of(cell: &Cell, scale: f32) -> f32 {
     match cell {
         Cell::Span(span) => GUTTER + span.x0 as f32 * scale,
@@ -162,18 +236,11 @@ fn fit(text: &str, max_chars: usize) -> String {
     format!("{kept}\u{2026}")
 }
 
-fn is_selected(look: &Look<'_>, instance: u32, target: Target, id: u64, start: u64) -> bool {
-    look.selected
-        .is_some_and(|(i, r)| i == instance && r.target == target && r.id == id && r.start == start)
-}
-
 /// How a span is placed among its neighbours.
 #[derive(Clone, Copy)]
 struct Placement {
     /// The colour of the signal it is on, for a span that names no colour.
     signal: Option<Color>,
-    /// Whether it is the selected annotation.
-    selected: bool,
     /// The left edge of the cell after it, which it must not reach into.
     right_limit: Option<f32>,
 }
@@ -189,7 +256,6 @@ fn draw_span(
 ) {
     let Placement {
         signal,
-        selected,
         right_limit,
     } = placement;
     let x0 = GUTTER + cell.x0 as f32 * scale;
@@ -211,14 +277,6 @@ fn draw_span(
             .with_color(colour)
             .with_width(if cell.error { 2.0 } else { 1.0 }),
     );
-    if selected {
-        frame.stroke(
-            &outline,
-            Stroke::default()
-                .with_color(look.theme.palette().text)
-                .with_width(2.0),
-        );
-    }
     if let Some(content) = span_label(&annotation_text(look.localizer, &cell.text), width) {
         frame.fill_text(Text {
             content,
@@ -231,12 +289,61 @@ fn draw_span(
     }
 }
 
+/// A block of a band (`Part`, `Whole`): a solid rectangle in the colour of its style, whatever the error
+/// flag says (an error has a heavier outline), with its text if all of it fits.
+fn draw_block(
+    frame: &mut Frame,
+    cell: &SpanCell,
+    top: f32,
+    height: f32,
+    scale: f32,
+    placement: Placement,
+    look: &Look<'_>,
+) {
+    let Placement { right_limit, .. } = placement;
+    let x0 = GUTTER + cell.x0 as f32 * scale;
+    let x1 = GUTTER + cell.x1 as f32 * scale;
+    let x1 = right_limit.map_or(x1, |limit| x1.min(limit.max(x0)));
+    let width = (x1 - x0).max(1.0);
+    let text_colour = look.theme.palette().text;
+    let fill = cell
+        .style
+        .colour
+        .map_or(text_colour, |index| look.variant.annotation(index));
+    frame.fill_rectangle(Point::new(x0, top), Size::new(width, height), fill);
+    let outline = Path::rectangle(Point::new(x0, top), Size::new(width, height));
+    frame.stroke(
+        &outline,
+        Stroke::default()
+            .with_color(Color {
+                a: if cell.error { 1.0 } else { 0.35 },
+                ..text_colour
+            })
+            .with_width(if cell.error { 2.0 } else { 1.0 }),
+    );
+    let full = annotation_text(look.localizer, &cell.text);
+    let label = block_label(&full, width).or_else(|| {
+        annotation_text_short(look.localizer, &cell.text)
+            .and_then(|short| block_label(&short, width))
+    });
+    if let Some(content) = label {
+        frame.fill_text(Text {
+            content,
+            position: Point::new(x0 + width / 2.0, top + height / 2.0),
+            color: contrast_text(fill),
+            size: Pixels(TEXT_SIZE),
+            align_x: iced::alignment::Horizontal::Center.into(),
+            align_y: Vertical::Center,
+            ..Text::default()
+        });
+    }
+}
+
 fn draw_mark(
     frame: &mut Frame,
     cell: &MarkCell,
     y: f32,
     scale: f32,
-    selected: bool,
     signal: Option<Color>,
     look: &Look<'_>,
 ) {
@@ -247,14 +354,6 @@ fn draw_mark(
     } else {
         colour_of(cell.style, cell.error, signal, look)
     };
-    if selected {
-        frame.stroke(
-            &Path::circle(Point::new(x, y), 7.0),
-            Stroke::default()
-                .with_color(look.theme.palette().text)
-                .with_width(1.5),
-        );
-    }
     draw_shape(frame, cell.style.shape, cell.edge, x, y, colour);
 }
 
@@ -283,9 +382,15 @@ pub fn draw_lanes(
         let top = lane_top(first_lane.saturating_add(index));
         let lane = lane_height(first_lane.saturating_add(index));
         let label_colour = look.theme.palette().text;
+        // The grey bar at the left edge, as the colour bar of a channel, so that the rows look alike.
+        frame.fill_rectangle(
+            Point::new(0.0, top),
+            Size::new(LANE_BAR_WIDTH, lane),
+            look.variant.annotation(GREY_INDEX),
+        );
         frame.fill_text(Text {
             content: fit(&decoder.name, 14),
-            position: Point::new(8.0, top + lane / 2.0),
+            position: Point::new(LANE_BAR_WIDTH + 6.0, top + lane / 2.0),
             color: label_colour,
             size: Pixels(TEXT_SIZE + 1.0),
             align_y: Vertical::Center,
@@ -293,18 +398,39 @@ pub fn draw_lanes(
         });
         let legible = marks_legible(&decoder.plan, plan.pixels as f32 * scale);
         let rows = decoder.plan.rows.len().max(1);
-        let usable = lane - STRIP - 6.0;
-        let row_height = (usable / rows as f32).min(24.0);
+        // The strip of dense cells takes room only where there are some to draw.
+        let strip = if legible && !decoder.plan.dense.is_empty() {
+            STRIP + 2.0
+        } else {
+            0.0
+        };
+        let row_height = row_height(lane, rows, strip);
         for (r, row) in decoder.plan.rows.iter().enumerate() {
-            let row_top = top + 3.0 + r as f32 * row_height;
+            let row_top = top + LANE_MARGIN + r as f32 * row_height;
             for (at, cell) in row.iter().enumerate() {
                 if !legible && matches!(cell, Cell::Mark(_)) {
+                    continue;
+                }
+                // A block of a band narrower than a pixel is not drawn.
+                if matches!(cell, Cell::Mark(m) if m.style.shape.band().is_some()) {
                     continue;
                 }
                 let right_limit = row
                     .get(at.saturating_add(1))
                     .map(|next| left_of(next, scale));
                 match cell {
+                    Cell::Span(span) if span.style.shape.band().is_some() => draw_block(
+                        frame,
+                        span,
+                        row_top + 1.0,
+                        row_height - 2.0,
+                        scale,
+                        Placement {
+                            signal: None,
+                            right_limit,
+                        },
+                        look,
+                    ),
                     Cell::Span(span) => draw_span(
                         frame,
                         span,
@@ -313,26 +439,13 @@ pub fn draw_lanes(
                         scale,
                         Placement {
                             signal: None,
-                            selected: is_selected(
-                                look,
-                                decoder.instance,
-                                Target::Lane,
-                                span.id,
-                                span.start,
-                            ),
                             right_limit,
                         },
                         look,
                     ),
-                    Cell::Mark(mark) => draw_mark(
-                        frame,
-                        mark,
-                        row_top + row_height / 2.0,
-                        scale,
-                        is_selected(look, decoder.instance, Target::Lane, mark.id, mark.start),
-                        None,
-                        look,
-                    ),
+                    Cell::Mark(mark) => {
+                        draw_mark(frame, mark, row_top + row_height / 2.0, scale, None, look)
+                    }
                 }
             }
         }
@@ -392,17 +505,8 @@ pub fn draw_overlays(
             if !legible && matches!(cell, Cell::Mark(_)) {
                 continue;
             }
-            let target = Target::Channel(overlay.channel);
             match cell {
-                Cell::Mark(mark) => draw_mark(
-                    frame,
-                    mark,
-                    centre,
-                    scale,
-                    is_selected(look, overlay.instance, target, mark.id, mark.start),
-                    signal,
-                    look,
-                ),
+                Cell::Mark(mark) => draw_mark(frame, mark, centre, scale, signal, look),
                 Cell::Span(span) => draw_span(
                     frame,
                     span,
@@ -411,7 +515,6 @@ pub fn draw_overlays(
                     scale,
                     Placement {
                         signal,
-                        selected: is_selected(look, overlay.instance, target, span.id, span.start),
                         right_limit: None,
                     },
                     look,
@@ -461,7 +564,12 @@ fn pick_in(
         }
         for cell in row {
             match cell {
-                Cell::Mark(m) if marks && (m.x as f32 - column).abs() * scale <= PICK => {
+                // A block narrower than a pixel is not drawn, so it cannot be pointed at.
+                Cell::Mark(m)
+                    if marks
+                        && m.style.shape.band().is_none()
+                        && (m.x as f32 - column).abs() * scale <= PICK =>
+                {
                     return Some((m.id, m.start, m.end, m.text.clone(), m.error));
                 }
                 Cell::Span(s) if column >= s.x0 as f32 && column <= s.x1 as f32 => {
@@ -492,14 +600,21 @@ pub fn hit_test(
         let lane = lane_height(first_lane.saturating_add(index));
         if position.y >= top && position.y < top + lane {
             let rows = decoder.plan.rows.len().max(1);
-            let row_height = ((lane - STRIP - 6.0) / rows as f32).min(24.0);
-            let y = position.y - top - 3.0;
+            let legible = marks_legible(&decoder.plan, plan.pixels as f32 * scale);
+            // The same rows as `draw_lanes` draws.
+            let strip = if legible && !decoder.plan.dense.is_empty() {
+                STRIP + 2.0
+            } else {
+                0.0
+            };
+            let row_height = row_height(lane, rows, strip);
+            let y = position.y - top - LANE_MARGIN;
             if let Some((id, start, end, text, error)) = pick_in(
                 &decoder.plan,
                 position.x,
                 scale,
                 Some((y, row_height)),
-                marks_legible(&decoder.plan, plan.pixels as f32 * scale),
+                legible,
             ) {
                 return Some(Hit {
                     instance: decoder.instance,
@@ -651,5 +766,108 @@ mod tests {
         };
         assert!(!marks_legible(&plan, 1_000.0));
         assert!(marks_legible(&Plan::default(), 1_000.0));
+    }
+
+    #[test]
+    fn a_block_shows_its_whole_text_or_none_never_a_cut_text() {
+        // 4 pixels of margin at each end and 6.5 per character: "Stop" needs 34 pixels.
+        assert_eq!(block_label("Stop", 34.0).as_deref(), Some("Stop"));
+        assert_eq!(block_label("Stop", 33.9), None);
+        assert_eq!(block_label("Repeated start", 60.0), None);
+        assert_eq!(
+            block_label("Repeated start", 100.0).as_deref(),
+            Some("Repeated start")
+        );
+        assert_eq!(block_label("", 500.0), None);
+        for width in 0..300 {
+            if let Some(text) = block_label("Address 0x50 (write)", width as f32) {
+                assert_eq!(text, "Address 0x50 (write)");
+            }
+        }
+    }
+
+    /// The colours the I2C blocks use (research R3): red 0, yellow 1, green 2, blue 4, orange 6, grey 7.
+    const ROLES: [u8; 6] = [0, 1, 2, 4, 6, 7];
+
+    #[test]
+    fn the_text_on_a_block_has_contrast_on_every_variant() {
+        for variant in [Variant::Dark, Variant::Light, Variant::HighContrast] {
+            for index in ROLES {
+                let fill = variant.annotation(index);
+                let text = contrast_text(fill);
+                let ratio = contrast(fill, text);
+                assert!(ratio >= 4.5, "{variant:?} colour {index}: {ratio}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_colours_of_the_blocks_tell_apart_on_every_variant() {
+        for variant in [Variant::Dark, Variant::Light, Variant::HighContrast] {
+            for (n, a) in ROLES.iter().enumerate() {
+                for b in ROLES.iter().skip(n + 1) {
+                    let (ca, cb) = (variant.annotation(*a), variant.annotation(*b));
+                    let distance =
+                        ((ca.r - cb.r).powi(2) + (ca.g - cb.g).powi(2) + (ca.b - cb.b).powi(2))
+                            .sqrt();
+                    assert!(
+                        distance > 0.25,
+                        "{variant:?}: colours {a} and {b}: {distance}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_rows_of_a_lane_fill_it_whatever_its_height() {
+        for lane in [54.0_f32, 80.0, 133.0, 240.0] {
+            for rows in [1_usize, 2, 3] {
+                let row = row_height(lane, rows, 0.0);
+                // The margins above and below and the rows are the whole lane: nothing is left below.
+                let used = 2.0 * LANE_MARGIN + rows as f32 * row;
+                assert!((used - lane).abs() < 1e-3, "{lane} {rows}: {used}");
+            }
+        }
+        // A lane as high as its rows need gives rows of the height of a row.
+        let fitting = f32::from(fitting_height(2));
+        assert!((row_height(fitting, 2, 0.0) - ROW_HEIGHT).abs() < 1e-3);
+        // The strip of dense cells takes its room from the rows.
+        assert!(row_height(100.0, 2, STRIP + 2.0) < row_height(100.0, 2, 0.0));
+    }
+
+    #[test]
+    fn blocks_narrower_than_a_pixel_do_not_make_the_other_marks_illegible() {
+        use la_decoders::lanes::{Cell, MarkCell, Plan};
+        use la_decoders::model::{Shape, Style, Text};
+        let mark = |at: u64, shape: Shape| {
+            Cell::Mark(MarkCell {
+                id: at,
+                start: at,
+                end: at,
+                text: Text::Literal("x".into()),
+                x: at as f64,
+                style: Style {
+                    colour: Some(1),
+                    shape,
+                },
+                edge: None,
+                error: false,
+            })
+        };
+        // A thousand sub-pixel blocks and one dot in a view 100 pixels wide: the dot is still legible.
+        let mut cells: Vec<Cell> = (0..1_000).map(|at| mark(at, Shape::Part)).collect();
+        cells.push(mark(5, Shape::Dot));
+        let plan = Plan {
+            rows: vec![cells],
+            ..Plan::default()
+        };
+        assert!(marks_legible(&plan, 100.0));
+        // The same number of dots is not.
+        let dots = Plan {
+            rows: vec![(0..1_000).map(|at| mark(at, Shape::Dot)).collect()],
+            ..Plan::default()
+        };
+        assert!(!marks_legible(&dots, 100.0));
     }
 }

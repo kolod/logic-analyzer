@@ -193,10 +193,16 @@
 01 4
 11 65
 --- expect
-lane point 2480 ann-i2c-start
+lane part 2473 2481 4 ann-i2c-start
+lane whole 2473 2924 2 ann-i2c-transaction-write-long 0x50 0x12_0x34
+lane part 2481 2607 6 ann-i2c-address-write 0x50
+lane part 2609 2623 2 ann-i2c-ack
+lane part 2625 2751 6 ann-i2c-data 0x12
+lane part 2753 2767 2 ann-i2c-ack
+lane part 2769 2895 6 ann-i2c-data 0x34
+lane part 2897 2911 2 ann-i2c-ack
+lane part 2911 2924 4 ann-i2c-stop
 ch1 point 2480 ann-i2c-start
-lane range 2488 2617 ann-i2c-address-write 0x50
-lane point 2616 ann-i2c-ack
 ch0 edge 2488 rising =1
 ch0 edge 2504 rising =0
 ch0 edge 2520 rising =1
@@ -206,8 +212,6 @@ ch0 edge 2568 rising =0
 ch0 edge 2584 rising =0
 ch0 edge 2600 rising =0
 ch0 edge 2616 rising ann-i2c-ack
-lane range 2632 2761 ann-i2c-data 0x12
-lane point 2760 ann-i2c-ack
 ch0 edge 2632 rising =0
 ch0 edge 2648 rising =0
 ch0 edge 2664 rising =0
@@ -217,8 +221,6 @@ ch0 edge 2712 rising =0
 ch0 edge 2728 rising =1
 ch0 edge 2744 rising =0
 ch0 edge 2760 rising ann-i2c-ack
-lane range 2776 2905 ann-i2c-data 0x34
-lane point 2904 ann-i2c-ack
 ch0 edge 2776 rising =0
 ch0 edge 2792 rising =0
 ch0 edge 2808 rising =1
@@ -228,6 +230,4 @@ ch0 edge 2856 rising =1
 ch0 edge 2872 rising =0
 ch0 edge 2888 rising =0
 ch0 edge 2904 rising ann-i2c-ack
-lane point 2924 ann-i2c-stop
 ch1 point 2924 ann-i2c-stop
-lane range 2480 2925 ann-i2c-transaction-write 0x50

@@ -118,10 +118,23 @@
 01 4
 11 65
 --- expect
-lane point 64 ann-i2c-start
+lane part 56 64 4 ann-i2c-start
+lane whole 56 508 2 ann-i2c-transaction-write-long 0x51 0x01_0x02
+lane part 64 192 6 ann-i2c-address-write 0x51
+lane part 192 208 2 ann-i2c-ack
+lane part 208 336 6 ann-i2c-data 0x01
+lane part 336 352 2 ann-i2c-ack
+lane part 352 480 6 ann-i2c-data 0x02
+lane part 480 496 2 ann-i2c-ack
+lane part 496 508 4 ann-i2c-stop
+lane part 565 573 4 ann-i2c-start
+lane whole 565 873 0 ann-i2c-transaction-write-long 0x50 0x12 error
+lane part 573 701 6 ann-i2c-address-write 0x50
+lane part 701 717 2 ann-i2c-ack
+lane part 717 845 6 ann-i2c-data 0x12
+lane part 845 861 0 ann-i2c-nak error
+lane part 861 873 4 ann-i2c-stop
 ch1 point 64 ann-i2c-start
-lane range 72 201 ann-i2c-address-write 0x51
-lane point 200 ann-i2c-ack
 ch0 edge 72 rising =1
 ch0 edge 88 rising =0
 ch0 edge 104 rising =1
@@ -131,8 +144,6 @@ ch0 edge 152 rising =0
 ch0 edge 168 rising =1
 ch0 edge 184 rising =0
 ch0 edge 200 rising ann-i2c-ack
-lane range 216 345 ann-i2c-data 0x01
-lane point 344 ann-i2c-ack
 ch0 edge 216 rising =0
 ch0 edge 232 rising =0
 ch0 edge 248 rising =0
@@ -142,8 +153,6 @@ ch0 edge 296 rising =0
 ch0 edge 312 rising =0
 ch0 edge 328 rising =1
 ch0 edge 344 rising ann-i2c-ack
-lane range 360 489 ann-i2c-data 0x02
-lane point 488 ann-i2c-ack
 ch0 edge 360 rising =0
 ch0 edge 376 rising =0
 ch0 edge 392 rising =0
@@ -153,13 +162,8 @@ ch0 edge 440 rising =0
 ch0 edge 456 rising =1
 ch0 edge 472 rising =0
 ch0 edge 488 rising ann-i2c-ack
-lane point 508 ann-i2c-stop
 ch1 point 508 ann-i2c-stop
-lane range 64 509 ann-i2c-transaction-write 0x51
-lane point 573 ann-i2c-start
 ch1 point 573 ann-i2c-start
-lane range 581 710 ann-i2c-address-write 0x50
-lane point 709 ann-i2c-ack
 ch0 edge 581 rising =1
 ch0 edge 597 rising =0
 ch0 edge 613 rising =1
@@ -169,8 +173,6 @@ ch0 edge 661 rising =0
 ch0 edge 677 rising =0
 ch0 edge 693 rising =0
 ch0 edge 709 rising ann-i2c-ack
-lane range 725 854 ann-i2c-data 0x12
-lane point 853 ann-i2c-error-data-nak 0x12 error
 ch0 edge 725 rising =0
 ch0 edge 741 rising =0
 ch0 edge 757 rising =0
@@ -179,7 +181,5 @@ ch0 edge 789 rising =0
 ch0 edge 805 rising =0
 ch0 edge 821 rising =1
 ch0 edge 837 rising =0
-ch0 edge 853 rising ann-i2c-nak
-lane point 873 ann-i2c-stop
+ch0 edge 853 rising ann-i2c-error-data-nak 0x12 error
 ch1 point 873 ann-i2c-stop
-lane range 573 874 ann-i2c-transaction-write 0x50

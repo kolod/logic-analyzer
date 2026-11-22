@@ -51,7 +51,37 @@ prints `LA-RIG 1` once. Every line you send is answered with one line.
 | `COUNTER <step_us>` | `OK` | an 8-bit up counter that wraps; changes every `step_us` microseconds |
 | `WALK <step_us>` | `OK` | one-hot walk `01, 02, 04 … 80, 01 …`; changes every `step_us` |
 | `SQUARE <step_us>` | `OK` | all eight pins toggle together every `step_us` |
+| `LCDP <4\|8> <cols> <rows> <step_us>` | `OK` | an HD44780 on a parallel bus, see below |
+| `LCDI <addr> <cols> <rows> <step_us>` | `OK` | an HD44780 behind a PCF8574 on I2C; `addr` is two hex digits (`27`) |
 | anything else | `ERR` | nothing changes |
+
+## HD44780 modes (decoder test source)
+
+Every second the sketch sends one script: the initialisation by instruction, then every instruction
+of the controller (clear, home, the four entry modes, the eight display-control values, cursor and
+display shifts, function set, CGRAM and DDRAM addresses), text and two custom characters, and reads
+of the busy flag / address counter and of data. `cols` is 8..40, `rows` is 1, 2 or 4 (4 only up to
+20 columns). A new command ends the script at once. For a parallel bus `step_us` is the length of
+each of setup, E high and hold; for I2C one bit takes four steps (`LCDI 27 16 2 25` is 10 kHz).
+
+| Analyzer input | `LCDP 4` | `LCDP 8` | `LCDI` |
+|----------------|----------|----------|--------|
+| 0 (D2) | RS | RS | SCL |
+| 1 (D3) | RW | RW | SDA |
+| 2 (D4) | E | E | - |
+| 3 (D5) | D4 | D0 | - |
+| 4 (D6) | D5 | D1 | - |
+| 5 (D7) | D6 | D2 | - |
+| 6 (D8) | D7 | D3 | - |
+| 7 (D9) | - | D4 | - |
+| 8 (D10) | - | D5 | - |
+| 9 (D11) | - | D6 | - |
+| 10 (D12) | - | D7 | - |
+
+An 8-bit bus has ten lines, an eight-input analyzer sees eight: D5, D6, D7 of the display leave on
+Nano **D10, D11, D12**, which are inputs 8..10 of an analyzer with more than eight inputs, and are
+not captured by the WeAct. The I2C bytes are PCF8574 backpack bytes (P0 RS, P1 RW, P2 E, P3
+backlight on, P4..P7 D4..D7); the address and each byte are acknowledged.
 
 `step_us` is a decimal number from 20 to 1,000,000; outside that range the answer is `ERR`. A pattern
 starts on the answer and runs until the next command. The sketch reads the serial port between steps,

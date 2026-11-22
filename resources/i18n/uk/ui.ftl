@@ -224,6 +224,8 @@ ann-i2c-repeated-start = Повторний старт
 ann-i2c-stop = Стоп
 ann-i2c-transaction-write = Запис до { $value }
 ann-i2c-transaction-read = Читання з { $value }
+ann-i2c-transaction-write-long = Запис до { $value }: { $second }
+ann-i2c-transaction-read-long = Читання з { $value }: { $second }
 ann-i2c-address-write = Адреса { $value } (запис)
 ann-i2c-address-read = Адреса { $value } (читання)
 ann-i2c-data = Дані { $value }
@@ -255,20 +257,14 @@ decoder-needs-channels = Оберіть канали, щоб почати дек
 decoder-channel-none = (немає)
 decoder-channel-unavailable = { $name } (не записується)
 decoder-channels-unrecorded = Канал цього декодера не записується, тому декодер не запускається.
-decoder-lane-show = Показувати доріжку
 decoder-annotations = Анотацій: { $number }
 decoder-incomplete = Неповні результати
-decoder-selected = Вибрана анотація
-decoder-detail-length = Тривалість: { $value }
-decoder-detail-error = Повідомляє про проблему в сигналі
-decoder-detail-position = Позиція: від { $first } до { $second }
 
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Навмисно додавати помилки в змодельовані сигнали
 decoder-generator-rate = Приблизно кожен такий за рахунком байт обривається
 
 ### Decoders: running, cancelling and the memory limit
-decoder-run = Запустити знову
 decoder-cancel = Скасувати
 settings-decoder-memory = Обмеження пам'яті для результатів декодерів
 settings-decoder-memory-note = Спільне для всіх декодерів. Діє з наступного проходу.

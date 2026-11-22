@@ -268,7 +268,10 @@ fn read_presentation(r: &mut Reader<'_>, bounds: Bounds) -> Result<Option<Presen
             height: 0,
         });
     }
-    Ok(Some(Presentation { channels }))
+    Ok(Some(Presentation {
+        channels,
+        ..Presentation::default()
+    }))
 }
 
 fn read_markers(r: &mut Reader<'_>, bounds: Bounds) -> Result<Markers> {

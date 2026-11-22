@@ -1,6 +1,6 @@
 # Host API
 
-Version: 2.0
+Version: 2.1
 
 This is the authoritative description of the API between a user interface and the core. The crate
 is `la-host`; its constant `la_host::HOST_API_VERSION` and the version line above must agree (a test
@@ -92,6 +92,8 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | | `SetChannelVisible { channel, visible }` | the one flag of a channel: shows it (a lane is drawn when the capture on screen has data for it) and makes the next capture record it, so it also changes `EditConfig(Channels)`; ignored while a capture runs |
 | | `MoveChannel { from, to }` | changes the order |
 | | `SetChannelHeight { channel, height }` | the height of the signal of a channel in logical pixels: 0 is automatic, anything else is clamped into 24 to 240; allowed at any time; saved with the session in the optional `LAYT` section |
+| | `SetDecoderLaneHeight { instance, height }` | the same for the lane of a decoder instance (2.1); an instance that does not exist is refused; saved in `LAYT` version 2 |
+| | `MoveLane { from, to }` | moves a lane among the shown lanes, channels and decoder lanes together, as `FramePlan::order` lists them (2.1); `to` counts positions after the lane was taken out; a channel changes its place in the order of the channels (a hidden channel stays where it is), a decoder lane its place among the lanes; not saved |
 | | `ResetPresentation` | defaults for names, colours, order, heights and visibility |
 | Side panel | `SetSidePanel(SidePanel)` | the view of the panel at the right edge: `Capture` (the default), `Decoders`, `Markers` or `Hidden`; kept in the settings |
 | | `ScrollToEdge { channel, direction }` | the window moves, zoom unchanged, so that the first real edge of the channel beyond the window on that side (`Next`: at or after its end; `Previous`: before its start) is a quarter of the window from the side it came from; follow-latest turns off; ignored when there is no such edge |
@@ -200,7 +202,7 @@ for each gap that is skipped), computed once per plan for the shown channels onl
 when the samples on both sides of it exist: the change next to a gap is not an edge.
 
 Since 1.1 it also carries `lanes` (one lane plan per visible decoder instance: rows of spans and marks
-and a row of dense cells, at most `4·W` cells) and `overlays` (per shown channel and instance, the marks,
+and a row of dense cells, at most `4·W` cells; 2.1: each with the `height` the user gave it, its `slot` among the lanes and the `rows` its decoder asks for, and `FramePlan::order()` lists the shown lanes from top to bottom) and `overlays` (per shown channel and instance, the marks,
 edges and dense cells that instance draws on the channel, at most `2·W`), built with one window query per
 store (`la_decoders::lanes`). Every annotation intersecting the window is represented exactly once; an
 error is never hidden in a dense cell without its error count. The plan never reads samples and never
@@ -309,8 +311,10 @@ when it is done, and a failed or cancelled cut leaves everything as it was.
 
 The heights of the channels the user set are stored in the optional `LAYT` section
 (`specs/014-gui-improvements/contracts/layt-section.md`): a version, a count and (channel, height)
-pairs. It is written only when at least one height differs from automatic, so a file of an earlier
-version stays byte-compatible. A reader that does not know the section keeps it as an extra and
+pairs. Version 2 (`specs/016-i2c-lane-blocks/contracts/layt-section-2.md`) adds a count and
+(decoder instance, height) pairs for the lanes of decoders; it is written only when a decoder lane
+has a height of its own, and otherwise the section is version 1 as before. It is written only when at
+least one height differs from automatic, so a file of an earlier version stays byte-compatible. A reader that does not know the section keeps it as an extra and
 writes it back unchanged; an invalid payload opens the capture with automatic heights and a
 `host.layout_invalid` warning, a newer one is kept untouched with a notice.
 
@@ -332,6 +336,7 @@ signal data, channel names or marker names.
 
 Version 1.0 is the first; 1.1 adds the decoder commands, state and plan parts; 1.2 adds the channel
 height, the side panel, the scroll to an edge and the recent files commands, the `LAYT` section and
-the edge flags of the plan. Additions of commands or `State` fields that existing shells can ignore
+the edge flags of the plan; 2.1 adds the height and the moving of decoder lanes (`SetDecoderLaneHeight`,
+`MoveLane`, the fields of `LanePlan`, `LAYT` version 2). Additions of commands or `State` fields that existing shells can ignore
 are minor versions. Removing or changing the meaning of a command, a state field or an invariant is
 a major version and requires every shell in the repository to be updated in the same merge.

@@ -211,6 +211,46 @@ pub struct LanePlan {
     pub outdated: bool,
     /// The rows of spans and marks and the dense cells.
     pub plan: la_decoders::lanes::Plan,
+    /// The height the user gave the lane, in logical pixels (0: automatic).
+    pub height: u16,
+    /// Where the user put the lane among the shown lanes (`None`: after the channels).
+    pub slot: Option<u16>,
+    /// The rows of spans and marks the decoder asks for (its `lane_rows`).
+    pub rows: u8,
+}
+
+/// A lane of the signal view: a shown channel or a decoder lane, by position in its list of
+/// `FramePlan`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaneSlot {
+    /// `FramePlan::channels[n]`.
+    Channel(usize),
+    /// `FramePlan::lanes[n]`.
+    Decoder(usize),
+}
+
+/// The order of the shown lanes: the channels in their order, with the lanes that have a place of
+/// their own put at that place (in the order of their places, then of their position) and the rest
+/// after the last one.
+#[must_use]
+pub fn lane_order(channels: usize, slots: &[Option<u16>]) -> Vec<LaneSlot> {
+    let mut order: Vec<LaneSlot> = (0..channels).map(LaneSlot::Channel).collect();
+    let mut placed: Vec<(u16, usize)> = slots
+        .iter()
+        .enumerate()
+        .filter_map(|(n, slot)| slot.map(|s| (s, n)))
+        .collect();
+    placed.sort_unstable();
+    for (slot, n) in placed {
+        let at = usize::from(slot).min(order.len());
+        order.insert(at, LaneSlot::Decoder(n));
+    }
+    for (n, slot) in slots.iter().enumerate() {
+        if slot.is_none() {
+            order.push(LaneSlot::Decoder(n));
+        }
+    }
+    order
 }
 
 /// What a decoder instance draws on top of one channel.
@@ -261,6 +301,13 @@ pub struct FramePlan {
 }
 
 impl FramePlan {
+    /// The shown lanes from top to bottom.
+    #[must_use]
+    pub fn order(&self) -> Vec<LaneSlot> {
+        let slots: Vec<Option<u16>> = self.lanes.iter().map(|l| l.slot).collect();
+        lane_order(self.channels.len(), &slots)
+    }
+
     fn blank(state: FrameState, window: &ViewWindow, pixels: u32) -> Self {
         Self {
             state,

@@ -16,8 +16,9 @@ mod common;
 use std::sync::atomic::AtomicBool;
 
 use common::i2c::{
-    Bus, Decoded, Expected, byte_lane, collect, decode, decode_capture, erroneous, lane_point,
-    lane_range, new_pass, setup, write_tx,
+    Bus, Decoded, Expected, GREY, HALF, ORANGE, RED, SCL, ack_end, arrow, byte_lane, collect,
+    decode, decode_capture, erroneous, new_pass, part, setup, sorted, start_block, stop_block,
+    whole, write_tx,
 };
 use common::{Part, append_parts, capture_from_parts};
 use la_decoders::decoders::i2c::items;
@@ -65,15 +66,24 @@ fn a_nak_on_the_address_is_an_error_where_it_happens_and_the_transaction_ends_at
     let stop = bus.stop();
     bus.idle(64);
     let decoded = decode(&bus.words());
-    let mut nak = lane_point(a.ack, "ann-i2c-error-address-nak");
-    nak.args = vec!["0x50".to_owned()];
-    assert_eq!(errors(&decoded), vec![erroneous(nak)]);
-    assert!(lane(&decoded).contains(&lane_range(
-        start,
-        stop + 1,
+    // The NAK block is red and an error, and so is the packet below it, which still runs from the
+    // start to the stop.
+    let nak = erroneous(part(a.ack - HALF, a.ack + HALF, RED, "ann-i2c-nak", &[]));
+    let packet = erroneous(whole(
+        start - HALF,
+        stop,
+        RED,
         "ann-i2c-transaction-write",
+        &["0x50"],
+    ));
+    assert_eq!(errors(&decoded), sorted(vec![nak, packet]));
+    assert!(lane(&decoded).contains(&stop_block(ack_end(a), stop)));
+    // The text of the error is on the arrow of the acknowledge bit.
+    assert!(decoded.overlay(SCL).contains(&erroneous(arrow(
+        a.ack,
+        "ann-i2c-error-address-nak",
         &["0x50"]
-    )));
+    ))));
     assert_eq!(
         tail_items(&decoded),
         vec![
@@ -87,28 +97,58 @@ fn a_nak_on_the_address_is_an_error_where_it_happens_and_the_transaction_ends_at
 #[test]
 fn a_nak_on_a_written_data_byte_is_an_error_and_on_the_last_read_byte_it_is_not() {
     let mut bus = lead();
-    bus.start();
+    let start = bus.start();
     bus.byte(0xA0, true);
     let d = bus.byte(0x12, false);
-    bus.stop();
+    let stop = bus.stop();
     bus.idle(64);
     let decoded = decode(&bus.words());
-    let mut nak = lane_point(d.ack, "ann-i2c-error-data-nak");
-    nak.args = vec!["0x12".to_owned()];
-    assert_eq!(errors(&decoded), vec![erroneous(nak)]);
+    let nak = erroneous(part(d.ack - HALF, d.ack + HALF, RED, "ann-i2c-nak", &[]));
+    // The byte that was not acknowledged went over the bus: the text says so.
+    let packet = erroneous(common::i2c::packet(
+        start - HALF,
+        stop,
+        RED,
+        false,
+        "0x50",
+        "0x12",
+    ));
+    assert_eq!(errors(&decoded), sorted(vec![nak, packet]));
+    assert!(decoded.overlay(SCL).contains(&erroneous(arrow(
+        d.ack,
+        "ann-i2c-error-data-nak",
+        &["0x12"]
+    ))));
     assert_eq!(
         tail_items(&decoded)[2],
         (items::DATA, items::WRITE, items::NAK, true)
     );
 
-    // A read that ends with the controller's NAK has no error at all.
+    // A read that ends with the controller's NAK has no error at all: its NAK block is red but the
+    // packet is green.
     let mut bus = lead();
-    bus.start();
+    let start = bus.start();
     bus.byte(0xA1, true);
-    bus.byte(0x12, false);
-    bus.stop();
+    let last = bus.byte(0x12, false);
+    let stop = bus.stop();
     bus.idle(64);
-    assert!(errors(&decode(&bus.words())).is_empty());
+    let decoded = decode(&bus.words());
+    assert!(errors(&decoded).is_empty());
+    assert!(lane(&decoded).contains(&part(
+        last.ack - HALF,
+        last.ack + HALF,
+        RED,
+        "ann-i2c-nak",
+        &[]
+    )));
+    assert!(lane(&decoded).contains(&common::i2c::packet(
+        start - HALF,
+        stop,
+        common::i2c::GREEN,
+        true,
+        "0x50",
+        "0x12"
+    )));
 }
 
 #[test]
@@ -124,20 +164,37 @@ fn a_stop_in_the_middle_of_a_byte_cuts_it_short_and_the_next_transaction_decodes
     let expected_next = write_tx(&mut bus, 0x52, &[0x09]);
     bus.idle(64);
     let decoded = decode(&bus.words());
-    // The error covers the bits that were read, up to the stop.
-    let mut cut = lane_range(first_bit, stop, "ann-i2c-error-byte-cut", &["3"]);
-    cut.error = true;
-    assert_eq!(errors(&decoded), vec![cut]);
-    // The stop is marked and the transaction ends there; the address was read before the cut.
-    let lane = lane(&decoded);
-    assert!(lane.contains(&lane_point(stop, "ann-i2c-stop")));
-    assert!(lane.contains(&lane_range(
-        start,
-        stop + 1,
+    // The error is a block over the three bits that were read, in the colour of a written byte, and
+    // the packet is red.
+    let cut = erroneous(part(
+        first_bit - HALF,
+        first_bit + 2 * 16 + HALF,
+        ORANGE,
+        "ann-i2c-error-byte-cut",
+        &["3"],
+    ));
+    let packet = erroneous(whole(
+        start - HALF,
+        stop,
+        RED,
         "ann-i2c-transaction-write",
-        &["0x50"]
-    )));
-    assert!(lane.contains(&byte_lane(a, "ann-i2c-address-write", "0x50", "ann-i2c-ack", false)[0]));
+        &["0x50"],
+    ));
+    assert_eq!(errors(&decoded), sorted(vec![packet, cut.clone()]));
+    // The stop block begins where the cut block ends and ends at the stop; the address was read
+    // before the cut.
+    let lane = lane(&decoded);
+    assert!(lane.contains(&stop_block(cut.positions[1], stop)));
+    assert!(lane.contains(
+        &byte_lane(
+            a,
+            "ann-i2c-address-write",
+            "0x50",
+            ORANGE,
+            "ann-i2c-ack",
+            false
+        )[0]
+    ));
     // The byte that was cut short gives no item, and the next transaction is whole.
     assert_eq!(
         tail_items(&decoded)[..3],
@@ -168,20 +225,34 @@ fn a_start_in_the_middle_of_a_byte_cuts_it_short_and_begins_a_new_transaction() 
     let stop = bus.stop();
     bus.idle(64);
     let decoded = decode(&bus.words());
-    let mut cut = lane_range(first_bit, second, "ann-i2c-error-byte-cut", &["3"]);
-    cut.error = true;
-    assert_eq!(errors(&decoded), vec![cut]);
+    let cut = erroneous(part(
+        first_bit - HALF,
+        first_bit + 2 * 16 + HALF,
+        ORANGE,
+        "ann-i2c-error-byte-cut",
+        &["3"],
+    ));
+    // The first transaction is shown as unfinished, up to the end of the cut byte, in red since the
+    // byte was an error; the second start is a start and not a repeated start; the second
+    // transaction is whole.
+    let unfinished = erroneous(whole(
+        first - HALF,
+        cut.positions[1],
+        RED,
+        "ann-i2c-incomplete",
+        &[],
+    ));
+    assert_eq!(errors(&decoded), sorted(vec![unfinished, cut]));
     let lane = lane(&decoded);
-    // The first transaction is shown as unfinished, up to the second start, which is a start and
-    // not a repeated start; the second one is whole.
-    assert!(lane.contains(&lane_range(first, second, "ann-i2c-incomplete", &[])));
-    assert!(lane.contains(&lane_point(second, "ann-i2c-start")));
+    assert!(lane.contains(&start_block(second, "ann-i2c-start")));
     assert!(!lane.iter().any(|e| e.key == "ann-i2c-repeated-start"));
-    assert!(lane.contains(&lane_range(
-        second,
-        stop + 1,
-        "ann-i2c-transaction-write",
-        &["0x51"]
+    assert!(lane.contains(&common::i2c::packet(
+        second - HALF,
+        stop,
+        common::i2c::GREEN,
+        false,
+        "0x51",
+        "0x77"
     )));
 }
 
@@ -192,9 +263,10 @@ fn a_start_followed_by_a_stop_without_a_clock_is_an_empty_transaction() {
     let stop = bus.stop();
     bus.idle(64);
     let decoded = decode(&bus.words());
-    let mut empty = lane_range(start, stop + 1, "ann-i2c-error-empty", &[]);
-    empty.error = true;
+    let empty = erroneous(whole(start - HALF, stop, RED, "ann-i2c-error-empty", &[]));
     assert_eq!(errors(&decoded), vec![empty]);
+    assert!(lane(&decoded).contains(&start_block(start, "ann-i2c-start")));
+    assert!(lane(&decoded).contains(&stop_block(start + HALF, stop)));
     assert_eq!(
         tail_items(&decoded),
         vec![
@@ -226,10 +298,23 @@ fn a_gap_in_the_middle_of_a_byte_is_reported_and_decoding_resumes_after_the_idle
     );
     capture.close().unwrap();
     let decoded = decode_capture(&capture, &[], &ChunkLimits::default());
-    let mut gap = lane_range(gap_start, gap_start + 30, "ann-i2c-error-gap", &[]);
-    gap.error = true;
-    assert_eq!(errors(&decoded), vec![gap]);
-    assert!(lane(&decoded).contains(&lane_range(start, gap_start, "ann-i2c-incomplete", &[])));
+    // The lost samples are a red block; the packet that was in progress is red too (the gap is an
+    // error) and ends where the samples were lost.
+    let gap = erroneous(part(
+        gap_start,
+        gap_start + 30,
+        RED,
+        "ann-i2c-error-gap",
+        &[],
+    ));
+    let unfinished = erroneous(whole(
+        start - HALF,
+        gap_start,
+        RED,
+        "ann-i2c-incomplete",
+        &[],
+    ));
+    assert_eq!(errors(&decoded), sorted(vec![unfinished, gap]));
     for mut wanted in expected_next {
         for p in &mut wanted.positions {
             *p += gap_start + 30;
@@ -246,22 +331,38 @@ fn a_capture_that_ends_inside_a_byte_or_between_bytes_shows_the_transaction_as_u
     bus.byte(0xA0, true);
     let first_bit = bus.pos() + 4;
     bus.bits(0x12, 3);
-    let length = bus.pos();
     let decoded = decode(&bus.words());
-    let mut cut = lane_range(first_bit, length, "ann-i2c-error-byte-cut", &["3"]);
-    cut.error = true;
-    assert_eq!(errors(&decoded), vec![cut]);
-    // The unfinished transaction is not an error.
-    assert!(lane(&decoded).contains(&lane_range(start, length, "ann-i2c-incomplete", &[])));
+    let cut = erroneous(part(
+        first_bit - HALF,
+        first_bit + 2 * 16 + HALF,
+        ORANGE,
+        "ann-i2c-error-byte-cut",
+        &["3"],
+    ));
+    // A packet that was cut short in a byte is red; one that is only unfinished is grey (below).
+    let unfinished = erroneous(whole(
+        start - HALF,
+        cut.positions[1],
+        RED,
+        "ann-i2c-incomplete",
+        &[],
+    ));
+    assert_eq!(errors(&decoded), sorted(vec![unfinished, cut]));
 
     // Between bytes: only the unfinished transaction.
     let mut bus = lead();
     let start = bus.start();
-    bus.byte(0xA0, true);
-    let length = bus.pos();
+    let a = bus.byte(0xA0, true);
     let decoded = decode(&bus.words());
     assert!(errors(&decoded).is_empty());
-    assert!(lane(&decoded).contains(&lane_range(start, length, "ann-i2c-incomplete", &[])));
+    // Unfinished and no error so far: grey, up to the end of the last block (the ack).
+    assert!(lane(&decoded).contains(&whole(
+        start - HALF,
+        ack_end(a),
+        GREY,
+        "ann-i2c-incomplete",
+        &[]
+    )));
 }
 
 #[test]

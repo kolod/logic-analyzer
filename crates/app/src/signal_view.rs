@@ -15,9 +15,8 @@ use iced::alignment::Vertical;
 use iced::mouse;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, LineDash, Path, Stroke, Text};
 use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
-use la_host::decoders::AnnotationRef;
 use la_host::markers::{End, Kind, Placement, Pointer, Resolved};
-use la_host::plan::{FramePlan, FrameState, PlanShape, Segment};
+use la_host::plan::{ChannelPlan, FramePlan, FrameState, LanePlan, LaneSlot, PlanShape, Segment};
 use la_host::presentation::{Colour, PALETTE_SIZE};
 use la_host::{Command, EdgeDirection, ZoomAnchor, ZoomFactor};
 use la_i18n::{Args, Key, Localizer};
@@ -67,8 +66,6 @@ pub struct SignalView<'a> {
     pub variant: Variant,
     /// The language of every text.
     pub localizer: &'a Localizer,
-    /// The selected annotation, if any.
-    pub selected: Option<(u32, AnnotationRef)>,
     /// A channel name is being edited: a press anywhere in the view accepts it.
     pub editing: bool,
     /// The marker being placed with the mouse, if any.
@@ -110,11 +107,35 @@ const HOVER_LABEL_HEIGHT: f32 = 20.0;
 /// How far the box is from the crosshair, both ways.
 const HOVER_OFFSET: f32 = 10.0;
 
-/// The size of the box for `content` (the glyphs of a proportional font are estimated).
+/// How wide `content` is drawn at `size`: the advance of each glyph of the proportional font of the
+/// interface (Fira Sans) as a share of the size, by kind of glyph. The text engine cannot be asked from
+/// where the canvas draws, and one width for every glyph made the box much wider than a text of
+/// narrow glyphs (the time, the digits and dots of an address).
+fn estimated_width(content: &str, size: f32) -> f32 {
+    content
+        .chars()
+        .map(|c| {
+            let em = match c {
+                ' ' => 0.25,
+                'i' | 'l' | 'j' | '.' | ',' | ':' | ';' | '|' | '!' | '\'' | 'I' => 0.28,
+                'f' | 't' | 'r' | '1' | '-' | '(' | ')' | '[' | ']' => 0.36,
+                'm' | 'w' => 0.85,
+                'M' | 'W' => 0.88,
+                c if c.is_ascii_digit() => 0.58,
+                c if c.is_uppercase() => 0.62,
+                // Kana, kanji and the wide forms take a whole em.
+                c if u32::from(c) >= 0x2e80 => 1.0,
+                _ => 0.54,
+            };
+            em * size
+        })
+        .sum()
+}
+
+/// The size of the box for `content`.
 fn hover_label_size(content: &str) -> Size {
-    let glyphs = content.chars().count() as f32;
     Size::new(
-        glyphs * TEXT_SIZE * 0.62 + 2.0 * HOVER_PAD_X,
+        estimated_width(content, TEXT_SIZE) + 2.0 * HOVER_PAD_X,
         HOVER_LABEL_HEIGHT,
     )
 }
@@ -151,8 +172,6 @@ pub struct ViewState {
     panning: bool,
     /// The marker end being dragged.
     drag_marker: Option<(u32, End)>,
-    /// The last click on an annotation (a second one on it soon after is a double click).
-    last_click: Option<(Instant, u32, AnnotationRef)>,
     /// How far the lanes are scrolled.
     scroll: f32,
     /// A press in the legend strip.
@@ -166,6 +185,11 @@ pub struct ViewState {
     shifts: Vec<f32>,
     /// When the shifts were last advanced.
     anim_at: Option<Instant>,
+}
+
+/// How many lanes the view shows at this height and scroll.
+fn layout_count(view: &SignalView<'_>, height: f32, scroll: f32) -> usize {
+    view.layout(height, scroll).count()
 }
 
 fn message(localizer: &Localizer, key: &'static str) -> String {
@@ -190,8 +214,50 @@ fn next_colour(colour: Colour) -> Colour {
 }
 
 impl SignalView<'_> {
+    /// The shown lanes from top to bottom: the channels and the decoder lanes, as the plan orders them.
+    fn order(&self) -> Vec<LaneSlot> {
+        self.plan.order()
+    }
+
+    /// The channel in lane `lane`, if that lane is a channel.
+    fn channel_at(&self, lane: usize) -> Option<&ChannelPlan> {
+        match self.order().get(lane)? {
+            LaneSlot::Channel(n) => self.plan.channels.get(*n),
+            LaneSlot::Decoder(_) => None,
+        }
+    }
+
+    /// The decoder lane in lane `lane`, if that lane is one.
+    fn decoder_at(&self, lane: usize) -> Option<&LanePlan> {
+        match self.order().get(lane)? {
+            LaneSlot::Decoder(n) => self.plan.lanes.get(*n),
+            LaneSlot::Channel(_) => None,
+        }
+    }
+
+    /// The lane of each channel and of each decoder lane of the plan.
+    fn lane_maps(&self) -> (Vec<usize>, Vec<usize>) {
+        let mut channels = vec![0; self.plan.channels.len()];
+        let mut decoders = vec![0; self.plan.lanes.len()];
+        for (lane, slot) in self.order().iter().enumerate() {
+            match slot {
+                LaneSlot::Channel(n) => {
+                    if let Some(place) = channels.get_mut(*n) {
+                        *place = lane;
+                    }
+                }
+                LaneSlot::Decoder(n) => {
+                    if let Some(place) = decoders.get_mut(*n) {
+                        *place = lane;
+                    }
+                }
+            }
+        }
+        (channels, decoders)
+    }
+
     fn channel_label(&self, index: usize) -> String {
-        let Some(channel) = self.plan.channels.get(index) else {
+        let Some(channel) = self.channel_at(index) else {
             return String::new();
         };
         if channel.name.is_empty() {
@@ -204,19 +270,25 @@ impl SignalView<'_> {
         }
     }
 
-    /// The lanes: the channels with their heights, then the decoders (automatic).
+    /// The lanes in the order they are shown: a channel has the height the user gave it (or the
+    /// automatic one), a decoder lane the height the user gave it or the one its rows need.
     fn specs(&self) -> Vec<LaneSpec> {
-        self.plan
-            .channels
+        self.order()
             .iter()
-            .map(|c| LaneSpec {
-                kind: LaneKind::Channel,
-                height: c.height,
+            .filter_map(|slot| match slot {
+                LaneSlot::Channel(n) => self.plan.channels.get(*n).map(|c| LaneSpec {
+                    kind: LaneKind::Channel,
+                    height: c.height,
+                }),
+                LaneSlot::Decoder(n) => self.plan.lanes.get(*n).map(|l| LaneSpec {
+                    kind: LaneKind::Decoder,
+                    height: if l.height != 0 {
+                        l.height
+                    } else {
+                        decoder_view::fitting_height(usize::from(l.rows))
+                    },
+                }),
             })
-            .chain(self.plan.lanes.iter().map(|_| LaneSpec {
-                kind: LaneKind::Decoder,
-                height: 0,
-            }))
             .collect()
     }
 
@@ -236,12 +308,14 @@ impl SignalView<'_> {
         if self.plan.state != FrameState::Ok || position.x < GUTTER || position.y < AXIS_HEIGHT {
             return None;
         }
+        let (lane_of_channel, _) = self.lane_maps();
         let index = (0..self.plan.channels.len()).find(|i| {
-            layout
-                .lane(*i)
+            lane_of_channel
+                .get(*i)
+                .and_then(|l| layout.lane(*l))
                 .is_some_and(|l| position.y >= l.top && position.y < l.bottom())
         })?;
-        let lane = layout.lane(index)?;
+        let lane = layout.lane(*lane_of_channel.get(index)?)?;
         let channel = self.plan.channels.get(index)?;
         let top = lane.top + (lane.height - EDGE_BUTTON) / 2.0;
         let (direction, left) = if channel.edge_after && position.x >= width - EDGE_ZONE {
@@ -276,12 +350,12 @@ impl SignalView<'_> {
         if position.x < GUTTER || position.y < AXIS_HEIGHT {
             return None;
         }
-        let index = (0..self.plan.channels.len()).find(|i| {
+        let lane = (0..layout.count()).find(|i| {
             layout
                 .lane(*i)
                 .is_some_and(|l| position.y >= l.top && position.y < l.bottom())
         })?;
-        self.plan.channels.get(index).map(|c| c.channel)
+        self.channel_at(lane).map(|c| c.channel)
     }
 
     /// The pointer as the host takes it: pixels of the plan from the left of the signal area, and
@@ -413,11 +487,27 @@ impl SignalView<'_> {
         let area_width = (size.width - GUTTER).max(1.0);
         let scale = area_width / plan.pixels.max(1) as f32;
         let layout = self.layout(size.height, scroll);
+        let (lane_of_channel, lane_of_decoder) = self.lane_maps();
         let lane_top = |index: usize| {
             layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top)
                 + shifts.get(index).copied().unwrap_or(0.0)
         };
         let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
+        // The drawing of the decoders counts the channels first and the decoder lanes after them; this
+        // turns such a number into the lane that is really there.
+        let channels_shown = plan.channels.len();
+        let real = |virtual_lane: usize| {
+            if virtual_lane < channels_shown {
+                lane_of_channel.get(virtual_lane).copied().unwrap_or(0)
+            } else {
+                lane_of_decoder
+                    .get(virtual_lane.saturating_sub(channels_shown))
+                    .copied()
+                    .unwrap_or(0)
+            }
+        };
+        let decoder_top = |virtual_lane: usize| lane_top(real(virtual_lane));
+        let decoder_height = |virtual_lane: usize| lane_height(real(virtual_lane));
         let hairline = self.variant.hairline();
 
         // The vertical grid of the time axis.
@@ -430,7 +520,8 @@ impl SignalView<'_> {
         }
 
         // Lanes of the channels.
-        for (index, channel) in plan.channels.iter().enumerate() {
+        for (n, channel) in plan.channels.iter().enumerate() {
+            let index = lane_of_channel.get(n).copied().unwrap_or(n);
             let top = lane_top(index);
             let lane = lane_height(index);
             if top + lane < AXIS_HEIGHT || top > size.height {
@@ -461,12 +552,11 @@ impl SignalView<'_> {
         let look = Look {
             variant: self.variant,
             localizer: self.localizer,
-            selected: self.selected,
             theme,
         };
         // The lanes of the decoders come after the channels.
         for index in 0..plan.lanes.len() {
-            let at = plan.channels.len().saturating_add(index);
+            let at = lane_of_decoder.get(index).copied().unwrap_or(index);
             let (top, lane) = (lane_top(at), lane_height(at));
             frame.stroke(
                 &Path::line(
@@ -480,12 +570,12 @@ impl SignalView<'_> {
             frame,
             plan,
             plan.channels.len(),
-            &lane_top,
-            &lane_height,
+            &decoder_top,
+            &decoder_height,
             scale,
             &look,
         );
-        decoder_view::draw_overlays(frame, plan, &lane_top, &lane_height, scale, &look);
+        decoder_view::draw_overlays(frame, plan, &decoder_top, &decoder_height, scale, &look);
         if plan.state == FrameState::Empty {
             frame.fill_text(Text {
                 content: message(self.localizer, "view-empty"),
@@ -745,7 +835,7 @@ impl canvas::Program<Message> for SignalView<'_> {
                     return None;
                 };
                 let layout = self.layout(bounds.height, state.scroll);
-                let count = self.plan.channels.len();
+                let count = layout.count();
                 let targets = layout.shifts(from, layout.move_target(from, y), count);
                 let dt = state
                     .anim_at
@@ -834,7 +924,6 @@ impl canvas::Program<Message> for SignalView<'_> {
                 let layout = self.layout(bounds.height, state.scroll);
                 if position.x < GUTTER {
                     let LegendHit { lane, zone } = layout.zone_at(position.x, position.y)?;
-                    let channel = self.plan.channels.get(lane)?;
                     if zone == Zone::Border {
                         let now = Instant::now();
                         let double = state.last_border.is_some_and(|(at, l)| {
@@ -844,10 +933,9 @@ impl canvas::Program<Message> for SignalView<'_> {
                         if double {
                             state.last_border = None;
                             return Some(
-                                canvas::Action::publish(Message::Run(Command::SetChannelHeight {
-                                    channel: channel.channel,
-                                    height: 0,
-                                }))
+                                canvas::Action::publish(Message::Run(
+                                    self.height_command(lane, 0)?,
+                                ))
                                 .and_capture(),
                             );
                         }
@@ -887,38 +975,6 @@ impl canvas::Program<Message> for SignalView<'_> {
                             .and_capture(),
                     );
                 }
-                // A click on an annotation selects it.
-                let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
-                let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
-                if let Some(decoder_view::Hit {
-                    instance,
-                    annotation,
-                    ..
-                }) = decoder_view::hit_test(
-                    self.plan,
-                    position,
-                    self.plan.channels.len(),
-                    &lane_top,
-                    &lane_height,
-                    scale,
-                ) {
-                    let now = Instant::now();
-                    let double = state.last_click.is_some_and(|(at, i, a)| {
-                        i == instance
-                            && a == annotation
-                            && now.saturating_duration_since(at) < Duration::from_millis(400)
-                    });
-                    state.last_click = Some((now, instance, annotation));
-                    let command = if double {
-                        Command::GoToAnnotation(la_host::AnnotationTarget::Selected)
-                    } else {
-                        Command::SelectAnnotation {
-                            instance,
-                            annotation,
-                        }
-                    };
-                    return Some(canvas::Action::publish(Message::Run(command)).and_capture());
-                }
                 if let Some(first) = self.joining {
                     // Choosing the other half of a pair: a single marker other than the first
                     // is taken, everything else is ignored (no drag, no selection).
@@ -952,14 +1008,12 @@ impl canvas::Program<Message> for SignalView<'_> {
                         start_height,
                         start_y,
                     }) => {
-                        let channel = self.plan.channels.get(lane)?;
                         let height = lane_layout::resized_height(start_height, start_y, position.y);
-                        if height != channel.height {
+                        if height != self.chosen_height(lane)? {
                             return Some(
-                                canvas::Action::publish(Message::Run(Command::SetChannelHeight {
-                                    channel: channel.channel,
-                                    height,
-                                }))
+                                canvas::Action::publish(Message::Run(
+                                    self.height_command(lane, height)?,
+                                ))
                                 .and_capture(),
                             );
                         }
@@ -977,7 +1031,8 @@ impl canvas::Program<Message> for SignalView<'_> {
                         let far = (position.x - press.at.x).hypot(position.y - press.at.y)
                             > DRAG_THRESHOLD;
                         if press.zone == Zone::Name && far {
-                            state.shifts = vec![0.0; self.plan.channels.len()];
+                            state.shifts =
+                                vec![0.0; layout_count(self, bounds.height, state.scroll)];
                             state.anim_at = None;
                             state.drag = Some(Drag::Lane {
                                 from: press.lane,
@@ -1076,7 +1131,8 @@ impl canvas::Program<Message> for SignalView<'_> {
                     }
                     (Some(Drag::Resize { .. }), _) => Some(canvas::Action::capture()),
                     (None, Some(press)) => {
-                        let channel = self.plan.channels.get(press.lane)?;
+                        // A click on the legend of a decoder lane does nothing (it can be dragged).
+                        let channel = self.channel_at(press.lane)?;
                         match press.zone {
                             Zone::Bar => Some(
                                 canvas::Action::publish(Message::Run(Command::SetChannelColour {
@@ -1124,7 +1180,10 @@ impl canvas::Program<Message> for SignalView<'_> {
         // drawn under the pointer in the overlay.
         let waveforms = if let Some(Drag::Lane { from, .. }) = state.drag {
             let mut shifts = state.shifts.clone();
-            shifts.resize(self.plan.channels.len().max(from.saturating_add(1)), 0.0);
+            shifts.resize(
+                layout_count(self, size.height, state.scroll).max(from.saturating_add(1)),
+                0.0,
+            );
             if let Some(carried) = shifts.get_mut(from) {
                 *carried = -OFF_SCREEN;
             }
@@ -1265,9 +1324,7 @@ impl SignalView<'_> {
         colour: Color,
     ) {
         let number = self
-            .plan
-            .channels
-            .get(index)
+            .channel_at(index)
             .map(|c| physical_label(c.channel))
             .unwrap_or_default();
         let left = BAR_WIDTH + 6.0;
@@ -1324,11 +1381,13 @@ impl SignalView<'_> {
         let plan = self.plan;
         let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
         let layout = self.layout(size.height, scroll);
+        let (lane_of_channel, _) = self.lane_maps();
         let lane = plan
             .channels
             .iter()
             .position(|c| c.channel == snapped.channel)
-            .and_then(|index| layout.lane(index));
+            .and_then(|index| lane_of_channel.get(index))
+            .and_then(|index| layout.lane(*index));
         let Some(lane) = lane else {
             return;
         };
@@ -1406,7 +1465,11 @@ impl SignalView<'_> {
                 .with_color(palette.primary)
                 .with_width(2.0),
         );
-        let (Some(lane), Some(channel)) = (layout.lane(from), self.plan.channels.get(from)) else {
+        let Some(lane) = layout.lane(from) else {
+            return;
+        };
+        let Some(channel) = self.channel_at(from) else {
+            self.draw_decoder_lane_drag(frame, size, theme, from, y, &layout);
             return;
         };
         let colour = self.variant.channel(channel.colour);
@@ -1455,6 +1518,92 @@ impl SignalView<'_> {
         );
     }
 
+    /// The lane of a decoder lifted by its legend: its name and an outline under the pointer.
+    fn draw_decoder_lane_drag(
+        &self,
+        frame: &mut Frame,
+        size: Size,
+        theme: &Theme,
+        from: usize,
+        y: f32,
+        layout: &Layout,
+    ) {
+        let (Some(lane), Some(decoder)) = (layout.lane(from), self.decoder_at(from)) else {
+            return;
+        };
+        let palette = theme.palette();
+        let top = (y - lane.height / 2.0)
+            .clamp(AXIS_HEIGHT, (size.height - lane.height).max(AXIS_HEIGHT));
+        frame.fill_rectangle(
+            Point::new(0.0, top),
+            Size::new(size.width, lane.height),
+            Color {
+                a: 0.96,
+                ..palette.background
+            },
+        );
+        frame.fill_text(Text {
+            content: fit(&decoder.name, 14),
+            position: Point::new(8.0, top + lane.height / 2.0),
+            color: palette.text,
+            size: Pixels(TEXT_SIZE + 1.0),
+            align_y: Vertical::Center,
+            ..Text::default()
+        });
+        frame.stroke(
+            &Path::rectangle(Point::new(0.0, top), Size::new(size.width, lane.height)),
+            Stroke::default().with_color(palette.text).with_width(1.5),
+        );
+    }
+
+    /// The command that gives the lane `lane` the height `height` (0: automatic): a channel's or a
+    /// decoder's.
+    fn height_command(&self, lane: usize, height: u16) -> Option<Command> {
+        match self.order().get(lane)? {
+            LaneSlot::Channel(n) => Some(Command::SetChannelHeight {
+                channel: self.plan.channels.get(*n)?.channel,
+                height,
+            }),
+            LaneSlot::Decoder(n) => Some(Command::SetDecoderLaneHeight {
+                instance: self.plan.lanes.get(*n)?.instance,
+                height,
+            }),
+        }
+    }
+
+    /// The height the user gave the lane `lane` (0: none).
+    fn chosen_height(&self, lane: usize) -> Option<u16> {
+        match self.order().get(lane)? {
+            LaneSlot::Channel(n) => self.plan.channels.get(*n).map(|c| c.height),
+            LaneSlot::Decoder(n) => self.plan.lanes.get(*n).map(|l| l.height),
+        }
+    }
+
+    /// The tops and heights of the lanes as the drawing of the decoders asks for them: it counts the
+    /// channels first and the decoder lanes after them.
+    fn decoder_lane_functions<'l>(
+        &self,
+        layout: &'l Layout,
+    ) -> (impl Fn(usize) -> f32 + 'l, impl Fn(usize) -> f32 + 'l) {
+        let (lane_of_channel, lane_of_decoder) = self.lane_maps();
+        let channels_shown = self.plan.channels.len();
+        let real = move |virtual_lane: usize| {
+            if virtual_lane < channels_shown {
+                lane_of_channel.get(virtual_lane).copied().unwrap_or(0)
+            } else {
+                lane_of_decoder
+                    .get(virtual_lane.saturating_sub(channels_shown))
+                    .copied()
+                    .unwrap_or(0)
+            }
+        };
+        let real_again = real.clone();
+        (
+            move |v: usize| layout.lane(real(v)).map_or(AXIS_HEIGHT, |l| l.top),
+            move |v: usize| layout.lane(real_again(v)).map_or(AUTO_MAX, |l| l.height),
+        )
+    }
+
     /// The time under the pointer, with a vertical hairline.
     fn draw_hover(
         &self,
@@ -1482,8 +1631,8 @@ impl SignalView<'_> {
                 .with_color(Color { a: 0.5, ..colour })
                 .with_width(1.0),
         );
-        // The time is attached to the pointer, not to a corner where it would merge with the axis.
-        let content = self.localizer.format_duration(seconds);
+        // The box is attached to the pointer, not to a corner where it would merge with the axis.
+        let content = self.hover_content(size, position, scroll, seconds);
         let label = hover_label_rect(position, size, hover_label_size(&content));
         let palette = theme.palette();
         frame.fill_rectangle(
@@ -1508,71 +1657,40 @@ impl SignalView<'_> {
             align_y: Vertical::Center,
             ..Text::default()
         });
-        self.draw_annotation_readout(frame, size, position, theme, scroll);
     }
 
-    /// The full text of the annotation under the pointer and its length in time, in a box next to
-    /// the pointer (a span's text may be cut in the lane).
-    fn draw_annotation_readout(
+    /// What the box at the pointer says: over an annotation of a decoder its whole text, anywhere else
+    /// the time under the pointer (`seconds`).
+    fn hover_content(&self, size: Size, position: Point, scroll: f32, seconds: f64) -> String {
+        let Some(hit) = self.annotation_under(size, position, scroll) else {
+            return self.localizer.format_duration(seconds);
+        };
+        // The invisible isolating marks of the formatter take no room.
+        la_host::decoders::annotation_text(self.localizer, &hit.text)
+            .chars()
+            .filter(|c| !('\u{2066}'..='\u{2069}').contains(c))
+            .collect()
+    }
+
+    /// The annotation of a decoder under the pointer, if any.
+    fn annotation_under(
         &self,
-        frame: &mut Frame,
         size: Size,
         position: Point,
-        theme: &Theme,
         scroll: f32,
-    ) {
+    ) -> Option<decoder_view::Hit> {
         let plan = self.plan;
         let layout = self.layout(size.height, scroll);
-        let lane_top = |index: usize| layout.lane(index).map_or(AXIS_HEIGHT, |l| l.top);
-        let lane_height = |index: usize| layout.lane(index).map_or(AUTO_MAX, |l| l.height);
+        let (lane_top, lane_height) = self.decoder_lane_functions(&layout);
         let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
-        let Some(hit) = decoder_view::hit_test(
+        decoder_view::hit_test(
             plan,
             position,
             plan.channels.len(),
             &lane_top,
             &lane_height,
             scale,
-        ) else {
-            return;
-        };
-        let seconds = hit.end.saturating_sub(hit.start) as f64 / plan.sample_rate_hz.max(1) as f64;
-        let content = format!(
-            "{}  \u{b7}  {}",
-            la_host::decoders::annotation_text(self.localizer, &hit.text),
-            self.localizer.format_duration(seconds)
-        );
-        let width = content.chars().count() as f32 * 7.0 + 12.0;
-        let x = (position.x + 12.0).min((size.width - width - 4.0).max(0.0));
-        // Below the time of the pointer, which sits right under the crosshair.
-        let y = (position.y + 14.0 + HOVER_LABEL_HEIGHT + 4.0).min((size.height - 24.0).max(0.0));
-        let palette = theme.palette();
-        frame.fill_rectangle(
-            Point::new(x, y),
-            Size::new(width, 20.0),
-            Color {
-                a: 0.92,
-                ..palette.background
-            },
-        );
-        frame.stroke(
-            &Path::rectangle(Point::new(x, y), Size::new(width, 20.0)),
-            Stroke::default()
-                .with_color(if hit.error {
-                    palette.danger
-                } else {
-                    palette.text
-                })
-                .with_width(1.0),
-        );
-        frame.fill_text(Text {
-            content,
-            position: Point::new(x + 6.0, y + 10.0),
-            color: palette.text,
-            size: Pixels(TEXT_SIZE),
-            align_y: Vertical::Center,
-            ..Text::default()
-        });
+        )
     }
 }
 
@@ -1599,7 +1717,6 @@ mod tests {
             cache: &cache,
             variant: Variant::Dark,
             localizer: &localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -1736,7 +1853,6 @@ mod tests {
             cache: &cache,
             variant: Variant::Dark,
             localizer: &localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -1853,7 +1969,6 @@ mod tests {
             cache: &cache,
             variant: Variant::Dark,
             localizer: &localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -1913,7 +2028,6 @@ mod tests {
             cache,
             variant: Variant::Dark,
             localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -1975,6 +2089,9 @@ mod tests {
             incomplete: false,
             outdated: false,
             plan: la_decoders::lanes::Plan::default(),
+            height: 0,
+            slot: None,
+            rows: 3,
         });
         let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
         let view = view_of(&plan, &cache, &localizer);
@@ -2203,6 +2320,219 @@ mod tests {
             &[press(start), moved(outside), release(outside)],
         );
         assert!(published.is_empty(), "{published:?}");
+    }
+
+    /// The plan of four channels with a decoder lane put between the first and the second one.
+    fn plan_with_a_decoder_lane() -> FramePlan {
+        let (mut plan, _shell) = plan_with_channels();
+        plan.lanes.push(la_host::plan::LanePlan {
+            instance: 7,
+            name: "I2C".into(),
+            state: la_host::decoders::InstanceState::Finished,
+            incomplete: false,
+            outdated: false,
+            plan: la_decoders::lanes::Plan::default(),
+            height: 0,
+            slot: Some(1),
+            rows: 2,
+        });
+        plan
+    }
+
+    #[test]
+    fn a_decoder_lane_between_channels_has_the_height_its_rows_need_and_the_channels_keep_theirs() {
+        let plan = plan_with_a_decoder_lane();
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let layout = view.layout(500.0, 0.0);
+        let heights: Vec<f32> = (0..5).map(|i| layout.lane(i).unwrap().height).collect();
+        // Two rows: 3 + 2 * 24 + 3 = 54.
+        assert!((heights[1] - 54.0).abs() < 1e-4, "{heights:?}");
+        assert!(heights.iter().enumerate().all(|(i, h)| i == 1 || *h > 54.0));
+        // The lane after the decoder is the second channel.
+        assert_eq!(
+            view.channel_at(2).map(|c| c.channel),
+            Some(plan.channels[1].channel)
+        );
+        assert!(view.channel_at(1).is_none());
+        assert_eq!(view.decoder_at(1).map(|l| l.instance), Some(7));
+        // The pointer over the decoder lane is over no channel; over the next lane, the second one.
+        let y = |lane: usize| layout.lane(lane).unwrap().top + 10.0;
+        assert_eq!(view.lane_under(Point::new(500.0, y(1)), &layout), None);
+        assert_eq!(
+            view.lane_under(Point::new(500.0, y(2)), &layout),
+            Some(plan.channels[1].channel)
+        );
+    }
+
+    #[test]
+    fn the_border_of_a_decoder_lane_sets_its_height_and_a_double_click_makes_it_automatic() {
+        let plan = plan_with_a_decoder_lane();
+        // The decoder lane is 100..154 (the first channel lane is 72 high from the axis).
+        let border = Point::new(60.0, 154.0);
+        let to = Point::new(60.0, 184.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(border), moved(to), release(to)],
+        );
+        assert!(
+            matches!(
+                published.as_slice(),
+                [Message::Run(Command::SetDecoderLaneHeight {
+                    instance: 7,
+                    height: 84
+                })]
+            ),
+            "{published:?}"
+        );
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[
+                press(border),
+                release(border),
+                press(border),
+                release(border),
+            ],
+        );
+        assert!(
+            published.iter().any(|m| matches!(
+                m,
+                Message::Run(Command::SetDecoderLaneHeight {
+                    instance: 7,
+                    height: 0
+                })
+            )),
+            "{published:?}"
+        );
+    }
+
+    #[test]
+    fn a_decoder_lane_is_carried_by_its_name_and_a_click_on_it_does_nothing() {
+        let plan = plan_with_a_decoder_lane();
+        let start = Point::new(60.0, 125.0);
+        let down = Point::new(60.0, 480.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(start), moved(down), release(down)],
+        );
+        assert!(
+            matches!(published.as_slice(), [Message::MoveLane { from: 1, to: 4 }]),
+            "{published:?}"
+        );
+        // Even the place of the colour bar of a channel is only the name here: a click is nothing.
+        let near = Point::new(62.0, 127.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(start), moved(near), release(near)],
+        );
+        assert!(published.is_empty(), "{published:?}");
+        let bar = Point::new(3.0, 125.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(bar), release(bar)],
+        );
+        assert!(published.is_empty(), "{published:?}");
+    }
+
+    #[test]
+    fn the_lanes_after_a_decoder_lane_still_belong_to_their_channels() {
+        let plan = plan_with_a_decoder_lane();
+        // The colour bar of the lane after the decoder lane (154..226): the second channel.
+        let bar = Point::new(3.0, 190.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(bar), release(bar)],
+        );
+        assert!(
+            matches!(
+                published.as_slice(),
+                [Message::Run(Command::SetChannelColour { channel, .. })]
+                    if *channel == plan.channels[1].channel
+            ),
+            "{published:?}"
+        );
+        // The border under it sets that channel's height.
+        let border = Point::new(60.0, 226.0);
+        let to = Point::new(60.0, 236.0);
+        let published = drive(
+            &plan,
+            &mut ViewState::default(),
+            &[press(border), moved(to), release(to)],
+        );
+        assert!(
+            matches!(
+                published.as_slice(),
+                [Message::Run(Command::SetChannelHeight { channel, height: 82 })]
+                    if *channel == plan.channels[1].channel
+            ),
+            "{published:?}"
+        );
+    }
+
+    #[test]
+    fn the_width_of_the_box_follows_the_glyphs_of_the_text() {
+        // Narrow glyphs make a narrow box, wide ones a wide box, at the same number of characters.
+        let narrow = estimated_width("1.111.11 il.", TEXT_SIZE);
+        let wide = estimated_width("MWMWMWMWMWMW", TEXT_SIZE);
+        assert!(narrow < 0.5 * wide, "{narrow} {wide}");
+        // A text of ordinary letters and digits is well under the old flat 0.62 of the size.
+        let text = "Write to 0x50: 0x12 0x34";
+        let flat = text.chars().count() as f32 * TEXT_SIZE * 0.62;
+        let estimate = estimated_width(text, TEXT_SIZE);
+        assert!(
+            estimate < 0.9 * flat && estimate > 0.6 * flat,
+            "{estimate} {flat}"
+        );
+        // The box is the text and the room at each side.
+        let size = hover_label_size(text);
+        assert!((size.width - (estimate + 2.0 * HOVER_PAD_X)).abs() < 1e-3);
+        // Wide characters take a whole em.
+        assert!((estimated_width("\u{3042}", TEXT_SIZE) - TEXT_SIZE).abs() < 1e-3);
+        assert_eq!(estimated_width("", TEXT_SIZE), 0.0);
+    }
+
+    #[test]
+    fn the_box_at_the_pointer_says_the_annotation_instead_of_the_time_over_one() {
+        use la_decoders::lanes::{Cell, Plan, SpanCell};
+        use la_decoders::model::{Shape, Style, Text as AnnotationText};
+        let mut plan = plan_with_a_decoder_lane();
+        let span = SpanCell {
+            id: 1,
+            start: 100,
+            end: 300,
+            x0: 100.0,
+            x1: 300.0,
+            style: Style {
+                colour: Some(1),
+                shape: Shape::Part,
+            },
+            text: AnnotationText::Literal("hello".into()),
+            error: false,
+        };
+        plan.lanes[0].plan = Plan {
+            rows: vec![vec![Cell::Span(span)], vec![]],
+            ..Plan::default()
+        };
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let size = Size::new(900.0, 500.0);
+        // The decoder lane is 100..154; the annotation spans 100..300 pixels of the signal area.
+        let over = Point::new(GUTTER + 150.0, 110.0);
+        let said = view.hover_content(size, over, 0.0, 0.001);
+        // Its text and nothing else: no length in time.
+        assert_eq!(said, "hello");
+        // Beside the annotation, and over a channel, it is the time.
+        let beside = Point::new(GUTTER + 500.0, 110.0);
+        let time = localizer.format_duration(0.001);
+        assert_eq!(view.hover_content(size, beside, 0.0, 0.001), time);
+        let channel = Point::new(GUTTER + 150.0, 60.0);
+        assert_eq!(view.hover_content(size, channel, 0.0, 0.001), time);
     }
 
     #[test]
