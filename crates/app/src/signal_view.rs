@@ -1635,20 +1635,17 @@ impl SignalView<'_> {
         });
     }
 
-    /// What the box at the pointer says: over an annotation of a decoder its whole text and its length
-    /// in time, anywhere else the time under the pointer (`seconds`).
+    /// What the box at the pointer says: over an annotation of a decoder its whole text, anywhere else
+    /// the time under the pointer (`seconds`).
     fn hover_content(&self, size: Size, position: Point, scroll: f32, seconds: f64) -> String {
         let Some(hit) = self.annotation_under(size, position, scroll) else {
             return self.localizer.format_duration(seconds);
         };
-        let rate = self.plan.sample_rate_hz.max(1) as f64;
-        let length = hit.end.saturating_sub(hit.start) as f64 / rate;
         // The invisible isolating marks of the formatter take no room.
-        let text: String = la_host::decoders::annotation_text(self.localizer, &hit.text)
+        la_host::decoders::annotation_text(self.localizer, &hit.text)
             .chars()
             .filter(|c| !('\u{2066}'..='\u{2069}').contains(c))
-            .collect();
-        format!("{text}  \u{b7}  {}", self.localizer.format_duration(length))
+            .collect()
     }
 
     /// The annotation of a decoder under the pointer, if any.
@@ -2482,8 +2479,8 @@ mod tests {
         // The decoder lane is 100..154; the annotation spans 100..300 pixels of the signal area.
         let over = Point::new(GUTTER + 150.0, 110.0);
         let said = view.hover_content(size, over, 0.0, 0.001);
-        assert!(said.starts_with("hello"), "{said}");
-        assert!(said.contains('\u{b7}'), "{said}");
+        // Its text and nothing else: no length in time.
+        assert_eq!(said, "hello");
         // Beside the annotation, and over a channel, it is the time.
         let beside = Point::new(GUTTER + 500.0, 110.0);
         let time = localizer.format_duration(0.001);

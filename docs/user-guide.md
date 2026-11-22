@@ -180,7 +180,7 @@ right removes the decoder.
    signal, such as a byte that was cut short or samples that were lost. When there are too many
    marks for the width of the view to tell them apart, none of them is drawn (the ranges that are wide
    enough still are); zoom in and they appear.
-4. Point at an annotation to read its whole text and its length in time in the box at the pointer, which
+4. Point at an annotation to read its whole text in the box at the pointer, which
    shows the time everywhere else (there is nothing to click or select). **F8** and **Shift+F8** bring the next and the previous
    annotation into view.
 5. The lane is always shown; the cross removes the decoder.
