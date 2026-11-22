@@ -31,7 +31,62 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
+  # Decides whether the code checks have anything to check. A change that touches only
+  # descriptions (the specifications, the roadmap, the notes of the tools) cannot change the result
+  # of the checks below, so their steps are skipped. The jobs themselves still run and report
+  # success, because the required status checks of `main` are named after them: a job that is
+  # skipped as a whole would leave its check "expected" forever. Everything that is not known to be
+  # a description counts as code, and so do the scheduled run and a push whose range is unknown.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Look at the changed files
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        shell: bash
+        run: |
+          set -u
+          code=true
+          case "$EVENT" in
+            pull_request)
+              # The checkout is the merge of the pull request into its base: the first parent is
+              # the base, so the difference to it is what the pull request brings.
+              files="$(git diff --name-only HEAD^1 HEAD)" || files=""
+              ;;
+            push)
+              files="$(git diff --name-only "$BEFORE" HEAD 2>/dev/null)" || files=""
+              ;;
+            *)
+              files=""
+              ;;
+          esac
+          if [ -n "$files" ]; then
+            echo "Changed files:"
+            echo "$files"
+            # Descriptions only: the specifications (except the one document a test compares with the
+            # code), the roadmap and the other notes in the root, the licence, and the settings of
+            # the editor and of the tools that write the specifications. `docs/` and `packaging/`
+            # are not here: tests read them.
+            code="$(printf '%s\n' "$files" | grep -Ev '^(specs/|\.specify/|\.claude/|\.remember/|\.vscode/|[^/]+\.md$|LICENSE$)' || true)"
+            keep="$(printf '%s\n' "$files" | grep -E '^specs/006-ui-shell-signal-view/contracts/host-api\.md$' || true)"
+            if [ -z "$code" ] && [ -z "$keep" ]; then
+              code=false
+            else
+              code=true
+            fi
+          fi
+          echo "Code checks needed: $code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
   fmt:
+    needs: changes
     name: fmt (${{ matrix.name }})
     if: github.event_name != 'schedule'
     strategy:
@@ -44,13 +99,17 @@ jobs:
     container: ${{ matrix.container }}
     steps:
       - name: Debian prerequisites
-        if: matrix.name == 'debian'
+        if: (matrix.name == 'debian') && needs.changes.outputs.code == 'true'
         run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.code == 'true'
       - uses: ./.github/actions/setup-rust
+        if: needs.changes.outputs.code == 'true'
       - run: cargo fmt --all --check
+        if: needs.changes.outputs.code == 'true'
 
   clippy:
+    needs: changes
     name: clippy (${{ matrix.name }})
     if: github.event_name != 'schedule'
     strategy:
@@ -63,14 +122,19 @@ jobs:
     container: ${{ matrix.container }}
     steps:
       - name: Debian prerequisites
-        if: matrix.name == 'debian'
+        if: (matrix.name == 'debian') && needs.changes.outputs.code == 'true'
         run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.code == 'true'
       - uses: ./.github/actions/setup-rust
+        if: needs.changes.outputs.code == 'true'
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: needs.changes.outputs.code == 'true'
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        if: needs.changes.outputs.code == 'true'
 
   test:
+    needs: changes
     name: test (${{ matrix.name }})
     if: github.event_name != 'schedule'
     strategy:
@@ -83,14 +147,19 @@ jobs:
     container: ${{ matrix.container }}
     steps:
       - name: Debian prerequisites
-        if: matrix.name == 'debian'
+        if: (matrix.name == 'debian') && needs.changes.outputs.code == 'true'
         run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.code == 'true'
       - uses: ./.github/actions/setup-rust
+        if: needs.changes.outputs.code == 'true'
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: needs.changes.outputs.code == 'true'
       - run: cargo test --workspace --all-features
+        if: needs.changes.outputs.code == 'true'
 
   msrv:
+    needs: changes
     name: msrv (${{ matrix.name }})
     if: github.event_name != 'schedule'
     strategy:
@@ -103,10 +172,12 @@ jobs:
     container: ${{ matrix.container }}
     steps:
       - name: Debian prerequisites
-        if: matrix.name == 'debian'
+        if: (matrix.name == 'debian') && needs.changes.outputs.code == 'true'
         run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.code == 'true'
       - name: Read the minimum supported Rust version
+        if: needs.changes.outputs.code == 'true'
         id: msrv
         shell: bash
         run: |
@@ -114,9 +185,11 @@ jobs:
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/setup-rust
+        if: needs.changes.outputs.code == 'true'
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: needs.changes.outputs.code == 'true'
       # la-app has its own, higher rust-version (its UI dependencies need it); the core crates
       # keep the workspace MSRV (specs/006-ui-shell-signal-view/research.md R12).
       #
@@ -124,8 +197,10 @@ jobs:
       # the pinned toolchain in the `test` job, and running them a second time took longer than
       # everything else in the job together (10 minutes on Windows) without proving more.
       - run: cargo +${{ steps.msrv.outputs.version }} check --workspace --exclude la-app --all-targets --all-features
+        if: needs.changes.outputs.code == 'true'
 
   deny:
+    needs: changes
     name: deny (${{ matrix.name }})
     strategy:
       fail-fast: false
@@ -137,14 +212,18 @@ jobs:
     container: ${{ matrix.container }}
     steps:
       - name: Debian prerequisites
-        if: matrix.name == 'debian'
+        if: (matrix.name == 'debian') && needs.changes.outputs.code == 'true'
         run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.code == 'true'
       - uses: ./.github/actions/setup-rust
+        if: needs.changes.outputs.code == 'true'
       - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+        if: needs.changes.outputs.code == 'true'
         with:
           tool: cargo-deny@0.20.2
       - run: cargo deny --all-features check
+        if: needs.changes.outputs.code == 'true'
 
   # Non-blocking: reports commit subjects that do not follow Conventional Commits with a
   # component scope (see CONTRIBUTING.md). A warning only; it never blocks a merge.
