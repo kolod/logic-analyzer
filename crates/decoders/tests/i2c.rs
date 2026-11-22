@@ -214,10 +214,12 @@ fn an_sda_change_on_the_sample_scl_falls_is_neither_a_start_nor_a_stop() {
         .collect();
     assert_eq!(arrows, rises);
     let lane = decoded.lane();
-    // The bus period here is 12 samples, so a cell reaches 6 samples either side of the edge.
+    // The bus period here is 12 samples, so a cell reaches 6 samples either side of the edge; the
+    // first clock pulse rises 16 samples after the start, so the start block, which goes on to the
+    // block after it, ends 10 samples after the edge.
     assert!(lane.contains(&common::i2c::part(
         start - 6,
-        start + 6,
+        start + 10,
         common::i2c::BLUE,
         "ann-i2c-start",
         &[]

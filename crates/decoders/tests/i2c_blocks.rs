@@ -196,7 +196,10 @@ fn with_an_odd_period_a_cell_reaches_half_the_period_rounded_down_before_the_edg
         let upper = band(&lane, "part");
         // Start, three bytes with an acknowledge each, stop.
         assert_eq!(upper.len(), 8, "period {period}: {upper:?}");
-        assert_eq!(upper[0].positions, vec![start - before, start + after]);
+        // The clock of this bus falls a little late, so the start block reaches the first block.
+        assert_eq!(upper[0].positions[0], start - before);
+        assert_eq!(upper[0].positions[1], upper[1].positions[0]);
+        assert!(upper[0].positions[1] >= start + after);
         for (n, (first, ack)) in cells.iter().enumerate() {
             let byte = &upper[1 + 2 * n];
             let ack_cell = &upper[2 + 2 * n];
@@ -318,4 +321,60 @@ fn a_ten_bit_address_is_read_in_full_in_the_text_of_the_packet() {
     let (key, args) = packet_text(&bus, &[]);
     assert_eq!(key, "ann-i2c-transaction-write-long");
     assert_eq!(args, ["0x123", "0x77"]);
+}
+
+#[test]
+fn a_start_block_reaches_the_first_block_when_the_clock_falls_late() {
+    // The clock falls 44 samples after the start, long after half a period: the start block does not
+    // stop short of the address block, it goes on to it.
+    let mut bus = lead();
+    let start = bus.pos();
+    bus.raw(false, true, 44);
+    let first = bus.pos() + 4;
+    bus.byte(0xA0, true);
+    bus.stop();
+    bus.idle(64);
+    let lane = decode(&bus.words()).lane();
+    assert!(
+        lane.contains(&part(
+            start - HALF,
+            first - HALF,
+            BLUE,
+            "ann-i2c-start",
+            &[]
+        )),
+        "{lane:?}"
+    );
+    // The address block begins where the start block ends: they touch.
+    assert!(
+        lane.iter()
+            .any(|e| e.key == "ann-i2c-address-write" && e.positions[0] == first - HALF)
+    );
+}
+
+#[test]
+fn a_repeated_start_block_runs_from_the_acknowledge_to_the_next_block_when_the_clock_falls_late() {
+    let mut bus = lead();
+    bus.start();
+    bus.byte(0xA0, true);
+    let a = bus.byte(0x10, true);
+    // A repeated start whose clock falls 40 samples after the SDA edge.
+    bus.raw(true, false, 4);
+    bus.raw(true, true, 4);
+    bus.raw(false, true, 40);
+    let first = bus.pos() + 4;
+    bus.byte(0xA1, true);
+    bus.stop();
+    bus.idle(64);
+    let lane = decode(&bus.words()).lane();
+    assert!(
+        lane.contains(&part(
+            ack_end(a),
+            first - HALF,
+            BLUE,
+            "ann-i2c-repeated-start",
+            &[]
+        )),
+        "{lane:?}"
+    );
 }

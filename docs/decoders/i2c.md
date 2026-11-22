@@ -63,8 +63,8 @@ earlier is cut where the later begins).
 
 | What | Band | Where | Colour | Text |
 |------|------|-------|--------|------|
-| start | upper | `T` centred on the falling edge of SDA | blue | `Start` |
-| repeated start | upper | from the end of the block before it (the acknowledge) to half a period after the falling edge of SDA | blue | `Repeated start` |
+| start | upper | from half a period before the falling edge of SDA to the block after it (at least half a period after the edge; the clock may fall late) | blue | `Start` |
+| repeated start | upper | from the end of the block before it (the acknowledge) to the block after it (at least half a period after the falling edge of SDA) | blue | `Repeated start` |
 | an address | upper | the eight bits (for 10 bits, a block for each byte, both naming the address) | orange (write), yellow (read) | `Address 0x50 (write)` |
 | a data byte | upper | the eight bits | orange (write), yellow (read) | `Data 0x12` |
 | an acknowledge bit | upper | the one period of the bit | green (ACK), red (NAK) | `ACK`, `NAK` |

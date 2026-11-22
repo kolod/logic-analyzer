@@ -97,6 +97,8 @@ enum Kind10 {
 struct Held {
     from: u64,
     to: u64,
+    /// A start: it reaches the block after it, whatever lies between (the clock may fall late).
+    stretch: bool,
     text: Text,
     style: Style,
     error: bool,
@@ -273,22 +275,46 @@ impl Bus {
         sink: &mut Sink,
         from: u64,
         to: u64,
-        (text, style): (Text, Style),
+        ts: (Text, Style),
         error: bool,
     ) -> Result<(), DecodeError> {
+        self.push(sink, from, to, ts, error, false)
+    }
+
+    /// A start or a repeated start: as `push_part`, and it will be stretched to the block after it.
+    fn push_start(
+        &mut self,
+        sink: &mut Sink,
+        from: u64,
+        to: u64,
+        ts: (Text, Style),
+    ) -> Result<(), DecodeError> {
+        self.push(sink, from, to, ts, false, true)
+    }
+
+    fn push(
+        &mut self,
+        sink: &mut Sink,
+        from: u64,
+        to: u64,
+        (text, style): (Text, Style),
+        error: bool,
+        stretch: bool,
+    ) -> Result<(), DecodeError> {
         if let Some(held) = self.held.take() {
-            self.emit_block(
-                sink,
-                held.from,
-                held.to.min(from),
-                (held.text, held.style),
-                held.error,
-            )?;
+            // A block is cut where the next begins; a start also reaches it when it lies further on.
+            let end = if held.stretch {
+                from.max(held.from)
+            } else {
+                held.to.min(from)
+            };
+            self.emit_block(sink, held.from, end, (held.text, held.style), held.error)?;
         }
         self.last_end = to;
         self.held = Some(Held {
             from,
             to,
+            stretch,
             text,
             style,
             error,
@@ -635,7 +661,7 @@ impl Bus {
             });
             text::start()
         };
-        self.push_part(sink, from, to, (text, style), false)?;
+        self.push_start(sink, from, to, (text, style))?;
         let kind = if repeated {
             items::REPEATED_START
         } else {

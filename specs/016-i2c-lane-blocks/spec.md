@@ -158,9 +158,10 @@ every block and compare them with the drawn blocks.
   **data block** (or **address block**) MUST span the eight bits of its byte, from half a period before
   the rising edge of its first bit to half a period after that of its eighth; an **ack** or **nak
   block** MUST span the one period of the acknowledge bit that follows.
-- **FR-003**: A **start block** and a **repeated start block** MUST be one bus period, centred on the
-  falling edge of SDA that makes the start; on a bus whose clock behaves as the generated one (the
-  clock falls half a period after the edge) it ends where the first block of the byte after it begins.
+- **FR-003**: A **start block** MUST begin half a bus period before the falling edge of SDA that makes the
+  start and a **repeated start block** where the acknowledge before it ends; both MUST go on to the block
+  after them (the address), so that no gap is left when the clock falls late, and never end before half a
+  period after the edge.
 - **FR-004**: A **stop block** MUST end at the rising edge of SDA that makes the stop and MUST begin one
   period before it, but not before the end of the last block before it (so on the generated signal it
   begins where the last ack block ends).

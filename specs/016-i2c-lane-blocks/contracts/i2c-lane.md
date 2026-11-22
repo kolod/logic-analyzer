@@ -12,7 +12,8 @@ overlays on SDA and SCL and the items for stacking are as in feature 008, with t
 bit cell of a bit read at the rising edge r        [r - before, r + after)
 address or data block                              [cell(bit 1).from, cell(bit 8).to)
 ack or nak block                                   cell(bit 9)
-start, repeated start (SDA falls at s)             [s - before, s + after)
+start (SDA falls at s)                             [s - before, from of the block after it)   (not before s + after)
+repeated start (SDA falls at s)                    [end of the acknowledge, from of the block after it)
 stop (SDA rises at p)                              [max(last block end, p - T), p)
 packet                                             [start.from, stop.to)
 ```
