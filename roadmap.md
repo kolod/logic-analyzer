@@ -26,7 +26,8 @@ built and verified without capture hardware, using the virtual device.
 | 014 | `014-gui-improvements` (merged) | Interface rework (no change to the host API contract of decoding or storage), in one feature or split in two when planning: see the list under "GUI improvements" below. | 006, 007, 008 |
 | 015 | `015-markers-rework` (merged) | Two kinds of marker, single (T) and pair (P), replacing the one kind of 006: lines with a pentagon-arrow or two squares, placed with the mouse and snapped to transitions, colours, comments, time origin, cutting and trimming the data, fit and scroll to a marker, duration and frequency of a pair; the Markers panel with two add buttons. | 006, 014 |
 | 016 | `016-i2c-lane-blocks` | The lane of the I2C decoder as two bands of solid blocks: the parts of a packet (start, address, data, ack/nak, stop) above, the whole packet below, green or red; decoder API 1.2 (block shapes, rows of a lane). | 008 |
-| 017+ | as needed | More decoders (SPI, UART, 1-Wire, ...), raw data export, `.sr` import/export, packaging (Windows installer, `.deb`). | — |
+| 017 | `017-driver-rp2350b-32ch` | Driver for a 32-channel logic analyzer: the continuation of the [gusmanb/logicanalyzer](https://github.com/gusmanb/logicanalyzer) project on the RP2350B chip, on the WeAct RP2350B Core Board ([schematic](https://github.com/WeActStudio/WeActStudio.RP2350BCoreBoard/blob/main/HDK/RP2350B_SCH.pdf)), with 32 channels instead of 24. It needs firmware written in Rust that extends the support from 24 to 32 channels: see "The 32-channel driver" below. Recorded-transport tests, manual hardware verification procedure, device access. | 004, 011 |
+| 018+ | as needed | More decoders (SPI, UART, 1-Wire, ...), raw data export, `.sr` import/export, packaging (Windows installer, `.deb`). | — |
 
 ## Notes on the order
 
@@ -73,12 +74,32 @@ What the feature covers, as asked by the owner; the plan decides the order and w
   key opens a choice.
 - (More items may be added here before the specification is written.)
 
+## The 32-channel driver (017)
+
+What the feature covers, as asked by the owner; the specification decides the details.
+
+- **The device**: a logic analyzer built as the gusmanb Raspberry Pi Pico one, but on an RP2350B chip,
+  which has the pins for 32 channels, on the WeAct RP2350B Core Board. The board's schematic is the
+  reference for which pins are free for the inputs.
+- **The driver**: one specification and one driver of its own (Principle II), next to the gusmanb Pico
+  driver of 011, whose protocol it continues; the number of channels is 32, not 24.
+- **The firmware**: written in Rust, extending the support from 24 to 32 channels. Its functions must be
+  at least as good as those of the original firmware, at least for 24 channels: nothing the original
+  does with 24 channels may be missing or worse (the list of those functions is made from the original's
+  documentation and behaviour at the start of the specification, and each one gets a test or a
+  verification step).
+- **Hardware verification**: a procedure for the owner, with the board, as for the other drivers.
+
 ## Risks and open questions
 
 - 003: native session format versus sigrok `.sr` from the start. A native format is
   easier to make robust (Principle I); `.sr` is convenient for exchange with PulseView.
 - 013: the WeAct device protocol must be studied from its repository before the
   specification is written.
+- 017: the protocol and the licence of the original gusmanb firmware must be studied before the
+  specification is written; the Rust firmware is written from the behaviour of the protocol and not by
+  copying its code (Principle XII). Whether the 32 channels fit the existing protocol or need an extension
+  of it, and what the RP2350B's speed and memory allow at 32 channels, are open.
 - 007 was the riskiest item: the annotation model determines overlays, export and
   generators. It is merged; the open points it leaves are in its pull request (the wording of
   Principle IX's overlay bound against Principle VIII, process isolation for future user-written
