@@ -279,8 +279,14 @@ fn check_invariants(shell: &Shell) -> Result<(), String> {
         ));
     }
     // Activity and unsaved state.
-    if state.operation.is_some() && state.activity != Activity::Idle {
-        return Err("a save or load while capturing".into());
+    // A save or load runs with the activity idle; a cut runs with the activity `Cropping`, and it may
+    // well still be running when the action is over (it runs in the background).
+    if let Some(operation) = state.operation {
+        let cut =
+            operation.kind == la_host::OperationKind::Crop && state.activity == Activity::Cropping;
+        if state.activity != Activity::Idle && !cut {
+            return Err("a save or load while capturing".into());
+        }
     }
     if capture.is_none() && state.unsaved != Unsaved::Clean {
         return Err(format!("{:?} without a capture", state.unsaved));
