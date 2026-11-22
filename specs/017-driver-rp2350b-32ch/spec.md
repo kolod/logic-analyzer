@@ -332,7 +332,9 @@ signal appears on a channel of each board at the same time to within one sample.
   firmware whose version it does not support, telling the user the version it found.
 - **FR-017**: The firmware MUST NOT panic, reset or hang on any input from the host: an unknown command, a
   damaged or oversized frame, a request outside the limits, or a request in the wrong state MUST get an
-  error reply and leave the device ready for the next request.
+  error reply and leave the device ready for the next request. If the firmware nevertheless fails
+  (a fault that should not happen), it MAY restart itself, and the driver MUST find the board again; such a
+  restart is a defect to be reported, never an accepted way of handling input.
 - **FR-018**: The firmware MUST be able to restart into the board's bootloader on request, so that it can
   be updated without touching the board.
 - **FR-019**: The parts of the firmware that are logic (the parsing of requests, the checking of limits, the
