@@ -5,12 +5,14 @@
 //! is drawn from the seed and `k`. A frame is
 //!
 //! ```text
-//! lead-in (64 samples, both lines high) | start (4) | bytes of 9 slots of 16 samples each
-//!   [ | repeated start (12) | bytes ] | stop (8) | idle
+//! lead-in (64 samples, both lines high) | start (12) | bytes of 9 slots of 16 samples each
+//!   [ | repeated start (24) | bytes ] | stop (12) | idle
 //! ```
 //!
-//! In a bit slot SCL is low for samples 0..4, high for 4..12 and low for 12..16 and SDA holds the bit
-//! for all 16, so the data is stable around the rising edge of SCL, which is where the decoder reads.
+//! In a bit slot SCL is low for samples 0..4, high for 4..12 and low for 12..16. SDA takes the bit in the
+//! sample where SCL falls (sample 12 of the slot before) and holds it for 16 samples, so the data is
+//! stable around the rising edge of SCL, which is where the decoder reads. A start, a repeated start
+//! and a stop put the edge of SDA 8 samples from an edge of SCL.
 //!
 //! With `errors` on, about one frame in `error_rate` carries a planted error: the address is not
 //! acknowledged, a written byte is not acknowledged, or the transaction is cut short by a stop in the
@@ -58,9 +60,14 @@ pub const DEFAULT_ERROR_RATE: i64 = 8;
 
 const SLOT: u64 = SAMPLES_PER_BIT;
 const BYTE: u64 = 9 * SLOT;
-const START: u64 = 4;
-const RESTART: u64 = 12;
-const STOP: u64 = 8;
+/// A start: SDA falls with SCL high, SCL falls 8 samples later (and SDA takes the first bit), 4 more
+/// samples of low before the clock pulse of the first bit.
+const START: u64 = 12;
+/// A repeated start: SDA high with SCL low (4), SCL high (8), SDA low with SCL high (8), SCL low and the
+/// first bit set (4).
+const RESTART: u64 = 24;
+/// A stop: SDA low with SCL low (4), SCL high with SDA low (8), then SDA rises.
+const STOP: u64 = 12;
 
 /// An error the generator planted, with where the decoder must report it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -350,13 +357,34 @@ impl Params {
     }
 
     /// The `(sda, scl)` levels at offset `r` of a frame.
+    ///
+    /// SDA changes in the sample where SCL falls (the bit of a slot is set 4 samples before the slot's
+    /// clock pulse starts, and held until the pulse has ended); in a start, a repeated start and a stop
+    /// the edge of SDA is 8 samples from an edge of SCL.
     fn levels(frame: &Frame, r: u64) -> (bool, bool) {
         if r < LEAD_IN {
             return (true, true);
         }
         let mut t = r - LEAD_IN;
+        // The bit at `u` samples into the part of the body that begins with byte `from`.
+        let bit_at = |from: usize, u: u64| {
+            let slot = u / SLOT;
+            let byte = from + (slot / 9) as usize;
+            let bit = slot % 9;
+            let b = frame.bytes[byte];
+            if bit < 8 {
+                b.value >> (7 - bit) & 1 != 0
+            } else {
+                b.nak
+            }
+        };
         if t < START {
-            return (false, true);
+            // SDA falls with SCL high; 8 samples later SCL falls and the first bit is set.
+            return if t < 8 {
+                (false, true)
+            } else {
+                (bit_at(0, 0), false)
+            };
         }
         t -= START;
         let cut = frame.cut_bits * SLOT;
@@ -368,40 +396,35 @@ impl Params {
         } else {
             (frame.count as u64 * BYTE + cut, 0)
         };
-        let body = |t: u64, from: usize| {
-            let slot = t / SLOT;
-            let byte = from + (slot / 9) as usize;
-            let bit = slot % 9;
-            let off = t % SLOT;
-            let b = frame.bytes[byte];
-            let sda = if bit < 8 {
-                b.value >> (7 - bit) & 1 != 0
-            } else {
-                b.nak
-            };
-            (sda, (4..12).contains(&off))
+        // A part of the body: `len` samples; the last 4 hold the level `after` (SDA high before a
+        // repeated start, low before a stop).
+        let body = |t: u64, from: usize, len: u64, after: bool| {
+            let u = t + 4;
+            let sda = if u >= len { after } else { bit_at(from, u) };
+            (sda, (4..12).contains(&(t % SLOT)))
         };
         if t < first {
-            return body(t, 0);
+            return body(t, 0, first, frame.restart);
         }
         t -= first;
         if frame.restart {
             if t < RESTART {
                 return match t {
                     0..=3 => (true, false),
-                    4..=7 => (true, true),
-                    _ => (false, true),
+                    4..=11 => (true, true),
+                    12..=19 => (false, true),
+                    _ => (bit_at(frame.restart_before, 0), false),
                 };
             }
             t -= RESTART;
             if t < second {
-                return body(t, frame.restart_before);
+                return body(t, frame.restart_before, second, false);
             }
             t -= second;
         }
         match t {
             0..=3 => (false, false),
-            4..=7 => (false, true),
+            4..=11 => (false, true),
             _ => (true, true),
         }
     }
@@ -556,7 +579,7 @@ fn analyse(params: &Params, length: u64) -> Analysis {
             if frame.restart && index == frame.restart_before {
                 let setup = base + Params::slot_start(&frame, index) - RESTART + 4;
                 rise(setup, &mut analysis);
-                let at = setup + 4;
+                let at = setup + 8;
                 if at < length {
                     analysis.items.push(
                         Event::condition(items::REPEATED_START, items::UNKNOWN).item(at, at + 1),
@@ -628,7 +651,7 @@ fn analyse(params: &Params, length: u64) -> Analysis {
         let body_end = base + Params::body_end(&frame);
         // The rising edge of SCL that sets the stop up, and the stop itself.
         rise(body_end + 4, &mut analysis);
-        let stop = body_end + 8;
+        let stop = body_end + 12;
         if stop < length {
             analysis
                 .items
