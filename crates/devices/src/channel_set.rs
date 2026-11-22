@@ -86,19 +86,19 @@ impl ChannelSet {
 
     /// Adds `channel`; a channel at or above [`MAX_CHANNELS`] is ignored.
     pub fn insert(&mut self, channel: u8) {
-        if let Some((k, bit)) = Self::slot(channel)
-            && let Some(word) = self.words.get_mut(k)
-        {
-            *word |= bit;
+        if let Some((k, bit)) = Self::slot(channel) {
+            if let Some(word) = self.words.get_mut(k) {
+                *word |= bit;
+            }
         }
     }
 
     /// Removes `channel`.
     pub fn remove(&mut self, channel: u8) {
-        if let Some((k, bit)) = Self::slot(channel)
-            && let Some(word) = self.words.get_mut(k)
-        {
-            *word &= !bit;
+        if let Some((k, bit)) = Self::slot(channel) {
+            if let Some(word) = self.words.get_mut(k) {
+                *word &= !bit;
+            }
         }
     }
 
