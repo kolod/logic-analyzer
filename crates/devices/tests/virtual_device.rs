@@ -29,7 +29,7 @@ fn virtual_id() -> DeviceId {
 
 fn config(mask: u32, rate: u64, length: u64, options: VirtualOptions) -> DeviceConfig {
     DeviceConfig {
-        enabled_channels: mask,
+        enabled_channels: la_devices::ChannelSet::from_u32(mask),
         sample_rate_hz: rate,
         trigger: None,
         capture_length: Some(length),
@@ -252,7 +252,13 @@ struct CounterFactory {
 }
 
 impl SignalSourceFactory for CounterFactory {
-    fn create(&self, enabled_mask: u32, sample_rate_hz: u64, seed: u64) -> Box<dyn SignalSource> {
+    fn create(
+        &self,
+        enabled: la_devices::ChannelSet,
+        sample_rate_hz: u64,
+        seed: u64,
+    ) -> Box<dyn SignalSource> {
+        let enabled_mask = enabled.to_u32();
         *self.seen.lock().unwrap() = Some((enabled_mask, sample_rate_hz, seed));
         Box::new(CounterSource { mask: enabled_mask })
     }

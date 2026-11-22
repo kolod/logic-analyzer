@@ -26,11 +26,27 @@ fn xorshift64(state: &mut u64) -> u64 {
     x
 }
 
+use la_storage::MAX_WORDS_PER_SAMPLE;
+
+use crate::channel_set::ChannelSet;
+
+/// The levels of one sample as words, the layout of a sample.
+type Levels = [u32; MAX_WORDS_PER_SAMPLE];
+
 #[derive(Debug)]
 struct ChannelGenerator {
-    bit: u32,
+    channel: u8,
     rng: u64,
     next_flip: u64,
+}
+
+impl ChannelGenerator {
+    /// Flips this channel's bit in `levels`.
+    fn toggle(&self, levels: &mut Levels) {
+        if let Some(word) = levels.get_mut(usize::from(self.channel) / 32) {
+            *word ^= 1_u32.wrapping_shl(u32::from(self.channel) % 32);
+        }
+    }
 }
 
 /// Generates random digital signals for the enabled channels.
@@ -38,40 +54,36 @@ struct ChannelGenerator {
 pub(crate) struct RandomGenerator {
     channels: Vec<ChannelGenerator>,
     modulus: u64,
-    levels: u32,
+    levels: Levels,
     position: u64,
-    scratch: Vec<(u64, u32)>,
+    scratch: Vec<(u64, usize)>,
 }
 
 impl RandomGenerator {
     /// Creates a generator for the channels in `enabled_mask`; `mean_gap` is clamped to
     /// at least 1.
-    pub(crate) fn new(enabled_mask: u32, seed: u64, mean_gap: u32) -> Self {
+    pub(crate) fn new(enabled: ChannelSet, seed: u64, mean_gap: u32) -> Self {
         let modulus = u64::from(mean_gap.max(1))
             .saturating_mul(2)
             .saturating_sub(1)
             .max(1);
-        let mut levels = 0_u32;
+        let mut levels: Levels = [0; MAX_WORDS_PER_SAMPLE];
         let mut channels = Vec::new();
-        for channel in 0..32_u32 {
-            let bit = 1_u32.wrapping_shl(channel);
-            if enabled_mask & bit == 0 {
-                continue;
-            }
+        for channel in enabled.iter() {
             // One independent stream per channel, derived from the seed and the channel.
             let mut mix = seed ^ u64::from(channel).wrapping_mul(0xD1B5_4A32_D192_ED03);
             let mut rng = splitmix64(&mut mix);
             if rng == 0 {
                 rng = 0x1234_5678_9ABC_DEF1;
             }
-            if xorshift64(&mut rng) & 1 == 1 {
-                levels |= bit;
-            }
             let mut generator = ChannelGenerator {
-                bit,
+                channel,
                 rng,
                 next_flip: 0,
             };
+            if xorshift64(&mut generator.rng) & 1 == 1 {
+                generator.toggle(&mut levels);
+            }
             generator.next_flip = gap(&mut generator.rng, modulus);
             channels.push(generator);
         }
@@ -84,21 +96,28 @@ impl RandomGenerator {
         }
     }
 
-    /// Fills `out` with the next `out.len()` samples.
+    /// Fills `out` with the next `out.len()` samples of one word each.
+    #[cfg(test)]
     pub(crate) fn fill(&mut self, out: &mut [u32]) {
+        self.fill_wide(out, 1);
+    }
+
+    /// Fills `out` with the next `out.len() / stride` samples of `stride` words each.
+    pub(crate) fn fill_wide(&mut self, out: &mut [u32], stride: usize) {
+        let stride = stride.clamp(1, MAX_WORDS_PER_SAMPLE);
+        let samples = out.len().checked_div(stride).unwrap_or(0);
         let start = self.position;
-        let len = u64::try_from(out.len()).unwrap_or(u64::MAX);
-        let end = start.saturating_add(len);
+        let end = start.saturating_add(u64::try_from(samples).unwrap_or(u64::MAX));
         let start_levels = self.levels;
 
         self.scratch.clear();
-        for channel in &mut self.channels {
+        for (index, channel) in self.channels.iter_mut().enumerate() {
             while channel.next_flip < end {
-                self.scratch.push((channel.next_flip, channel.bit));
+                self.scratch.push((channel.next_flip, index));
                 channel.next_flip = channel
                     .next_flip
                     .saturating_add(gap(&mut channel.rng, self.modulus));
-                self.levels ^= channel.bit;
+                channel.toggle(&mut self.levels);
             }
         }
         self.scratch.sort_unstable_by_key(|event| event.0);
@@ -106,25 +125,27 @@ impl RandomGenerator {
         let mut current = start_levels;
         let mut index = 0_usize;
         let mut events = self.scratch.iter().peekable();
-        while let Some(&(position, bit)) = events.next() {
-            let target = usize::try_from(position.saturating_sub(start)).unwrap_or(out.len());
-            if let Some(run) = out.get_mut(index..target.min(out.len())) {
-                run.fill(current);
+        while let Some(&(position, who)) = events.next() {
+            let target = usize::try_from(position.saturating_sub(start))
+                .unwrap_or(samples)
+                .min(samples);
+            fill_run(out, stride, index, target, &current);
+            index = target;
+            if let Some(channel) = self.channels.get(who) {
+                channel.toggle(&mut current);
             }
-            index = target.min(out.len());
-            current ^= bit;
             // Events at the same position toggle together.
-            while let Some(&&(next_position, next_bit)) = events.peek() {
+            while let Some(&&(next_position, next_who)) = events.peek() {
                 if next_position != position {
                     break;
                 }
-                current ^= next_bit;
+                if let Some(channel) = self.channels.get(next_who) {
+                    channel.toggle(&mut current);
+                }
                 events.next();
             }
         }
-        if let Some(rest) = out.get_mut(index..) {
-            rest.fill(current);
-        }
+        fill_run(out, stride, index, samples, &current);
         self.position = end;
     }
 
@@ -136,10 +157,28 @@ impl RandomGenerator {
                 channel.next_flip = channel
                     .next_flip
                     .saturating_add(gap(&mut channel.rng, self.modulus));
-                self.levels ^= channel.bit;
+                channel.toggle(&mut self.levels);
             }
         }
         self.position = end;
+    }
+}
+
+/// Writes the samples `from..to` of `out` (`stride` words each) as `levels`.
+fn fill_run(out: &mut [u32], stride: usize, from: usize, to: usize, levels: &Levels) {
+    if stride == 1 {
+        if let (Some(run), Some(&word)) = (out.get_mut(from..to), levels.first()) {
+            run.fill(word);
+        }
+        return;
+    }
+    let Some(run) = out.get_mut(from.saturating_mul(stride)..to.saturating_mul(stride)) else {
+        return;
+    };
+    for sample in run.chunks_exact_mut(stride) {
+        for (dst, &src) in sample.iter_mut().zip(levels) {
+            *dst = src;
+        }
     }
 }
 
@@ -154,7 +193,7 @@ mod tests {
     use super::*;
 
     fn generate(mask: u32, seed: u64, mean_gap: u32, splits: &[usize], total: usize) -> Vec<u32> {
-        let mut g = RandomGenerator::new(mask, seed, mean_gap);
+        let mut g = RandomGenerator::new(ChannelSet::from_u32(mask), seed, mean_gap);
         let mut out = vec![0_u32; total];
         let mut at = 0;
         let mut i = 0;
@@ -251,8 +290,8 @@ mod tests {
 
     #[test]
     fn skipping_equals_generating_and_discarding() {
-        let mut a = RandomGenerator::new(u32::MAX, 9, 10);
-        let mut b = RandomGenerator::new(u32::MAX, 9, 10);
+        let mut a = RandomGenerator::new(ChannelSet::from_u32(u32::MAX), 9, 10);
+        let mut b = RandomGenerator::new(ChannelSet::from_u32(u32::MAX), 9, 10);
         let mut discard = vec![0_u32; 5_000];
         a.fill(&mut discard);
         b.skip(5_000);

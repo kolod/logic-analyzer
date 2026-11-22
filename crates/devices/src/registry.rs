@@ -177,6 +177,7 @@ impl DeviceRegistry {
         let resolved = validate(&descriptor.capabilities, &config, &options.limits)?;
         if matches!(config.options, DeviceOptions::Virtual(_))
             && descriptor.id.provider() != PROVIDER_NAME
+            && descriptor.id.provider() != crate::virtual_device::WIDE_PROVIDER_NAME
         {
             return Err(error::invalid_state(format!(
                 "virtual device options were given for `{id}`, which is not the virtual device"

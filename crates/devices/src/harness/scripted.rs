@@ -257,7 +257,7 @@ mod tests {
     fn resolved() -> ResolvedConfig {
         ResolvedConfig::new(
             &DeviceConfig {
-                enabled_channels: 0b11,
+                enabled_channels: crate::ChannelSet::from_u32(0b11),
                 sample_rate_hz: 1_000,
                 trigger: None,
                 capture_length: None,

@@ -123,12 +123,37 @@ impl VirtualOptions {
 /// 500 MHz, every trigger kind, streaming.
 #[must_use]
 pub fn virtual_descriptor() -> DeviceDescriptor {
+    virtual_descriptor_with_channels(32)
+}
+
+/// The name of the provider of virtual devices with another channel count than 32.
+pub const WIDE_PROVIDER_NAME: &str = "virtual-wide";
+
+/// The id of the virtual device with `channels` channels: `virtual:0` for 32 (the built-in
+/// one), `virtual-wide:<n>` for any other count.
+fn wide_id(channels: u8) -> DeviceId {
+    let channels = channels.clamp(1, la_storage::MAX_CHANNELS);
+    if channels == 32 {
+        DeviceId::new(PROVIDER_NAME, "0")
+    } else {
+        DeviceId::new(WIDE_PROVIDER_NAME, &channels.to_string())
+    }
+}
+
+/// The description of a virtual device with `channels` channels (`1..=160`, clamped), so that
+/// captures wider than 32 channels can be tried without hardware.
+#[must_use]
+pub fn virtual_descriptor_with_channels(channels: u8) -> DeviceDescriptor {
     DeviceDescriptor {
-        id: DeviceId::new(PROVIDER_NAME, "0"),
-        name: "Virtual device".to_owned(),
+        id: wide_id(channels),
+        name: if channels == 32 {
+            "Virtual device".to_owned()
+        } else {
+            format!("Virtual device ({channels} channels)")
+        },
         simulated: true,
         capabilities: Capabilities {
-            channels: 32,
+            channels: channels.clamp(1, la_storage::MAX_CHANNELS),
             sample_rates: SampleRates::Range {
                 min: 1,
                 max: 500_000_000,
@@ -166,6 +191,44 @@ impl DeviceProvider for VirtualProvider {
     }
 }
 
+/// A provider of one virtual device (`virtual:0`) with a chosen number of channels, for
+/// captures wider than 32 channels.
+#[derive(Debug, Clone, Copy)]
+pub struct WideVirtualProvider {
+    channels: u8,
+}
+
+impl WideVirtualProvider {
+    /// A provider whose device has `channels` channels (`1..=160`, clamped).
+    #[must_use]
+    pub fn new(channels: u8) -> Self {
+        Self {
+            channels: channels.clamp(1, la_storage::MAX_CHANNELS),
+        }
+    }
+}
+
+impl DeviceProvider for WideVirtualProvider {
+    fn name(&self) -> &str {
+        WIDE_PROVIDER_NAME
+    }
+
+    fn scan(&self) -> Result<Vec<DeviceDescriptor>> {
+        // 32 channels is the built-in device, listed by the built-in provider.
+        if self.channels == 32 {
+            return Ok(Vec::new());
+        }
+        Ok(vec![virtual_descriptor_with_channels(self.channels)])
+    }
+
+    fn open(&self, id: &DeviceId) -> Result<Box<dyn Device>> {
+        if *id != wide_id(self.channels) {
+            return Err(error::not_found(id.as_str()));
+        }
+        Ok(Box::new(VirtualDevice::with_channels(self.channels)))
+    }
+}
+
 /// Produces the samples of one acquisition: the random generator or a custom source.
 enum Producer {
     Random(RandomGenerator),
@@ -173,27 +236,27 @@ enum Producer {
 }
 
 impl Producer {
-    /// Fills `out` with the samples for the generator positions `start ..`.
-    fn fill(&mut self, start: u64, out: &mut [u32]) {
+    /// Fills `out` (samples of `stride` words) for the generator positions `start ..`.
+    fn fill(&mut self, start: u64, out: &mut [u32], stride: usize) {
         match self {
-            Self::Random(generator) => generator.fill(out),
-            Self::Source(source) => source.fill(start, out),
+            Self::Random(generator) => generator.fill_wide(out, stride),
+            Self::Source(source) => source.fill_wide(start, out, stride),
         }
     }
 
     /// Advances over `count` generator positions without keeping the samples.
-    fn skip(&mut self, start: u64, count: u64) {
+    fn skip(&mut self, start: u64, count: u64, stride: usize) {
         match self {
             Self::Random(generator) => generator.skip(count),
             Self::Source(source) => {
                 // A source only knows how to fill, so produce and discard in chunks.
-                let mut scratch = vec![0_u32; 65_536];
+                let mut scratch = vec![0_u32; 65_536_usize.saturating_mul(stride.max(1))];
                 let mut done = 0_u64;
                 while done < count {
                     let len = usize::try_from(count.saturating_sub(done))
-                        .map_or(scratch.len(), |l| l.min(scratch.len()));
-                    if let Some(part) = scratch.get_mut(..len) {
-                        source.fill(start.saturating_add(done), part);
+                        .map_or(65_536, |l| l.min(65_536));
+                    if let Some(part) = scratch.get_mut(..len.saturating_mul(stride.max(1))) {
+                        source.fill_wide(start.saturating_add(done), part, stride.max(1));
                     }
                     done = done.saturating_add(u64::try_from(len).unwrap_or(1));
                 }
@@ -215,7 +278,10 @@ pub struct VirtualDevice {
     generated: u64,
     /// Samples generated while searching for the trigger that belong to the capture.
     carry: Vec<u32>,
+    /// Words of `carry` already delivered (a whole number of samples).
     carry_used: usize,
+    /// Words per sample of the running acquisition.
+    stride: usize,
     script: FailureScript,
     sample_rate_hz: u64,
     started: Option<Instant>,
@@ -235,8 +301,14 @@ impl VirtualDevice {
     /// Creates the virtual device.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_channels(32)
+    }
+
+    /// Creates a virtual device with `channels` channels (`1..=160`, clamped).
+    #[must_use]
+    pub fn with_channels(channels: u8) -> Self {
         Self {
-            descriptor: virtual_descriptor(),
+            descriptor: virtual_descriptor_with_channels(channels),
             producer: None,
             remaining: None,
             pacing: Pacing::Fast,
@@ -244,6 +316,7 @@ impl VirtualDevice {
             generated: 0,
             carry: Vec::new(),
             carry_used: 0,
+            stride: 1,
             script: FailureScript::default(),
             sample_rate_hz: 1,
             started: None,
@@ -267,7 +340,11 @@ impl VirtualDevice {
 
     /// Samples left over from the trigger search.
     fn carry_left(&self) -> usize {
-        self.carry.len().saturating_sub(self.carry_used)
+        self.carry
+            .len()
+            .saturating_sub(self.carry_used)
+            .checked_div(self.stride)
+            .unwrap_or(0)
     }
 
     /// Discards `count` capture positions: first from the trigger carry, then from the
@@ -276,11 +353,13 @@ impl VirtualDevice {
         let from_carry = usize::try_from(count)
             .unwrap_or(usize::MAX)
             .min(self.carry_left());
-        self.carry_used = self.carry_used.saturating_add(from_carry);
+        self.carry_used = self
+            .carry_used
+            .saturating_add(from_carry.saturating_mul(self.stride));
         let rest = count.saturating_sub(u64::try_from(from_carry).unwrap_or(0));
         if rest > 0 {
             if let Some(producer) = self.producer.as_mut() {
-                producer.skip(self.generated, rest);
+                producer.skip(self.generated, rest, self.stride);
             }
             self.generated = self.generated.saturating_add(rest);
         }
@@ -312,6 +391,8 @@ impl Device for VirtualDevice {
             _ => VirtualOptions::default(),
         };
         options.validate()?;
+        self.stride = la_storage::words_per_sample(self.descriptor.capabilities.channels);
+        let stride = self.stride;
         let mut producer = match &options.source {
             Some(factory) => Producer::Source(factory.create(
                 config.enabled_channels(),
@@ -332,9 +413,10 @@ impl Device for VirtualDevice {
             // Generate and discard samples until the trigger condition holds; capturing starts
             // at the trigger sample.
             let found = search_trigger(
-                &mut |start, out| producer.fill(start, out),
+                &mut |start, out| producer.fill(start, out, stride),
                 trigger,
                 options.trigger_search_limit,
+                stride,
             )?;
             skipped = found.skipped;
             self.generated = found.generated;
@@ -416,19 +498,27 @@ impl Device for VirtualDevice {
 
         out.clear();
         // Samples left over from the trigger search come first.
-        let from_carry = wanted.min(self.carry.len().saturating_sub(self.carry_used));
+        let stride = self.stride.max(1);
+        let from_carry = wanted.min(
+            self.carry
+                .len()
+                .saturating_sub(self.carry_used)
+                .checked_div(stride)
+                .unwrap_or(0),
+        );
+        let carried_words = from_carry.saturating_mul(stride);
         if let Some(part) = self
             .carry
-            .get(self.carry_used..self.carry_used.saturating_add(from_carry))
+            .get(self.carry_used..self.carry_used.saturating_add(carried_words))
         {
             out.extend_from_slice(part);
         }
-        self.carry_used = self.carry_used.saturating_add(from_carry);
+        self.carry_used = self.carry_used.saturating_add(carried_words);
         let rest = wanted.saturating_sub(from_carry);
         if rest > 0 {
-            out.resize(wanted, 0);
-            if let Some(part) = out.get_mut(from_carry..) {
-                producer.fill(self.generated, part);
+            out.resize(wanted.saturating_mul(stride), 0);
+            if let Some(part) = out.get_mut(carried_words..) {
+                producer.fill(self.generated, part, stride);
             }
             self.generated = self
                 .generated

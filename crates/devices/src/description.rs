@@ -10,6 +10,7 @@ use std::time::SystemTime;
 use la_core::Result;
 
 use crate::capabilities::DeviceId;
+use crate::channel_set::ChannelSet;
 use crate::config::Trigger;
 use crate::error;
 
@@ -43,7 +44,7 @@ pub struct CaptureDescription {
     requested_sample_rate_hz: u64,
     sample_rate_hz: u64,
     channels: u8,
-    enabled_mask: u32,
+    enabled_mask: ChannelSet,
     trigger: Option<Trigger>,
     samples_before_trigger: u64,
     started_at: SystemTime,
@@ -57,7 +58,7 @@ pub(crate) struct DescriptionParts {
     pub(crate) seed: Option<u64>,
     pub(crate) sample_rate_hz: u64,
     pub(crate) channels: u8,
-    pub(crate) enabled_mask: u32,
+    pub(crate) enabled_mask: ChannelSet,
     pub(crate) trigger: Option<Trigger>,
 }
 
@@ -80,10 +81,10 @@ pub struct SavedDescription {
     pub requested_sample_rate_hz: u64,
     /// The sample rate in effect, in hertz (at least 1).
     pub sample_rate_hz: u64,
-    /// Number of channels in the capture, `1..=32`.
+    /// Number of channels in the capture, `1..=160`.
     pub channels: u8,
-    /// Enabled channels (bit `i` = channel `i`), not zero, within `channels`.
-    pub enabled_mask: u32,
+    /// Enabled channels, not empty, within `channels`.
+    pub enabled_mask: ChannelSet,
     /// The configured trigger, on an enabled channel.
     pub trigger: Option<Trigger>,
     /// Samples skipped while waiting for the trigger.
@@ -159,19 +160,18 @@ impl CaptureDescription {
                 "the device id must look like `provider:unique`",
             ));
         };
-        let allowed = 1_u64
-            .checked_shl(u32::from(saved.channels))
-            .map_or(u64::from(u32::MAX), |bit| bit.saturating_sub(1));
-        if saved.enabled_mask == 0 || u64::from(saved.enabled_mask) > allowed {
+        if saved.enabled_mask.is_empty()
+            || saved
+                .enabled_mask
+                .highest()
+                .is_some_and(|h| h >= saved.channels)
+        {
             return Err(error::invalid_channel(
                 "the enabled channels are empty or outside the channel count".to_owned(),
             ));
         }
         if let Some(trigger) = saved.trigger {
-            let enabled = 1_u32
-                .checked_shl(u32::from(trigger.channel))
-                .is_some_and(|bit| saved.enabled_mask & bit != 0);
-            if !enabled {
+            if !saved.enabled_mask.contains(trigger.channel) {
                 return Err(error::invalid_channel(
                     "the trigger is on a channel that is not enabled".to_owned(),
                 ));
@@ -241,9 +241,9 @@ impl CaptureDescription {
         self.channels
     }
 
-    /// Which channels carry real data (bit `i` = channel `i`); the others read as zero.
+    /// Which channels carry real data; the others read as zero.
     #[must_use]
-    pub fn enabled_mask(&self) -> u32 {
+    pub fn enabled_mask(&self) -> ChannelSet {
         self.enabled_mask
     }
 

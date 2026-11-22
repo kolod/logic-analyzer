@@ -30,7 +30,7 @@ fn options(seed: u64) -> VirtualOptions {
 
 fn config(mask: u32, length: u64, options: VirtualOptions) -> DeviceConfig {
     DeviceConfig {
-        enabled_channels: mask,
+        enabled_channels: la_devices::ChannelSet::from_u32(mask),
         sample_rate_hz: 1_000_000,
         trigger: None,
         capture_length: Some(length),
