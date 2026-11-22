@@ -44,7 +44,7 @@ fn valid_configurations_are_accepted() {
 
 #[test]
 fn channel_count_outside_range_is_rejected() {
-    for channels in [0_u8, 33, 255] {
+    for channels in [0_u8, 161, 255] {
         let c = CaptureConfig {
             channels,
             ..config()

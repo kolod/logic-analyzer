@@ -4,8 +4,19 @@ use la_core::Result;
 
 use crate::error;
 
-/// The largest supported channel count (one bit of a 32-bit sample word each).
-pub const MAX_CHANNELS: u8 = 32;
+/// The largest supported channel count. A sample holds one bit per channel in 32-bit
+/// words: up to 32 channels take one word, more take [`words_per_sample`] words.
+pub const MAX_CHANNELS: u8 = 160;
+
+/// The most 32-bit words one sample can take (`MAX_CHANNELS / 32`).
+pub const MAX_WORDS_PER_SAMPLE: usize = 5;
+
+/// The number of 32-bit words one sample of `channels` channels takes (at least one):
+/// word `k` holds channels `32k..32k+31`, bit `i` of it being channel `32k + i`.
+#[must_use]
+pub fn words_per_sample(channels: u8) -> usize {
+    usize::from(channels).div_ceil(32).max(1)
+}
 
 /// Smallest accepted memory budget.
 pub const MIN_MEMORY_BUDGET_BYTES: u64 = 1024 * 1024;
@@ -80,6 +91,12 @@ pub struct CaptureConfig {
 }
 
 impl CaptureConfig {
+    /// The number of 32-bit words one sample takes, see [`words_per_sample`].
+    #[must_use]
+    pub fn words_per_sample(&self) -> usize {
+        words_per_sample(self.channels)
+    }
+
     /// Checks the whole configuration.
     ///
     /// # Errors
