@@ -58,8 +58,6 @@ pub struct Look<'a> {
     pub variant: Variant,
     /// The language of the annotation texts.
     pub localizer: &'a Localizer,
-    /// The selected annotation, if any.
-    pub selected: Option<(u32, AnnotationRef)>,
     /// The theme (for the danger colour).
     pub theme: &'a Theme,
 }
@@ -238,18 +236,11 @@ fn fit(text: &str, max_chars: usize) -> String {
     format!("{kept}\u{2026}")
 }
 
-fn is_selected(look: &Look<'_>, instance: u32, target: Target, id: u64, start: u64) -> bool {
-    look.selected
-        .is_some_and(|(i, r)| i == instance && r.target == target && r.id == id && r.start == start)
-}
-
 /// How a span is placed among its neighbours.
 #[derive(Clone, Copy)]
 struct Placement {
     /// The colour of the signal it is on, for a span that names no colour.
     signal: Option<Color>,
-    /// Whether it is the selected annotation.
-    selected: bool,
     /// The left edge of the cell after it, which it must not reach into.
     right_limit: Option<f32>,
 }
@@ -265,7 +256,6 @@ fn draw_span(
 ) {
     let Placement {
         signal,
-        selected,
         right_limit,
     } = placement;
     let x0 = GUTTER + cell.x0 as f32 * scale;
@@ -287,14 +277,6 @@ fn draw_span(
             .with_color(colour)
             .with_width(if cell.error { 2.0 } else { 1.0 }),
     );
-    if selected {
-        frame.stroke(
-            &outline,
-            Stroke::default()
-                .with_color(look.theme.palette().text)
-                .with_width(2.0),
-        );
-    }
     if let Some(content) = span_label(&annotation_text(look.localizer, &cell.text), width) {
         frame.fill_text(Text {
             content,
@@ -318,11 +300,7 @@ fn draw_block(
     placement: Placement,
     look: &Look<'_>,
 ) {
-    let Placement {
-        selected,
-        right_limit,
-        ..
-    } = placement;
+    let Placement { right_limit, .. } = placement;
     let x0 = GUTTER + cell.x0 as f32 * scale;
     let x1 = GUTTER + cell.x1 as f32 * scale;
     let x1 = right_limit.map_or(x1, |limit| x1.min(limit.max(x0)));
@@ -343,12 +321,6 @@ fn draw_block(
             })
             .with_width(if cell.error { 2.0 } else { 1.0 }),
     );
-    if selected {
-        frame.stroke(
-            &outline,
-            Stroke::default().with_color(text_colour).with_width(2.0),
-        );
-    }
     let full = annotation_text(look.localizer, &cell.text);
     let label = block_label(&full, width).or_else(|| {
         annotation_text_short(look.localizer, &cell.text)
@@ -372,7 +344,6 @@ fn draw_mark(
     cell: &MarkCell,
     y: f32,
     scale: f32,
-    selected: bool,
     signal: Option<Color>,
     look: &Look<'_>,
 ) {
@@ -383,14 +354,6 @@ fn draw_mark(
     } else {
         colour_of(cell.style, cell.error, signal, look)
     };
-    if selected {
-        frame.stroke(
-            &Path::circle(Point::new(x, y), 7.0),
-            Stroke::default()
-                .with_color(look.theme.palette().text)
-                .with_width(1.5),
-        );
-    }
     draw_shape(frame, cell.style.shape, cell.edge, x, y, colour);
 }
 
@@ -464,13 +427,6 @@ pub fn draw_lanes(
                         scale,
                         Placement {
                             signal: None,
-                            selected: is_selected(
-                                look,
-                                decoder.instance,
-                                Target::Lane,
-                                span.id,
-                                span.start,
-                            ),
                             right_limit,
                         },
                         look,
@@ -483,26 +439,13 @@ pub fn draw_lanes(
                         scale,
                         Placement {
                             signal: None,
-                            selected: is_selected(
-                                look,
-                                decoder.instance,
-                                Target::Lane,
-                                span.id,
-                                span.start,
-                            ),
                             right_limit,
                         },
                         look,
                     ),
-                    Cell::Mark(mark) => draw_mark(
-                        frame,
-                        mark,
-                        row_top + row_height / 2.0,
-                        scale,
-                        is_selected(look, decoder.instance, Target::Lane, mark.id, mark.start),
-                        None,
-                        look,
-                    ),
+                    Cell::Mark(mark) => {
+                        draw_mark(frame, mark, row_top + row_height / 2.0, scale, None, look)
+                    }
                 }
             }
         }
@@ -562,17 +505,8 @@ pub fn draw_overlays(
             if !legible && matches!(cell, Cell::Mark(_)) {
                 continue;
             }
-            let target = Target::Channel(overlay.channel);
             match cell {
-                Cell::Mark(mark) => draw_mark(
-                    frame,
-                    mark,
-                    centre,
-                    scale,
-                    is_selected(look, overlay.instance, target, mark.id, mark.start),
-                    signal,
-                    look,
-                ),
+                Cell::Mark(mark) => draw_mark(frame, mark, centre, scale, signal, look),
                 Cell::Span(span) => draw_span(
                     frame,
                     span,
@@ -581,7 +515,6 @@ pub fn draw_overlays(
                     scale,
                     Placement {
                         signal,
-                        selected: is_selected(look, overlay.instance, target, span.id, span.start),
                         right_limit: None,
                     },
                     look,
@@ -631,7 +564,12 @@ fn pick_in(
         }
         for cell in row {
             match cell {
-                Cell::Mark(m) if marks && (m.x as f32 - column).abs() * scale <= PICK => {
+                // A block narrower than a pixel is not drawn, so it cannot be pointed at.
+                Cell::Mark(m)
+                    if marks
+                        && m.style.shape.band().is_none()
+                        && (m.x as f32 - column).abs() * scale <= PICK =>
+                {
                     return Some((m.id, m.start, m.end, m.text.clone(), m.error));
                 }
                 Cell::Span(s) if column >= s.x0 as f32 && column <= s.x1 as f32 => {
@@ -662,14 +600,21 @@ pub fn hit_test(
         let lane = lane_height(first_lane.saturating_add(index));
         if position.y >= top && position.y < top + lane {
             let rows = decoder.plan.rows.len().max(1);
-            let row_height = ((lane - STRIP - 6.0) / rows as f32).min(24.0);
-            let y = position.y - top - 3.0;
+            let legible = marks_legible(&decoder.plan, plan.pixels as f32 * scale);
+            // The same rows as `draw_lanes` draws.
+            let strip = if legible && !decoder.plan.dense.is_empty() {
+                STRIP + 2.0
+            } else {
+                0.0
+            };
+            let row_height = row_height(lane, rows, strip);
+            let y = position.y - top - LANE_MARGIN;
             if let Some((id, start, end, text, error)) = pick_in(
                 &decoder.plan,
                 position.x,
                 scale,
                 Some((y, row_height)),
-                marks_legible(&decoder.plan, plan.pixels as f32 * scale),
+                legible,
             ) {
                 return Some(Hit {
                     instance: decoder.instance,

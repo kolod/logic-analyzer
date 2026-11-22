@@ -259,10 +259,6 @@ decoder-channel-unavailable = { $name } (не записується)
 decoder-channels-unrecorded = Канал цього декодера не записується, тому декодер не запускається.
 decoder-annotations = Анотацій: { $number }
 decoder-incomplete = Неповні результати
-decoder-selected = Вибрана анотація
-decoder-detail-length = Тривалість: { $value }
-decoder-detail-error = Повідомляє про проблему в сигналі
-decoder-detail-position = Позиція: від { $first } до { $second }
 
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Навмисно додавати помилки в змодельовані сигнали

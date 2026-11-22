@@ -259,10 +259,6 @@ decoder-channel-unavailable = { $name }（記録されていません）
 decoder-channels-unrecorded = このデコーダーのチャンネルが記録されていないため、デコーダーは実行されません。
 decoder-annotations = 注釈数: { $number }
 decoder-incomplete = 結果は不完全です
-decoder-selected = 選択中の注釈
-decoder-detail-length = 長さ: { $value }
-decoder-detail-error = 信号の問題を示しています
-decoder-detail-position = 位置: { $first } から { $second }
 
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = シミュレートした信号にわざとエラーを入れる

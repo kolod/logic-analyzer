@@ -15,7 +15,6 @@ use iced::alignment::Vertical;
 use iced::mouse;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, LineDash, Path, Stroke, Text};
 use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
-use la_host::decoders::AnnotationRef;
 use la_host::markers::{End, Kind, Placement, Pointer, Resolved};
 use la_host::plan::{ChannelPlan, FramePlan, FrameState, LanePlan, LaneSlot, PlanShape, Segment};
 use la_host::presentation::{Colour, PALETTE_SIZE};
@@ -67,8 +66,6 @@ pub struct SignalView<'a> {
     pub variant: Variant,
     /// The language of every text.
     pub localizer: &'a Localizer,
-    /// The selected annotation, if any.
-    pub selected: Option<(u32, AnnotationRef)>,
     /// A channel name is being edited: a press anywhere in the view accepts it.
     pub editing: bool,
     /// The marker being placed with the mouse, if any.
@@ -151,8 +148,6 @@ pub struct ViewState {
     panning: bool,
     /// The marker end being dragged.
     drag_marker: Option<(u32, End)>,
-    /// The last click on an annotation (a second one on it soon after is a double click).
-    last_click: Option<(Instant, u32, AnnotationRef)>,
     /// How far the lanes are scrolled.
     scroll: f32,
     /// A press in the legend strip.
@@ -533,7 +528,6 @@ impl SignalView<'_> {
         let look = Look {
             variant: self.variant,
             localizer: self.localizer,
-            selected: self.selected,
             theme,
         };
         // The lanes of the decoders come after the channels.
@@ -956,37 +950,6 @@ impl canvas::Program<Message> for SignalView<'_> {
                         canvas::Action::publish(Message::Run(Command::FixPlacement { pointer }))
                             .and_capture(),
                     );
-                }
-                // A click on an annotation selects it.
-                let (lane_top, lane_height) = self.decoder_lane_functions(&layout);
-                if let Some(decoder_view::Hit {
-                    instance,
-                    annotation,
-                    ..
-                }) = decoder_view::hit_test(
-                    self.plan,
-                    position,
-                    self.plan.channels.len(),
-                    &lane_top,
-                    &lane_height,
-                    scale,
-                ) {
-                    let now = Instant::now();
-                    let double = state.last_click.is_some_and(|(at, i, a)| {
-                        i == instance
-                            && a == annotation
-                            && now.saturating_duration_since(at) < Duration::from_millis(400)
-                    });
-                    state.last_click = Some((now, instance, annotation));
-                    let command = if double {
-                        Command::GoToAnnotation(la_host::AnnotationTarget::Selected)
-                    } else {
-                        Command::SelectAnnotation {
-                            instance,
-                            annotation,
-                        }
-                    };
-                    return Some(canvas::Action::publish(Message::Run(command)).and_capture());
                 }
                 if let Some(first) = self.joining {
                     // Choosing the other half of a pair: a single marker other than the first
@@ -1644,8 +1607,8 @@ impl SignalView<'_> {
                 .with_color(Color { a: 0.5, ..colour })
                 .with_width(1.0),
         );
-        // The time is attached to the pointer, not to a corner where it would merge with the axis.
-        let content = self.localizer.format_duration(seconds);
+        // The box is attached to the pointer, not to a corner where it would merge with the axis.
+        let content = self.hover_content(size, position, scroll, seconds);
         let label = hover_label_rect(position, size, hover_label_size(&content));
         let palette = theme.palette();
         frame.fill_rectangle(
@@ -1670,70 +1633,43 @@ impl SignalView<'_> {
             align_y: Vertical::Center,
             ..Text::default()
         });
-        self.draw_annotation_readout(frame, size, position, theme, scroll);
     }
 
-    /// The full text of the annotation under the pointer and its length in time, in a box next to
-    /// the pointer (a span's text may be cut in the lane).
-    fn draw_annotation_readout(
+    /// What the box at the pointer says: over an annotation of a decoder its whole text and its length
+    /// in time, anywhere else the time under the pointer (`seconds`).
+    fn hover_content(&self, size: Size, position: Point, scroll: f32, seconds: f64) -> String {
+        let Some(hit) = self.annotation_under(size, position, scroll) else {
+            return self.localizer.format_duration(seconds);
+        };
+        let rate = self.plan.sample_rate_hz.max(1) as f64;
+        let length = hit.end.saturating_sub(hit.start) as f64 / rate;
+        // The invisible isolating marks of the formatter take no room.
+        let text: String = la_host::decoders::annotation_text(self.localizer, &hit.text)
+            .chars()
+            .filter(|c| !('\u{2066}'..='\u{2069}').contains(c))
+            .collect();
+        format!("{text}  \u{b7}  {}", self.localizer.format_duration(length))
+    }
+
+    /// The annotation of a decoder under the pointer, if any.
+    fn annotation_under(
         &self,
-        frame: &mut Frame,
         size: Size,
         position: Point,
-        theme: &Theme,
         scroll: f32,
-    ) {
+    ) -> Option<decoder_view::Hit> {
         let plan = self.plan;
         let layout = self.layout(size.height, scroll);
         let (lane_top, lane_height) = self.decoder_lane_functions(&layout);
         let scale = (size.width - GUTTER).max(1.0) / plan.pixels.max(1) as f32;
-        let Some(hit) = decoder_view::hit_test(
+        decoder_view::hit_test(
             plan,
             position,
             plan.channels.len(),
             &lane_top,
             &lane_height,
             scale,
-        ) else {
-            return;
-        };
-        let seconds = hit.end.saturating_sub(hit.start) as f64 / plan.sample_rate_hz.max(1) as f64;
-        let content = format!(
-            "{}  \u{b7}  {}",
-            la_host::decoders::annotation_text(self.localizer, &hit.text),
-            self.localizer.format_duration(seconds)
-        );
-        let width = content.chars().count() as f32 * 7.0 + 12.0;
-        let x = (position.x + 12.0).min((size.width - width - 4.0).max(0.0));
-        // Below the time of the pointer, which sits right under the crosshair.
-        let y = (position.y + 14.0 + HOVER_LABEL_HEIGHT + 4.0).min((size.height - 24.0).max(0.0));
-        let palette = theme.palette();
-        frame.fill_rectangle(
-            Point::new(x, y),
-            Size::new(width, 20.0),
-            Color {
-                a: 0.92,
-                ..palette.background
-            },
-        );
-        frame.stroke(
-            &Path::rectangle(Point::new(x, y), Size::new(width, 20.0)),
-            Stroke::default()
-                .with_color(if hit.error {
-                    palette.danger
-                } else {
-                    palette.text
-                })
-                .with_width(1.0),
-        );
-        frame.fill_text(Text {
-            content,
-            position: Point::new(x + 6.0, y + 10.0),
-            color: palette.text,
-            size: Pixels(TEXT_SIZE),
-            align_y: Vertical::Center,
-            ..Text::default()
-        });
+        )
     }
 }
 
@@ -1760,7 +1696,6 @@ mod tests {
             cache: &cache,
             variant: Variant::Dark,
             localizer: &localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -1897,7 +1832,6 @@ mod tests {
             cache: &cache,
             variant: Variant::Dark,
             localizer: &localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -2014,7 +1948,6 @@ mod tests {
             cache: &cache,
             variant: Variant::Dark,
             localizer: &localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -2074,7 +2007,6 @@ mod tests {
             cache,
             variant: Variant::Dark,
             localizer,
-            selected: None,
             editing: false,
             placement: None,
             preview: None,
@@ -2520,6 +2452,44 @@ mod tests {
             ),
             "{published:?}"
         );
+    }
+
+    #[test]
+    fn the_box_at_the_pointer_says_the_annotation_instead_of_the_time_over_one() {
+        use la_decoders::lanes::{Cell, Plan, SpanCell};
+        use la_decoders::model::{Shape, Style, Text as AnnotationText};
+        let mut plan = plan_with_a_decoder_lane();
+        let span = SpanCell {
+            id: 1,
+            start: 100,
+            end: 300,
+            x0: 100.0,
+            x1: 300.0,
+            style: Style {
+                colour: Some(1),
+                shape: Shape::Part,
+            },
+            text: AnnotationText::Literal("hello".into()),
+            error: false,
+        };
+        plan.lanes[0].plan = Plan {
+            rows: vec![vec![Cell::Span(span)], vec![]],
+            ..Plan::default()
+        };
+        let (cache, localizer) = (Cache::new(), Localizer::new(la_i18n::Language::En));
+        let view = view_of(&plan, &cache, &localizer);
+        let size = Size::new(900.0, 500.0);
+        // The decoder lane is 100..154; the annotation spans 100..300 pixels of the signal area.
+        let over = Point::new(GUTTER + 150.0, 110.0);
+        let said = view.hover_content(size, over, 0.0, 0.001);
+        assert!(said.starts_with("hello"), "{said}");
+        assert!(said.contains('\u{b7}'), "{said}");
+        // Beside the annotation, and over a channel, it is the time.
+        let beside = Point::new(GUTTER + 500.0, 110.0);
+        let time = localizer.format_duration(0.001);
+        assert_eq!(view.hover_content(size, beside, 0.0, 0.001), time);
+        let channel = Point::new(GUTTER + 150.0, 60.0);
+        assert_eq!(view.hover_content(size, channel, 0.0, 0.001), time);
     }
 
     #[test]

@@ -259,10 +259,6 @@ decoder-channel-unavailable = { $name } (nicht aufgezeichnet)
 decoder-channels-unrecorded = Ein Kanal dieses Dekoders wird nicht aufgezeichnet, daher läuft der Dekoder nicht.
 decoder-annotations = Annotationen: { $number }
 decoder-incomplete = Unvollständige Ergebnisse
-decoder-selected = Ausgewählte Annotation
-decoder-detail-length = Dauer: { $value }
-decoder-detail-error = Meldet ein Problem im Signal
-decoder-detail-position = Position: { $first } bis { $second }
 
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Absichtlich Fehler in die simulierten Signale einbauen

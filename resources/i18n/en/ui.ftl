@@ -416,10 +416,6 @@ decoder-channel-unavailable = { $name } (not recorded)
 decoder-channels-unrecorded = A channel of this decoder is not recorded, so the decoder does not run.
 decoder-annotations = Annotations: { $number }
 decoder-incomplete = Incomplete results
-decoder-selected = Selected annotation
-decoder-detail-length = Length: { $value }
-decoder-detail-error = Reports a problem in the signal
-decoder-detail-position = Position: { $first } to { $second }
 
 ### Decoders: the simulation of signals that are valid for a decoder
 decoder-generator-errors = Plant deliberate errors in the simulated signals

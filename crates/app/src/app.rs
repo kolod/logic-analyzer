@@ -2125,36 +2125,6 @@ impl App {
                     .style(text::danger),
             );
         }
-        if let Some(selection) = &state.decoders.selection {
-            let details = &selection.details;
-            list = list.push(text(self.t("decoder-selected")).size(13));
-            list = list.push(text(details.text.clone()).size(13));
-            list = list.push(
-                text(
-                    localizer.message(
-                        &Key::from_static("decoder-detail-position"),
-                        &Args::new()
-                            .uint("first", details.start)
-                            .uint("second", details.end),
-                    ),
-                )
-                .size(12),
-            );
-            list = list.push(
-                text(localizer.message(
-                    &Key::from_static("decoder-detail-length"),
-                    &Args::new().text("value", &details.duration),
-                ))
-                .size(12),
-            );
-            if details.error {
-                list = list.push(
-                    text(self.t("decoder-detail-error"))
-                        .size(12)
-                        .style(text::danger),
-                );
-            }
-        }
         // No frame around the panel: each decoder has its own.
         container(scrollable(list))
             .width(Fill)
@@ -2822,13 +2792,6 @@ impl App {
             cache: &self.cache,
             variant: self.variant,
             localizer: self.shell.localizer(),
-            selected: self
-                .shell
-                .state()
-                .decoders
-                .selection
-                .as_ref()
-                .map(|s| (s.instance, s.annotation)),
             editing: self.editing.is_some(),
             placement: self.shell.state().placement,
             preview: self.placement_preview,
