@@ -153,7 +153,9 @@ pub fn decode(payload: &[u8]) -> Result<CaptureDescription> {
     let device_name = cursor.string(MAX_TEXT_BYTES)?;
     let channels = cursor.u8()?;
     if channels == 0 || channels > la_storage::MAX_CHANNELS {
-        return Err(error::inconsistent("the channel count is outside what a capture can have"));
+        return Err(error::inconsistent(
+            "the channel count is outside what a capture can have",
+        ));
     }
     let mut words = Vec::new();
     for _ in 0..la_storage::words_per_sample(channels) {

@@ -17,7 +17,7 @@ pub const TAG: &str = "LAYT";
 /// a height of its own, so that a file without one is byte for byte what version 1 wrote.
 pub const VERSION: u8 = 2;
 /// The most channels a payload can describe.
-pub const MAX_CHANNELS: u64 = 32;
+pub const MAX_CHANNELS: u64 = la_storage::MAX_CHANNELS as u64;
 /// The most decoder lanes a payload can describe.
 pub const MAX_DECODERS: u64 = 64;
 

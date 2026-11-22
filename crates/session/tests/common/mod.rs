@@ -82,6 +82,9 @@ impl Rng {
 
 /// Random words: every channel flips with probability `per_mille / 1000` per sample.
 pub fn random_words(len: usize, channels: u8, per_mille: u64, rng: &mut Rng) -> Vec<u32> {
+    if channels > 32 {
+        return wide_words(len, channels, per_mille, rng);
+    }
     let mask = if channels >= 32 {
         u32::MAX
     } else {
@@ -98,6 +101,30 @@ pub fn random_words(len: usize, channels: u8, per_mille: u64, rng: &mut Rng) -> 
             word
         })
         .collect()
+}
+
+/// `len` samples of a capture of more than 32 channels: `ceil(channels / 32)` words each.
+fn wide_words(len: usize, channels: u8, per_mille: u64, rng: &mut Rng) -> Vec<u32> {
+    let stride = usize::from(channels).div_ceil(32);
+    let mut levels = vec![false; usize::from(channels)];
+    let mut out = Vec::with_capacity(len * stride);
+    for _ in 0..len {
+        for level in &mut levels {
+            if rng.below(1000) < per_mille {
+                *level = !*level;
+            }
+        }
+        for k in 0..stride {
+            let mut word = 0_u32;
+            for bit in 0..32 {
+                if levels.get(k * 32 + bit).copied().unwrap_or(false) {
+                    word |= 1 << bit;
+                }
+            }
+            out.push(word);
+        }
+    }
+    out
 }
 
 /// How a recorded capture ends.
@@ -151,11 +178,6 @@ pub fn record(
 
 /// A description built from plain values (no clock involved, so files are reproducible).
 pub fn description(channels: u8, simulated: bool, seed: Option<u64>) -> CaptureDescription {
-    let mask = if channels >= 32 {
-        u32::MAX
-    } else {
-        (1_u32 << channels) - 1
-    };
     CaptureDescription::restore(SavedDescription {
         device_id: if simulated {
             "virtual:0"
@@ -174,7 +196,7 @@ pub fn description(channels: u8, simulated: bool, seed: Option<u64>) -> CaptureD
         requested_sample_rate_hz: 12_500_000,
         sample_rate_hz: 12_500_000,
         channels,
-        enabled_mask: la_devices::ChannelSet::from_u32(mask),
+        enabled_mask: la_devices::ChannelSet::all(channels),
         trigger: Some(Trigger {
             channel: 0,
             kind: TriggerKind::RisingEdge,

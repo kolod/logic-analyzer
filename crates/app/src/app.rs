@@ -3590,6 +3590,60 @@ mod tests {
         assert_eq!(App::button_rows(32), 4);
     }
 
+    /// Feature 017: a capture of 160 channels has twenty rows of eight buttons, every channel
+    /// button works and the capture view and the signal view render.
+    #[test]
+    fn a_capture_of_160_channels_fits_the_panel_and_renders() {
+        let _turn = render_turn();
+        assert_eq!(App::button_rows(160), 20);
+        let dir = std::env::temp_dir().join(format!("la-app-wide-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        app.shell
+            .add_provider(std::sync::Arc::new(la_devices::WideVirtualProvider::new(
+                160,
+            )));
+        let id = la_devices::virtual_descriptor_with_channels(160).id;
+        let deadline = Instant::now().checked_add(Duration::from_secs(10)).unwrap();
+        while !app.shell.state().devices.iter().any(|d| d.id == id) {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the wide device was not listed");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = app.update(Message::Run(Command::SelectDevice(id)));
+        for edit in [
+            ConfigEdit::Realtime(false),
+            ConfigEdit::Channels(la_devices::ChannelSet::all(160)),
+            ConfigEdit::SampleRate(1_000_000),
+            ConfigEdit::Length(5_000),
+            ConfigEdit::Seed(Some(2)),
+            ConfigEdit::AcceptBudgetRisk(true),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        assert_eq!(app.shell.state().presentation.channels.len(), 160);
+        let _ = app.update(Message::ChannelVisible(159, false));
+        assert!(!app.shell.state().config.enabled_channels.contains(159));
+        let _ = app.update(Message::ChannelVisible(159, true));
+        assert!(app.shell.state().config.enabled_channels.contains(159));
+        let _ = app.update(Message::Run(Command::StartCapture));
+        let deadline = Instant::now().checked_add(Duration::from_secs(20)).unwrap();
+        while app.shell.state().activity != Activity::Idle {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the capture did not end");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = app.update(Message::AreaResized(1000.0));
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        assert!(ui.snapshot(&app.theme()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_capture_view_renders_in_three_languages_at_the_minimum_size_and_while_recording() {
         let _turn = render_turn();

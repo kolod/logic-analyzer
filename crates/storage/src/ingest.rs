@@ -40,6 +40,9 @@ fn word_mask(channels: u8, index: usize) -> u32 {
 /// ignored.
 pub(crate) fn ingest_chunk(samples: &[u32], previous: Option<Word>, channels: u8) -> Ingested {
     let stride = words_per_sample(channels);
+    if stride == 1 {
+        return ingest_narrow(samples, previous, channels);
+    }
     let mut masks: Word = [0; MAX_WORDS_PER_SAMPLE];
     for (index, mask) in masks.iter_mut().enumerate().take(stride) {
         *mask = word_mask(channels, index);
@@ -75,5 +78,43 @@ pub(crate) fn ingest_chunk(samples: &[u32], previous: Option<Word>, channels: u8
         per_channel,
         first_word,
         last_word: last.unwrap_or([0; MAX_WORDS_PER_SAMPLE]),
+    }
+}
+
+/// The conversion for up to 32 channels (one word per sample), the hot path of every
+/// capture of 32 channels or fewer.
+fn ingest_narrow(samples: &[u32], previous: Option<Word>, channels: u8) -> Ingested {
+    let mask = word_mask(channels, 0);
+    let mut per_channel: Vec<Vec<u32>> = (0..channels).map(|_| Vec::new()).collect();
+    let mut last = previous.map(|word| word[0]);
+    let mut first_word = 0;
+    for (index, &raw) in samples.iter().enumerate() {
+        let word = raw & mask;
+        if index == 0 {
+            first_word = word;
+        }
+        if let Some(prev) = last {
+            let mut changed = prev ^ word;
+            if changed != 0 {
+                let relative = u32::try_from(index).unwrap_or(u32::MAX);
+                while changed != 0 {
+                    let channel = usize::try_from(changed.trailing_zeros()).unwrap_or(usize::MAX);
+                    if let Some(list) = per_channel.get_mut(channel) {
+                        list.push(relative);
+                    }
+                    changed &= changed.wrapping_sub(1);
+                }
+            }
+        }
+        last = Some(word);
+    }
+    let mut first: Word = [0; MAX_WORDS_PER_SAMPLE];
+    first[0] = first_word;
+    let mut final_word: Word = [0; MAX_WORDS_PER_SAMPLE];
+    final_word[0] = last.unwrap_or(0);
+    Ingested {
+        per_channel,
+        first_word: first,
+        last_word: final_word,
     }
 }
