@@ -23,6 +23,22 @@ const TEXT_SIZE: f32 = 12.0;
 const PICK: f32 = 5.0;
 /// Height of the strip of dense cells at the bottom of a lane.
 const STRIP: f32 = 5.0;
+/// The margin above and below the rows of a decoder lane.
+const LANE_MARGIN: f32 = 3.0;
+/// The height of a row of a decoder lane that is as high as its rows need.
+const ROW_HEIGHT: f32 = 24.0;
+/// The height a row may take when the user made the lane higher.
+const ROW_HEIGHT_MAX: f32 = 64.0;
+
+/// The height of a decoder lane of `rows` rows when the user gave it none: just what its rows need,
+/// with a small margin above and below.
+#[must_use]
+pub fn fitting_height(rows: usize) -> u16 {
+    let height = 2.0 * LANE_MARGIN + rows.max(1) as f32 * ROW_HEIGHT;
+    // The height is a few dozen pixels: far inside the range of `u16`.
+    height as u16
+}
+
 /// Height of the area where an overlay draws, at the top of a channel lane.
 pub const OVERLAY_BAND: f32 = 14.0;
 
@@ -393,10 +409,16 @@ pub fn draw_lanes(
         });
         let legible = marks_legible(&decoder.plan, plan.pixels as f32 * scale);
         let rows = decoder.plan.rows.len().max(1);
-        let usable = lane - STRIP - 6.0;
-        let row_height = (usable / rows as f32).min(24.0);
+        // The strip of dense cells takes room only where there are some to draw.
+        let strip = if legible && !decoder.plan.dense.is_empty() {
+            STRIP + 2.0
+        } else {
+            0.0
+        };
+        let usable = lane - 2.0 * LANE_MARGIN - strip;
+        let row_height = (usable / rows as f32).min(ROW_HEIGHT_MAX);
         for (r, row) in decoder.plan.rows.iter().enumerate() {
-            let row_top = top + 3.0 + r as f32 * row_height;
+            let row_top = top + LANE_MARGIN + r as f32 * row_height;
             for (at, cell) in row.iter().enumerate() {
                 if !legible && matches!(cell, Cell::Mark(_)) {
                     continue;

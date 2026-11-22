@@ -264,3 +264,24 @@ with a commit per task or logical group.
   fails; never bypass it); commit subjects are Conventional Commits with a scope.
 - The generator, the items for stacking and the arrows' places are not edited by any task (FR-013); the one
   change to an arrow is its text on an error bit (T025).
+
+---
+
+## Phase 7: The lane as a row of the view (after the owner looked at the running application)
+
+- [X] T039 [P] `crates/app/src/lane_layout.rs` tests: a decoder lane has the height it is given, its own
+  border and a name zone without a colour bar; a lane lands among all the lanes, decoder lanes included.
+- [X] T040 [P] `crates/host/tests/layout_section.rs`: `LAYT` version 2 (the payload by hand, the rejections,
+  version 1 unchanged when no decoder lane has a height); `crates/host/tests/decoder_lane_layout.rs`: the
+  order of the shown lanes after `MoveLane` against a model over 200 random moves, a hidden channel keeps its
+  place, the height command (limits, automatic, unknown instance), the lane is forgotten with its decoder and
+  on reset, the height comes back with the session.
+- [X] T041 [P] `crates/app/src/signal_view.rs` tests: a decoder lane between channels has the height its rows
+  need; the border sets its height and a double click makes it automatic; its name carries it (`MoveLane`) and
+  a click on it does nothing; the lanes after it still belong to their channels.
+- [X] T042 Host: `Presentation::decoder_heights` and `decoder_slots`, `LanePlan::{height, slot, rows}`,
+  `FramePlan::order`, `Command::SetDecoderLaneHeight` and `Command::MoveLane`, `LAYT` version 2, host API 2.1.
+- [X] T043 App: `lane_layout` for decoder lanes, `signal_view` with the shown order (the channels and the
+  decoder lanes interleaved), `decoder_view::fitting_height` and rows that fill the lane without a margin
+  wasted below.
+- [X] T044 Documents: `docs/host-api.md`, `docs/user-guide.md`, `contracts/layt-section-2.md`; this spec.

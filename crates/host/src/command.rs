@@ -270,6 +270,23 @@ pub enum Command {
         /// The height in logical pixels.
         height: u16,
     },
+    /// Sets the height of the lane of a decoder instance (0: automatic, otherwise 24 to 240 pixels).
+    SetDecoderLaneHeight {
+        /// The decoder instance.
+        instance: u32,
+        /// The height in logical pixels.
+        height: u16,
+    },
+    /// Moves a lane among the lanes that are shown (the channels and the decoders, as the frame plan
+    /// lists them in `FramePlan::order`): the lane at position `from` goes to position `to`, counted
+    /// after it has been taken out. A channel changes its place in the order of the channels, a
+    /// decoder its place among the lanes.
+    MoveLane {
+        /// Current position among the shown lanes.
+        from: usize,
+        /// New position among the shown lanes.
+        to: usize,
+    },
     /// Restores the default names, colours, order, heights and visibility.
     ResetPresentation,
     /// Chooses the view of the panel at the right edge (or hides it).
@@ -497,6 +514,8 @@ impl Command {
                 | Command::SetChannelVisible { .. }
                 | Command::MoveChannel { .. }
                 | Command::SetChannelHeight { .. }
+                | Command::SetDecoderLaneHeight { .. }
+                | Command::MoveLane { .. }
                 | Command::ResetPresentation
                 | Command::BeginPlacement(_)
                 | Command::FixPlacement { .. }
@@ -551,6 +570,8 @@ impl Command {
             Command::MoveChannel { .. } => "move_channel",
             Command::ResetPresentation => "reset_presentation",
             Command::SetChannelHeight { .. } => "set_channel_height",
+            Command::SetDecoderLaneHeight { .. } => "set_decoder_lane_height",
+            Command::MoveLane { .. } => "move_lane",
             Command::SetSidePanel(_) => "set_side_panel",
             Command::SetUnsavedChoice(_) => "set_unsaved_choice",
             Command::SetPanelWidth(_) => "set_panel_width",

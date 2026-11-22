@@ -26,7 +26,8 @@ const BORDER_BELOW: f32 = 4.0;
 pub enum LaneKind {
     /// The signal of a channel: it has a colour bar, a name and a border.
     Channel,
-    /// The lane of a decoder: automatic height, no zones, not draggable.
+    /// The lane of a decoder: no colour bar and no name to edit, but a height and a place of its
+    /// own like a channel.
     Decoder,
 }
 
@@ -35,7 +36,8 @@ pub enum LaneKind {
 pub struct LaneSpec {
     /// What it shows.
     pub kind: LaneKind,
-    /// The height the user chose; 0 is automatic (and the only value a decoder lane uses).
+    /// The height the user chose; 0 is automatic. A decoder lane's height is what the caller says
+    /// it needs when the user chose none, so it is taken as it is.
     pub height: u16,
 }
 
@@ -103,6 +105,7 @@ impl Layout {
                 LaneKind::Channel if spec.height != 0 => {
                     f32::from(clamp_height(f32::from(spec.height)))
                 }
+                LaneKind::Decoder if spec.height != 0 => f32::from(spec.height),
                 _ => automatic,
             })
             .collect();
@@ -160,16 +163,14 @@ impl Layout {
     }
 
     /// What the point `(x, y)` is on in the legend strip, if anything: the border bands win over
-    /// the colour bar and the name, nothing is above the axis edge, and a decoder lane has no zones.
+    /// the colour bar and the name, nothing is above the axis edge, and a decoder lane has no colour
+    /// bar (all of it is its name).
     #[must_use]
     pub fn zone_at(&self, x: f32, y: f32) -> Option<Hit> {
         if !(0.0..GUTTER).contains(&x) || y < AXIS_HEIGHT {
             return None;
         }
         for (index, lane) in self.lanes.iter().enumerate() {
-            if self.kinds.get(index) != Some(&LaneKind::Channel) {
-                continue;
-            }
             let bottom = lane.bottom();
             if y >= bottom - BORDER_ABOVE && y < bottom + BORDER_BELOW {
                 return Some(Hit {
@@ -179,29 +180,29 @@ impl Layout {
             }
         }
         for (index, lane) in self.lanes.iter().enumerate() {
-            if self.kinds.get(index) != Some(&LaneKind::Channel) {
-                continue;
-            }
             if y >= lane.top && y < lane.bottom() {
-                let zone = if x < BAR_WIDTH { Zone::Bar } else { Zone::Name };
+                let channel = self.kinds.get(index) == Some(&LaneKind::Channel);
+                let zone = if channel && x < BAR_WIDTH {
+                    Zone::Bar
+                } else {
+                    Zone::Name
+                };
                 return Some(Hit { lane: index, zone });
             }
         }
         None
     }
 
-    /// Where a dragged lane lands when released at `y`: the number of channel lanes whose middle is
-    /// above `y` (only channels count; a lane never lands among decoder lanes).
+    /// Where a dragged lane lands when released at `y`: the number of lanes whose middle is above `y`.
     #[must_use]
     pub fn landing(&self, y: f32) -> usize {
         self.lanes
             .iter()
-            .zip(&self.kinds)
-            .filter(|(lane, kind)| **kind == LaneKind::Channel && lane.top + lane.height / 2.0 < y)
+            .filter(|lane| lane.top + lane.height / 2.0 < y)
             .count()
     }
 
-    /// The `to` of `MoveChannel { from, to }` for lane `from` released at `y`: positions are counted
+    /// The `to` of `MoveLane { from, to }` for lane `from` released at `y`: positions are counted
     /// after the lane has been taken out.
     #[must_use]
     pub fn move_target(&self, from: usize, y: f32) -> usize {
@@ -235,19 +236,21 @@ impl Layout {
             .collect()
     }
 
+    /// The number of lanes.
+    #[must_use]
+    pub fn count(&self) -> usize {
+        self.lanes.len()
+    }
+
     /// The y of the line that shows where a lane landing at `landing` will be: the top of the lane it
-    /// goes before, or the bottom of the last channel lane.
+    /// goes before, or the bottom of the last lane.
     #[must_use]
     pub fn landing_line(&self, landing: usize) -> f32 {
-        let channels = self
-            .kinds
-            .iter()
-            .filter(|k| **k == LaneKind::Channel)
-            .count();
-        if landing < channels {
+        if landing < self.lanes.len() {
             self.lanes.get(landing).map_or(AXIS_HEIGHT, |l| l.top)
         } else {
-            channels
+            self.lanes
+                .len()
                 .checked_sub(1)
                 .and_then(|last| self.lanes.get(last))
                 .map_or(AXIS_HEIGHT, Lane::bottom)
@@ -343,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn a_decoder_lane_ignores_a_height() {
+    fn a_decoder_lane_has_the_height_it_is_given_and_an_automatic_one_without_it() {
         let layout = Layout::new(
             &[
                 channel(0),
@@ -355,7 +358,8 @@ mod tests {
             300.0,
             0.0,
         );
-        assert!((layout.lane(1).unwrap().height - 72.0).abs() < 1e-4);
+        assert!((layout.lane(1).unwrap().height - 200.0).abs() < 1e-4);
+        assert!((layout.lane(0).unwrap().height - 72.0).abs() < 1e-4);
     }
 
     fn hit(layout: &Layout, x: f32, y: f32) -> Option<(usize, Zone)> {
@@ -388,13 +392,40 @@ mod tests {
     }
 
     #[test]
-    fn a_decoder_lane_has_no_zones_and_no_border_of_its_own() {
+    fn a_decoder_lane_has_a_name_and_a_border_but_no_colour_bar() {
         let layout = Layout::new(&[channel(40), decoder()], 300.0, 0.0);
         // The channel lane is 28..68; the decoder lane 68..140.
         assert_eq!(hit(&layout, 3.0, 66.0), Some((0, Zone::Border)));
-        assert_eq!(hit(&layout, 50.0, 100.0), None);
-        assert_eq!(hit(&layout, 3.0, 139.0), None);
-        assert_eq!(hit(&layout, 3.0, 142.0), None);
+        // All of the legend of a decoder lane is its name, the colour bar's place too.
+        assert_eq!(hit(&layout, 3.0, 100.0), Some((1, Zone::Name)));
+        assert_eq!(hit(&layout, 50.0, 100.0), Some((1, Zone::Name)));
+        // Its own border, under it (bottom at 140).
+        assert_eq!(hit(&layout, 3.0, 139.0), Some((1, Zone::Border)));
+        assert_eq!(hit(&layout, 3.0, 142.0), Some((1, Zone::Border)));
+        assert_eq!(hit(&layout, 3.0, 144.0), None);
+    }
+
+    #[test]
+    fn a_lane_lands_among_all_the_lanes_decoders_included() {
+        // Heights 40 (28..68), 72 (68..140), 40 (140..180): the middles are 48, 104 and 160.
+        let layout = Layout::new(&[channel(40), decoder(), channel(40)], 300.0, 0.0);
+        assert_eq!(layout.landing(10.0), 0);
+        assert_eq!(layout.landing(60.0), 1);
+        assert_eq!(layout.landing(120.0), 2);
+        assert_eq!(layout.landing(1_000.0), 3);
+        assert_eq!(layout.count(), 3);
+        assert!((layout.landing_line(1) - 68.0).abs() < f32::EPSILON);
+        assert!((layout.landing_line(3) - 180.0).abs() < f32::EPSILON);
+        assert_eq!(
+            layout.move_target(1, 1_000.0),
+            2,
+            "a decoder lane goes to the end"
+        );
+        assert_eq!(
+            layout.move_target(2, 10.0),
+            0,
+            "a channel goes above a decoder"
+        );
     }
 
     #[test]
@@ -466,18 +497,6 @@ mod tests {
         // A long pause jumps to the target; a negative target works the same way.
         assert!((ease(0.0, -30.0, 10.0) + 30.0).abs() < 0.01);
         assert!((ease(5.0, 5.0, 0.016) - 5.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn dragging_never_lands_among_decoder_lanes() {
-        let layout = Layout::new(
-            &[channel(40), channel(40), decoder(), decoder()],
-            400.0,
-            0.0,
-        );
-        // Only the two channel lanes count, however far down the pointer is.
-        assert_eq!(layout.landing(10_000.0), 2);
-        assert_eq!(layout.move_target(0, 10_000.0), 1);
     }
 
     #[test]

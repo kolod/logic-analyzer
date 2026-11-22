@@ -29,6 +29,10 @@ fn presentation_with(heights: &[(u8, u16)]) -> Presentation {
     presentation
 }
 
+fn heights(channels: Vec<(u8, u16)>, decoders: Vec<(u32, u16)>) -> Decoded {
+    Decoded::Heights { channels, decoders }
+}
+
 fn heights_of(presentation: &Presentation) -> Vec<(u8, u16)> {
     let mut list: Vec<(u8, u16)> = presentation
         .channels
@@ -66,10 +70,10 @@ fn without_a_custom_height_there_is_no_section() {
 #[test]
 fn a_good_payload_is_read() {
     let decoded = decode(&[0x01, 0x02, 0x01, 0x28, 0x1f, 0xf0, 0x01], 32).unwrap();
-    assert_eq!(decoded, Decoded::Heights(vec![(1, 40), (31, 240)]));
+    assert_eq!(decoded, heights(vec![(1, 40), (31, 240)], vec![]));
     assert_eq!(
         decode(&[0x01, 0x00], 8).unwrap(),
-        Decoded::Heights(Vec::new())
+        heights(Vec::new(), Vec::new())
     );
 }
 
@@ -115,7 +119,7 @@ fn every_rejection_of_the_contract_is_made() {
         assert_eq!(error.code(), LAYOUT_INVALID, "{what}");
     }
     // A newer version is not an error: it is kept and not interpreted.
-    assert_eq!(decode(&[0x02, 0xff, 0xff], 8).unwrap(), Decoded::Newer);
+    assert_eq!(decode(&[0x03, 0xff, 0xff], 8).unwrap(), Decoded::Newer);
     assert_eq!(decode(&[0x63], 8).unwrap(), Decoded::Newer);
 }
 
@@ -153,7 +157,10 @@ fn random_bytes_never_panic_and_what_is_accepted_is_canonical() {
         if round % 7 == 0 {
             payload.push(random.below(256) as u8);
         }
-        if let Ok(Decoded::Heights(heights)) = decode(&payload, 32) {
+        if let Ok(Decoded::Heights {
+            channels: heights, ..
+        }) = decode(&payload, 32)
+        {
             accepted += 1;
             let mut presentation = Presentation::defaults(32, u32::MAX);
             for (channel, height) in &heights {
@@ -169,6 +176,75 @@ fn random_bytes_never_panic_and_what_is_accepted_is_canonical() {
         }
     }
     assert!(accepted > 3_000, "{accepted}");
+}
+
+// ---- version 2: the lanes of decoder instances --------------------------------------------
+
+#[test]
+fn decoder_lane_heights_make_a_version_two_payload_and_none_keep_version_one() {
+    // Channel 1 with 40 and the decoder instances 2 and 300 with 60 and 240: version 2, the
+    // channels as before, then the count and the (instance, height) pairs; 300 is the varint ac 02.
+    let mut presentation = presentation_with(&[(1, 40)]);
+    presentation.set_decoder_height(300, 240);
+    presentation.set_decoder_height(2, 60);
+    let payload = encode(&presentation).unwrap();
+    assert_eq!(
+        payload,
+        vec![
+            0x02, 0x01, 0x01, 0x28, 0x02, 0x02, 0x3c, 0xac, 0x02, 0xf0, 0x01
+        ]
+    );
+    assert_eq!(
+        decode(&payload, 8).unwrap(),
+        heights(vec![(1, 40)], vec![(2, 60), (300, 240)])
+    );
+    // Only decoder lanes: the count of channels is zero.
+    let mut only = Presentation::defaults(8, 0xff);
+    only.set_decoder_height(7, 24);
+    let payload = encode(&only).unwrap();
+    assert_eq!(payload, vec![0x02, 0x00, 0x01, 0x07, 0x18]);
+    // Without a decoder height the payload is version 1, as before.
+    assert_eq!(encode(&presentation_with(&[(1, 40)])).unwrap()[0], 0x01);
+    // A height of 0 is automatic: no entry.
+    let mut automatic = Presentation::defaults(8, 0xff);
+    automatic.set_decoder_height(7, 60);
+    automatic.set_decoder_height(7, 0);
+    assert_eq!(encode(&automatic), None);
+    // The limits of a height are those of a channel.
+    let mut limits = Presentation::defaults(8, 0xff);
+    limits.set_decoder_height(1, 5);
+    limits.set_decoder_height(2, 900);
+    assert_eq!(limits.decoder_heights[&1], 24);
+    assert_eq!(limits.decoder_heights[&2], 240);
+}
+
+#[test]
+fn every_rejection_of_version_two_is_made() {
+    let bad: Vec<(&str, Vec<u8>)> = vec![
+        ("no decoder count", vec![0x02, 0x00]),
+        ("a decoder count of 0", vec![0x02, 0x00, 0x00]),
+        ("a decoder count of 65", vec![0x02, 0x00, 65]),
+        (
+            "a repeated instance",
+            vec![0x02, 0x00, 0x02, 0x03, 0x28, 0x03, 0x30],
+        ),
+        (
+            "a descending instance",
+            vec![0x02, 0x00, 0x02, 0x04, 0x28, 0x03, 0x30],
+        ),
+        ("a height of 23", vec![0x02, 0x00, 0x01, 0x03, 23]),
+        ("a height of 241", vec![0x02, 0x00, 0x01, 0x03, 0xf1, 0x01]),
+        ("a missing height", vec![0x02, 0x00, 0x01, 0x03]),
+        ("a trailing byte", vec![0x02, 0x00, 0x01, 0x03, 0x28, 0x00]),
+        (
+            "an instance too large",
+            vec![0x02, 0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0x7f, 0x28],
+        ),
+    ];
+    for (what, payload) in bad {
+        let error = decode(&payload, 8).unwrap_err();
+        assert_eq!(error.code(), LAYOUT_INVALID, "{what}");
+    }
 }
 
 // ---- in a session --------------------------------------------------------------------------
@@ -322,7 +398,7 @@ fn a_newer_section_is_kept_untouched_with_an_info_notice() {
         &fixture("feature_006_view.lasession"),
         &newer,
         "LAYT",
-        vec![0x02, 0xaa, 0xbb],
+        vec![0x03, 0xaa, 0xbb],
     );
     let mut shell = open(&dir, &newer);
     assert!(codes(&shell).contains(&"notice-layout-newer".to_owned()));
@@ -333,7 +409,7 @@ fn a_newer_section_is_kept_untouched_with_an_info_notice() {
         .into_iter()
         .find(|(tag, _)| tag == "LAYT")
         .expect("kept");
-    assert_eq!(layt.1, vec![0x02, 0xaa, 0xbb]);
+    assert_eq!(layt.1, vec![0x03, 0xaa, 0xbb]);
 }
 
 #[test]

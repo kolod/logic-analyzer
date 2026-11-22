@@ -608,26 +608,6 @@ impl App {
         app
     }
 
-    /// The positions in the order of all channels (`MoveChannel`) for a lane dragged from the lane
-    /// `from` to the lane `to` of the lanes that are shown: the moved channel goes where the channel
-    /// of the target lane is.
-    fn presentation_move(&self, from: usize, to: usize) -> Option<(usize, usize)> {
-        let order: Vec<u8> = self
-            .shell
-            .state()
-            .presentation
-            .channels
-            .iter()
-            .map(|c| c.index)
-            .collect();
-        let position = |lane: usize| {
-            let channel = self.plan.channels.get(lane)?.channel;
-            order.iter().position(|c| *c == channel)
-        };
-        let (from, to) = (position(from)?, position(to)?);
-        (from != to).then_some((from, to))
-    }
-
     fn t(&self, key: &'static str) -> String {
         self.shell.text(&Key::from_static(key), &Args::new())
     }
@@ -1265,10 +1245,7 @@ impl App {
                     iced::widget::operation::select_all(NAME_EDITOR),
                 ])
             }
-            Message::MoveLane { from, to } => match self.presentation_move(from, to) {
-                Some((from, to)) => self.run(Command::MoveChannel { from, to }),
-                None => Task::none(),
-            },
+            Message::MoveLane { from, to } => self.run(Command::MoveLane { from, to }),
             Message::SidePanel(view) => self.run(Command::SetSidePanel(view)),
             Message::ChannelNameInput(text) => {
                 if let Some(edit) = &mut self.editing {
@@ -3897,14 +3874,10 @@ mod tests {
         let _turn = render_turn();
         let mut app = app_with_capture("lane-move");
         // Four lanes of the first four channels; all 32 channels are in the order.
-        assert_eq!(app.presentation_move(0, 3), Some((0, 3)));
-        assert_eq!(app.presentation_move(2, 2), None);
-        assert_eq!(app.presentation_move(0, 9), None);
         // Channel 3 goes to the top of the order: the lanes are now 3, 0, 1, 2.
         let _ = app.update(Message::Run(Command::MoveChannel { from: 3, to: 0 }));
-        assert_eq!(app.presentation_move(0, 3), Some((0, 3)));
-        assert_eq!(app.presentation_move(3, 0), Some((3, 0)));
-        let _ = app.update(Message::MoveLane { from: 3, to: 0 });
+        // The lane at the top is carried to the bottom of the four.
+        let _ = app.update(Message::MoveLane { from: 0, to: 3 });
         let order: Vec<u8> = app
             .shell
             .state()
@@ -3914,7 +3887,19 @@ mod tests {
             .take(4)
             .map(|c| c.index)
             .collect();
-        assert_eq!(order, [2, 3, 0, 1]);
+        assert_eq!(order, [0, 1, 2, 3]);
+        // A move outside the lanes does nothing.
+        let _ = app.update(Message::MoveLane { from: 0, to: 99 });
+        let again: Vec<u8> = app
+            .shell
+            .state()
+            .presentation
+            .channels
+            .iter()
+            .take(4)
+            .map(|c| c.index)
+            .collect();
+        assert_eq!(again, [0, 1, 2, 3]);
     }
 
     #[test]

@@ -100,6 +100,10 @@ The legend is the strip at the left of the signals, one row for each channel:
 - **Drag the border** below a row to make the signal taller or shorter (24 to 240 pixels);
   **double-click** the border to give the height back to the program.
 - The mouse wheel over the legend scrolls it when the signals do not fit.
+- **The lane of a decoder** (the row with its name, for example I2C) is a row like the others: drag its
+  name to put it anywhere among the signals (under SDA and SCL, say), drag its border to make it taller
+  or shorter, double-click the border for the height it needs. It has no colour bar and no name to edit.
+  Its height is saved with the capture; its place, like the order of the channels, is not.
 
 Names, colours, order and heights can be changed at any time, before the first capture included, and
 they stay for the next capture. They are saved with a capture and come back when you open it; a file

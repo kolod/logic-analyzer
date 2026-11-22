@@ -430,6 +430,25 @@ fn refusal_of(error: &la_core::Error) -> Refusal {
     }
 }
 
+/// The channels that are shown as lanes, in their order: the ones that are on and were recorded.
+pub(crate) fn shown_channels(state: &State) -> Vec<u8> {
+    let Some(capture) = state.capture.as_ref() else {
+        return Vec::new();
+    };
+    let recorded = capture.description.enabled_mask();
+    state
+        .presentation
+        .channels
+        .iter()
+        .filter(|style| {
+            style.visible
+                && u32::from(style.index) < 32
+                && recorded >> u32::from(style.index) & 1 == 1
+        })
+        .map(|style| style.index)
+        .collect()
+}
+
 impl Shell {
     /// The channels of the capture on screen (0 without one).
     fn decoder_channels(state: &State) -> u8 {
@@ -724,6 +743,9 @@ impl Shell {
             self.decoders.streams.remove(gone);
         }
         state.decoders.instances.retain(|i| !doomed.contains(&i.id));
+        for gone in &doomed {
+            state.presentation.forget_decoder(*gone);
+        }
         if state
             .decoders
             .selection
@@ -875,6 +897,7 @@ impl Shell {
         }
         self.decoders.results.remove(&id);
         state.decoders.instances.retain(|i| i.id != id);
+        state.presentation.forget_decoder(id);
         if state
             .decoders
             .selection
@@ -1179,6 +1202,83 @@ impl Shell {
             || self.decoders.loading.is_some()
     }
 
+    /// The decoder instances whose lanes are shown, in stack order (as the frame plan lists them).
+    pub(crate) fn shown_decoders(&self, state: &State) -> Vec<u32> {
+        let setups: Vec<Setup> = state
+            .decoders
+            .instances
+            .iter()
+            .map(|i| i.setup.clone())
+            .collect();
+        let order = stack_order(&setups);
+        let mut ordered: Vec<&InstanceView> = state.decoders.instances.iter().collect();
+        ordered.sort_by_key(|i| order.iter().position(|o| *o == i.id));
+        ordered
+            .into_iter()
+            .filter(|i| i.setup.lane_visible && self.decoders.results.contains_key(&i.id))
+            .map(|i| i.id)
+            .collect()
+    }
+
+    /// Moves a lane among the shown lanes (`Command::MoveLane`).
+    pub(crate) fn move_lane(
+        &mut self,
+        state: &mut State,
+        from: usize,
+        to: usize,
+    ) -> Result<Executed, Reject> {
+        let channels = shown_channels(state);
+        let decoders = self.shown_decoders(state);
+        let slots: Vec<Option<u16>> = decoders
+            .iter()
+            .map(|id| state.presentation.decoder_slots.get(id).copied())
+            .collect();
+        let mut order = crate::plan::lane_order(channels.len(), &slots);
+        if from == to || from >= order.len() || to >= order.len() {
+            return Err(Reject::Ignored(crate::error::INVALID_COMMAND));
+        }
+        let moved = order.remove(from);
+        order.insert(to, moved);
+        // The shown channels take the places of the shown channels in the order of all of them (a
+        // hidden channel stays where it is), in their new relative order.
+        let new_channels: Vec<u8> = order
+            .iter()
+            .filter_map(|slot| match slot {
+                crate::plan::LaneSlot::Channel(n) => channels.get(*n).copied(),
+                crate::plan::LaneSlot::Decoder(_) => None,
+            })
+            .collect();
+        let styles = &mut state.presentation.channels;
+        let positions: Vec<usize> = styles
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| channels.contains(&s.index))
+            .map(|(at, _)| at)
+            .collect();
+        let reordered: Vec<crate::presentation::ChannelStyle> = new_channels
+            .iter()
+            .filter_map(|c| styles.iter().find(|s| s.index == *c).cloned())
+            .collect();
+        for (at, style) in positions.into_iter().zip(reordered) {
+            if let Some(place) = styles.get_mut(at) {
+                *place = style;
+            }
+        }
+        // Every shown decoder lane is pinned where it now is, so that the order is exactly this one.
+        for (at, slot) in order.iter().enumerate() {
+            if let crate::plan::LaneSlot::Decoder(n) = slot {
+                if let Some(id) = decoders.get(*n) {
+                    state
+                        .presentation
+                        .decoder_slots
+                        .insert(*id, u16::try_from(at).unwrap_or(u16::MAX));
+                }
+            }
+        }
+        mark_dirty(state);
+        Ok(Executed::Changed(Changes::PRESENTATION))
+    }
+
     /// The lane plans and the overlay plans of the visible instances for a window.
     pub(crate) fn decoder_plans(
         &self,
@@ -1235,6 +1335,24 @@ impl Shell {
                         .get(&instance.setup.decoder)
                         .map_or(LANE_ROWS, |d| usize::from(d.lane_rows)),
                 ),
+                height: self
+                    .state
+                    .presentation
+                    .decoder_heights
+                    .get(&instance.id)
+                    .copied()
+                    .unwrap_or(0),
+                slot: self
+                    .state
+                    .presentation
+                    .decoder_slots
+                    .get(&instance.id)
+                    .copied(),
+                rows: self
+                    .decoders
+                    .registry
+                    .get(&instance.setup.decoder)
+                    .map_or(3, |d| d.lane_rows),
             });
             for channel in shown_channels {
                 if let Some(snapshot) = results.overlays.get(channel) {

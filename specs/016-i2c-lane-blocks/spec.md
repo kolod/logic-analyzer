@@ -201,6 +201,18 @@ every block and compare them with the drawn blocks.
 - **FR-015**: All new and changed text MUST be available in the six languages of the application, and
   the checks of feature 005 (parity, budget, fonts) MUST pass.
 
+**The lane as a row of the view** (added after the owner looked at the running application)
+
+- **FR-016**: The lane of a decoder MUST be a row of the signal view like the row of a channel: the user
+  MUST be able to change its height by dragging the border under it (24 to 240 pixels; a double click gives
+  back the automatic height) and to move it by dragging its name, to any place among the channels and the
+  other decoder lanes, the others making room as for a channel. Its legend has no colour bar and no name
+  to edit.
+- **FR-017**: Without a height of its own a decoder lane MUST be as high as its rows need, with a small
+  margin above and below and none wasted below the last row.
+- **FR-018**: The height of a decoder lane MUST be saved with the session and come back when it is opened;
+  the place of the lane, like the order of the channels, is not saved.
+
 ### Key Entities
 
 - **Part block**: a rectangle in the upper sub-band: start, repeated start, address, data, ack, nak or
