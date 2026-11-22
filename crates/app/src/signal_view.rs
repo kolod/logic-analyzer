@@ -107,11 +107,35 @@ const HOVER_LABEL_HEIGHT: f32 = 20.0;
 /// How far the box is from the crosshair, both ways.
 const HOVER_OFFSET: f32 = 10.0;
 
-/// The size of the box for `content` (the glyphs of a proportional font are estimated).
+/// How wide `content` is drawn at `size`: the advance of each glyph of the proportional font of the
+/// interface (Fira Sans) as a share of the size, by kind of glyph. The text engine cannot be asked from
+/// where the canvas draws, and one width for every glyph made the box much wider than a text of
+/// narrow glyphs (the time, the digits and dots of an address).
+fn estimated_width(content: &str, size: f32) -> f32 {
+    content
+        .chars()
+        .map(|c| {
+            let em = match c {
+                ' ' => 0.25,
+                'i' | 'l' | 'j' | '.' | ',' | ':' | ';' | '|' | '!' | '\'' | 'I' => 0.28,
+                'f' | 't' | 'r' | '1' | '-' | '(' | ')' | '[' | ']' => 0.36,
+                'm' | 'w' => 0.85,
+                'M' | 'W' => 0.88,
+                c if c.is_ascii_digit() => 0.58,
+                c if c.is_uppercase() => 0.62,
+                // Kana, kanji and the wide forms take a whole em.
+                c if u32::from(c) >= 0x2e80 => 1.0,
+                _ => 0.54,
+            };
+            em * size
+        })
+        .sum()
+}
+
+/// The size of the box for `content`.
 fn hover_label_size(content: &str) -> Size {
-    let glyphs = content.chars().count() as f32;
     Size::new(
-        glyphs * TEXT_SIZE * 0.62 + 2.0 * HOVER_PAD_X,
+        estimated_width(content, TEXT_SIZE) + 2.0 * HOVER_PAD_X,
         HOVER_LABEL_HEIGHT,
     )
 }
@@ -2449,6 +2473,28 @@ mod tests {
             ),
             "{published:?}"
         );
+    }
+
+    #[test]
+    fn the_width_of_the_box_follows_the_glyphs_of_the_text() {
+        // Narrow glyphs make a narrow box, wide ones a wide box, at the same number of characters.
+        let narrow = estimated_width("1.111.11 il.", TEXT_SIZE);
+        let wide = estimated_width("MWMWMWMWMWMW", TEXT_SIZE);
+        assert!(narrow < 0.5 * wide, "{narrow} {wide}");
+        // A text of ordinary letters and digits is well under the old flat 0.62 of the size.
+        let text = "Write to 0x50: 0x12 0x34";
+        let flat = text.chars().count() as f32 * TEXT_SIZE * 0.62;
+        let estimate = estimated_width(text, TEXT_SIZE);
+        assert!(
+            estimate < 0.9 * flat && estimate > 0.6 * flat,
+            "{estimate} {flat}"
+        );
+        // The box is the text and the room at each side.
+        let size = hover_label_size(text);
+        assert!((size.width - (estimate + 2.0 * HOVER_PAD_X)).abs() < 1e-3);
+        // Wide characters take a whole em.
+        assert!((estimated_width("\u{3042}", TEXT_SIZE) - TEXT_SIZE).abs() < 1e-3);
+        assert_eq!(estimated_width("", TEXT_SIZE), 0.0);
     }
 
     #[test]
