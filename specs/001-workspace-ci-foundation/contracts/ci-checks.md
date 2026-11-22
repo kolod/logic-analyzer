@@ -24,6 +24,17 @@ running in a `debian:trixie` container).
 | `bench (windows)` / `bench (debian)` | both | `cargo bench -p la-storage --bench viewport`, `--bench ingest`, `cargo bench -p la-devices --bench virtual_throughput`, `cargo bench -p la-session --bench session_io` `cargo bench -p la-i18n --bench lookup` and `cargo bench -p la-host --bench frame_plan`, `--bench annotation_plan`, `cargo bench -p la-decoders --bench store_insert` and `--bench decode_throughput` (workflow `bench.yml`, manual and weekly) | Records timing numbers as artifacts to compare with `crates/storage/benches/baseline.json` , `crates/devices/benches/baseline.json`, `crates/session/benches/baseline.json`, `crates/i18n/benches/baseline.json` and `crates/host/benches/baseline.json`, `crates/host/benches/annotation_baseline.json` and `crates/decoders/benches/baseline.json`; never blocks. The merge-blocking complexity check is the deterministic probe-count test `crates/storage/tests/complexity.rs`, part of `cargo test`. |
 | `fuzz (windows)` / `fuzz (debian)` | both | `cargo test -p la-session --release --test fuzz -- --ignored` (one million mutated session files) , the 1,000-kill save test and `cargo test -p la-i18n --release --test stress -- --ignored` (one million hostile localization operations), `cargo test -p la-host --release --test random_walk -- --ignored` (two million random actions on the host) `cargo test -p la-host --release --test view_section -- --ignored` (one million mutated `VIEW` sections), `cargo test -p la-decoders --release --test deco_section -- --ignored` and `--test dann_section -- --ignored` (one million mutated `DECO` and `DANN` sections each) and `cargo test -p la-decoders --release --test round_trip -- --ignored` (the sample decoder with 10,000 seeds) (workflow `fuzz.yml`, manual and weekly) | Informational, never blocks; uploads the failing input as an artifact. A 20,000-input fuzz run, a 150-kill save test, a 100,000-action host random walk and the `VIEW` section mutation tests are part of the normal `cargo test`, which does block. |
 
+## Changes that touch only descriptions
+
+A `changes` job looks at the files of the pull request (or of the push). When every one of them is a
+description (`specs/` except `specs/006-ui-shell-signal-view/contracts/host-api.md`, which a test compares
+with the code; `.specify/`, `.claude/`, `.remember/`, `.vscode/`; a Markdown file or `LICENSE` in the
+root), the steps of the blocking checks are skipped, because they cannot change the result. The jobs
+themselves still run and report success: the required checks of `main` are named after them, and a job
+skipped as a whole would stay "expected" for ever. `docs/` and `packaging/` are not descriptions here (tests
+read them), and neither is anything unknown: the scheduled run, a push whose range is unknown and any file
+that is not in the list above run every check.
+
 ## Rules
 
 - Actions are pinned by full commit SHA; the Rust toolchain by `rust-toolchain.toml`.
