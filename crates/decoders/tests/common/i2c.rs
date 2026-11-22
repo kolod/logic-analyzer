@@ -24,8 +24,8 @@
 //! is `lane` or `chN` (an overlay on channel N); the kinds are `range <start> <end>`, `point <at>`
 //! and `edge <at> <rising|falling>`, and for the lane the blocks `part <from> <to> <colour>` (the upper
 //! band) and `whole <from> <to> <colour>` (the lower band, the colour is an index of the palette);
-//! the text is a message key and its arguments, or `=text` for a literal text (the bit an arrow
-//! shows). SCL is channel 0 and SDA channel 1 (see [`SCL`] and [`SDA`]).
+//! the text is a message key and its arguments (an underscore in an argument is a space), or `=text`
+//! for a literal text (the bit an arrow shows). SCL is channel 0 and SDA channel 1 (see [`SCL`] and [`SDA`]).
 #![allow(dead_code)]
 
 /// The channel the helpers put SCL on.
@@ -286,7 +286,8 @@ fn parse_expected(parts: &[&str]) -> Result<Expected, String> {
         }
         Some((key, args)) => (
             (*key).to_owned(),
-            args.iter().map(|a| (*a).to_owned()).collect(),
+            // An underscore stands for a space in an argument (the data of a packet).
+            args.iter().map(|a| a.replace('_', " ")).collect(),
         ),
         None => (String::new(), Vec::new()),
     };
@@ -560,6 +561,7 @@ pub fn byte_arrows(at: At, value: u8, ack: &str) -> Vec<Expected> {
 /// The palette indices of the colours of the blocks.
 pub const BLUE: u8 = 4;
 pub const YELLOW: u8 = 1;
+pub const ORANGE: u8 = 6;
 pub const GREEN: u8 = 2;
 pub const RED: u8 = 0;
 pub const GREY: u8 = 7;
@@ -582,9 +584,33 @@ pub fn whole(from: u64, to: u64, colour: u8, key: &str, args: &[&str]) -> Expect
     }
 }
 
-/// The block of a start (or `key` of a repeated start) whose SDA edge is at `at`.
+/// The block of a start whose SDA edge is at `at`.
 pub fn start_block(at: u64, key: &str) -> Expected {
     part(at - HALF, at + HALF, BLUE, key, &[])
+}
+
+/// The block of a repeated start whose SDA edge is at `at`: it begins where the block before it, the
+/// acknowledge, ended (`previous_end`), as there is no stop before it.
+pub fn restart_block(previous_end: u64, at: u64) -> Expected {
+    part(
+        previous_end.min(at - HALF),
+        at + HALF,
+        BLUE,
+        "ann-i2c-repeated-start",
+        &[],
+    )
+}
+
+/// The block of a whole transaction: named after its first part, `read` or not, with the data that
+/// went over the bus as the text says it (`data` empty: the short text).
+pub fn packet(from: u64, to: u64, colour: u8, read: bool, address: &str, data: &str) -> Expected {
+    let (key, args): (&str, Vec<&str>) = match (read, data.is_empty()) {
+        (true, true) => ("ann-i2c-transaction-read", vec![address]),
+        (false, true) => ("ann-i2c-transaction-write", vec![address]),
+        (true, false) => ("ann-i2c-transaction-read-long", vec![address, data]),
+        (false, false) => ("ann-i2c-transaction-write-long", vec![address, data]),
+    };
+    whole(from, to, colour, key, &args)
 }
 
 /// The block of a stop whose SDA edge is at `at`, the block before it ending at `last_end`.
@@ -634,7 +660,7 @@ pub fn write_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
         a,
         "ann-i2c-address-write",
         &hex(address),
-        YELLOW,
+        ORANGE,
         "ann-i2c-ack",
         false,
     ));
@@ -646,7 +672,7 @@ pub fn write_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
             at,
             "ann-i2c-data",
             &hex(*value),
-            YELLOW,
+            ORANGE,
             "ann-i2c-ack",
             false,
         ));
@@ -655,12 +681,14 @@ pub fn write_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
     let stop = bus.stop();
     expected.push(stop_block(last_ack_end, stop));
     expected.push(dot(SDA, stop, "ann-i2c-stop"));
-    expected.push(whole(
+    let shown: Vec<String> = data.iter().map(|v| hex(*v)).collect();
+    expected.push(packet(
         start - HALF,
         stop,
         GREEN,
-        "ann-i2c-transaction-write",
-        &[&hex(address)],
+        false,
+        &hex(address),
+        &shown.join(" "),
     ));
     expected
 }
@@ -677,7 +705,7 @@ pub fn read_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
         a,
         "ann-i2c-address-read",
         &hex(address),
-        GREEN,
+        YELLOW,
         "ann-i2c-ack",
         false,
     ));
@@ -691,7 +719,7 @@ pub fn read_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
             at,
             "ann-i2c-data",
             &hex(*value),
-            GREEN,
+            YELLOW,
             ack,
             false,
         ));
@@ -700,12 +728,14 @@ pub fn read_tx(bus: &mut Bus, address: u8, data: &[u8]) -> Vec<Expected> {
     let stop = bus.stop();
     expected.push(stop_block(last_ack_end, stop));
     expected.push(dot(SDA, stop, "ann-i2c-stop"));
-    expected.push(whole(
+    let shown: Vec<String> = data.iter().map(|v| hex(*v)).collect();
+    expected.push(packet(
         start - HALF,
         stop,
         GREEN,
-        "ann-i2c-transaction-read",
-        &[&hex(address)],
+        true,
+        &hex(address),
+        &shown.join(" "),
     ));
     expected
 }

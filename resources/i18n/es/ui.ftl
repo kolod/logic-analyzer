@@ -224,6 +224,8 @@ ann-i2c-repeated-start = Inicio repetido
 ann-i2c-stop = Parada
 ann-i2c-transaction-write = Escritura en { $value }
 ann-i2c-transaction-read = Lectura de { $value }
+ann-i2c-transaction-write-long = Escritura en { $value }: { $second }
+ann-i2c-transaction-read-long = Lectura de { $value }: { $second }
 ann-i2c-address-write = Dirección { $value } (escritura)
 ann-i2c-address-read = Dirección { $value } (lectura)
 ann-i2c-data = Datos { $value }
@@ -255,7 +257,6 @@ decoder-needs-channels = Elija los canales para iniciar la decodificación.
 decoder-channel-none = (ninguno)
 decoder-channel-unavailable = { $name } (no grabado)
 decoder-channels-unrecorded = Un canal de este decodificador no se graba, así que el decodificador no se ejecuta.
-decoder-lane-show = Mostrar el carril
 decoder-annotations = Anotaciones: { $number }
 decoder-incomplete = Resultados incompletos
 decoder-selected = Anotación seleccionada
@@ -268,7 +269,6 @@ decoder-generator-errors = Introducir errores a propósito en las señales simul
 decoder-generator-rate = Aproximadamente uno de cada tantos bytes se corta
 
 ### Decoders: running, cancelling and the memory limit
-decoder-run = Ejecutar de nuevo
 decoder-cancel = Cancelar
 settings-decoder-memory = Límite de memoria de los resultados de los decodificadores
 settings-decoder-memory-note = Compartido por todos los decodificadores. Se aplica a la próxima pasada.

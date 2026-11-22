@@ -361,8 +361,9 @@ fn count_by_column(
 
 /// First-fit packing of spans and marks into rows by column; what does not fit is counted in the
 /// dense cell of its first column. A block of a band (`Part`, `Whole`) is not packed: it goes to the
-/// row of its band, or, if its place there is taken, into the dense cell; a lane that has such blocks
-/// has all its rows even when a band is empty.
+/// row of its band whatever the columns of its neighbours (the decoder keeps the blocks of a band from
+/// overlapping, and two that meet inside one column are told apart by their exact positions); a lane
+/// that has such blocks has all its rows even when a band is empty.
 fn pack(
     mut pieces: Vec<Piece>,
     rows: usize,
@@ -383,7 +384,7 @@ fn pack(
         let row = if let Some(band) = p.band {
             let band = band.min(rows.saturating_sub(1));
             open_row(&mut used, result, band);
-            used.get(band).filter(|end| **end <= p.first).map(|_| band)
+            Some(band)
         } else {
             match used.iter().position(|end| *end <= p.first) {
                 Some(row) => Some(row),

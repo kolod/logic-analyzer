@@ -415,6 +415,24 @@ pub fn annotation_text(localizer: &Localizer, text: &Text) -> String {
     }
 }
 
+/// The shorter form of the text of a block, when it has one: a message whose key ends in `-long` is
+/// the long form, and the same message without that ending the short one, which takes the same
+/// arguments. A block shows the long form when it fits and the short one when only that does.
+#[must_use]
+pub fn annotation_text_short(localizer: &Localizer, text: &Text) -> Option<String> {
+    let Text::Message { key, args } = text else {
+        return None;
+    };
+    let short = key.strip_suffix("-long")?;
+    Some(annotation_text(
+        localizer,
+        &Text::Message {
+            key: short,
+            args: args.clone(),
+        },
+    ))
+}
+
 fn refusal_of(error: &la_core::Error) -> Refusal {
     // The detail of a setup error starts with the setting it is about: `channels.clock: ...`.
     let setting = error

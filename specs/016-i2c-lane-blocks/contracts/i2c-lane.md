@@ -23,13 +23,13 @@ ack, data, ack, stop follow each other with no gap.
 
 ## Bands, shapes, colours
 
-Upper band: shape `Part`; lower band: shape `Whole`. Colour indices of the palette: blue 4, yellow 1, green
+Upper band: shape `Part`; lower band: shape `Whole`. Colour indices of the palette: blue 4, orange 6, yellow 1, green
 2, red 0, grey 7.
 
 | Block | Colour | Text |
 |-------|--------|------|
 | start / repeated start / stop | blue | Start / Repeated start / Stop |
-| address, data | yellow when writing, green when reading | as in 008 |
+| address, data | orange when writing, yellow when reading | as in 008 |
 | ack | green | ACK |
 | nak | red | NAK |
 | packet without error | green | Write to 0x43 / Read from 0x43 |

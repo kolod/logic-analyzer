@@ -119,19 +119,19 @@
 11 65
 --- expect
 lane part 56 64 4 ann-i2c-start
-lane whole 56 508 2 ann-i2c-transaction-write 0x51
-lane part 64 192 1 ann-i2c-address-write 0x51
+lane whole 56 508 2 ann-i2c-transaction-write-long 0x51 0x01_0x02
+lane part 64 192 6 ann-i2c-address-write 0x51
 lane part 192 208 2 ann-i2c-ack
-lane part 208 336 1 ann-i2c-data 0x01
+lane part 208 336 6 ann-i2c-data 0x01
 lane part 336 352 2 ann-i2c-ack
-lane part 352 480 1 ann-i2c-data 0x02
+lane part 352 480 6 ann-i2c-data 0x02
 lane part 480 496 2 ann-i2c-ack
 lane part 496 508 4 ann-i2c-stop
 lane part 565 573 4 ann-i2c-start
-lane whole 565 873 0 ann-i2c-transaction-write 0x50 error
-lane part 573 701 1 ann-i2c-address-write 0x50
+lane whole 565 873 0 ann-i2c-transaction-write-long 0x50 0x12 error
+lane part 573 701 6 ann-i2c-address-write 0x50
 lane part 701 717 2 ann-i2c-ack
-lane part 717 845 1 ann-i2c-data 0x12
+lane part 717 845 6 ann-i2c-data 0x12
 lane part 845 861 0 ann-i2c-nak error
 lane part 861 873 4 ann-i2c-stop
 ch1 point 64 ann-i2c-start

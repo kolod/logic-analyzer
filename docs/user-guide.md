@@ -183,7 +183,7 @@ right removes the decoder.
 4. Click an annotation to select it: the panel shows its text, position, length in time and whether it
    is an error. Click it twice to bring it into view. **F8** and **Shift+F8** select the next and the
    previous annotation, and **Ctrl+F8** goes to the selected one.
-5. The check box **Show the lane** hides the lane and its overlays; the cross removes the decoder.
+5. The lane is always shown; the cross removes the decoder.
 
 **Trying a decoder without hardware.** When the selected device is the simulated one, the virtual
 device makes signals that are valid for the decoder on the channels you chose (the other channels stay
@@ -194,12 +194,12 @@ marks where they were planted.
 
 ### Decoding I2C
 
-Choose **I2C** in the list, then choose the channels of **Clock (SCL)** and **Data (SDA)**.
+Choose **I2C** in the list, then choose the channels of **Data (SDA)** and **Clock (SCL)**.
 
 - **The lane** has two bands of blocks. The upper one shows the parts of a transaction side by side:
   **Start** (blue), the address (`Address 0x50 (write)`), each data byte (`Data 0x12`), an **ACK** (green)
   or **NAK** (red) after each byte, a **Repeated start** where there is one, and **Stop** (blue).
-  Address and data blocks are yellow for a write and green for a read. The lower band is one block for the
+  Address and data blocks are orange for a write and yellow for a read. The lower band is one block for the
   whole transaction (`Write to 0x50`, `Read from 0x50`), green if all went well and red if there was an
   error (the controller's NAK on the last byte it reads is normal). A block shows its text only if all of
   it fits; zoom in and it appears. Select the arrow on the clock line of a NAK to read what was not
@@ -229,7 +229,7 @@ Choose **I2C** in the list, then choose the channels of **Clock (SCL)** and **Da
 
 A decoder that fails never harms anything else: its block says what happened and what to do, the
 results it had found before the failure stay (marked incomplete), the other decoders and the capture
-are untouched, and **Run again** starts it again. **Cancel** stops a running pass. A decoder that does
+are untouched, and it runs again by itself when you change a channel or an option. **Cancel** stops a running pass. A decoder that does
 not answer in time is given up on after a few seconds; if several are stuck, restart the application.
 The memory the results of all decoders may use is set in the settings (16 MiB to 4 GiB).
 
@@ -242,7 +242,7 @@ from asks first, because they go with it. Lanes are in stack order, lowest first
 
 **Saving.** The decoders you set up are saved with the session and decode again when it is opened. The
 setting **Save decoded results with the session** also saves what they found, so that it shows at once
-when the file is opened (the file is larger); press **Run again** to decode anew. A file from a newer
+when the file is opened (the file is larger); change a channel or an option to decode anew. A file from a newer
 version keeps decoders this version does not have, and they are written back unchanged.
 
 Decoding never changes the capture. A dashed line along the bottom of a lane means that its results

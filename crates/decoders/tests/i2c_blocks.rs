@@ -13,7 +13,7 @@
 mod common;
 
 use common::i2c::{
-    BLUE, Bus, Expected, GREEN, GREY, HALF, RED, YELLOW, ack_end, decode, erroneous, part,
+    BLUE, Bus, Expected, GREEN, GREY, HALF, ORANGE, RED, ack_end, decode, erroneous, part,
     start_block, stop_block, whole, write_tx,
 };
 
@@ -62,7 +62,7 @@ fn a_good_write_is_six_blocks_side_by_side_and_one_block_below_them() {
         ]
     );
     let colours: Vec<u8> = upper.iter().map(|e| e.block.clone().unwrap().1).collect();
-    assert_eq!(colours, [BLUE, YELLOW, GREEN, YELLOW, GREEN, BLUE]);
+    assert_eq!(colours, [BLUE, ORANGE, GREEN, ORANGE, GREEN, BLUE]);
     // They follow each other with no gap and no overlap.
     for pair in upper.windows(2) {
         assert_eq!(pair[0].positions[1], pair[1].positions[0], "{pair:?}");
@@ -91,7 +91,7 @@ fn a_stop_right_after_the_eighth_bit_cuts_the_byte_and_begins_where_it_ends() {
     let cut = erroneous(part(
         first - HALF,
         first + 7 * 16 + HALF,
-        YELLOW,
+        ORANGE,
         "ann-i2c-error-byte-cut",
         &["8"],
     ));
@@ -234,4 +234,88 @@ fn a_capture_that_ends_after_the_ack_is_a_grey_packet_up_to_the_end_of_the_ack_b
         &[]
     )));
     assert!(lane.iter().all(|e| !e.error));
+}
+
+/// The text of the block of the last packet (key and arguments) of a decode.
+fn packet_text(bus: &Bus, options: &[(&str, la_decoders::setup::Value)]) -> (String, Vec<String>) {
+    let decoded = common::i2c::decode_with(
+        &bus.words(),
+        options,
+        &la_decoders::run::ChunkLimits::default(),
+    );
+    assert_eq!(decoded.refused, 0, "the sink refused a record");
+    let lane = decoded.lane();
+    let packets = band(&lane, "whole");
+    let last = packets.last().expect("a packet");
+    (last.key.clone(), last.args.clone())
+}
+
+#[test]
+fn the_packet_names_the_data_that_went_over_the_bus_with_a_bar_at_a_repeated_start() {
+    // A write of a register address, a repeated start and a read: the memory read of an EEPROM.
+    let mut bus = lead();
+    bus.start();
+    bus.byte(0xA0, true);
+    bus.byte(0x00, true);
+    bus.byte(0x10, true);
+    bus.repeated_start();
+    bus.byte(0xA1, true);
+    bus.byte(0x55, true);
+    bus.byte(0x66, false);
+    bus.stop();
+    bus.idle(64);
+    let (key, args) = packet_text(&bus, &[]);
+    assert_eq!(key, "ann-i2c-transaction-write-long");
+    assert_eq!(args, ["0x50", "0x00 0x10 | 0x55 0x66"]);
+    // An address and nothing else: the short text.
+    let mut bus = lead();
+    bus.start();
+    bus.byte(0xA1, true);
+    bus.stop();
+    bus.idle(64);
+    let (key, args) = packet_text(&bus, &[]);
+    assert_eq!(key, "ann-i2c-transaction-read");
+    assert_eq!(args, ["0x50"]);
+}
+
+#[test]
+fn a_long_transaction_cuts_the_data_in_its_text_with_a_sign_and_in_any_radix() {
+    for (radix, shown_length) in [("hex", 4), ("dec", 3), ("bin", 10)] {
+        let mut bus = lead();
+        bus.start();
+        bus.byte(0xA0, true);
+        for value in 0..30_u8 {
+            bus.byte(value | 0x80, true);
+        }
+        bus.stop();
+        bus.idle(64);
+        let (key, args) = packet_text(
+            &bus,
+            &[("radix", la_decoders::setup::Value::Choice(radix.to_owned()))],
+        );
+        assert_eq!(key, "ann-i2c-transaction-write-long", "{radix}");
+        let data = &args[1];
+        // Never more than an argument may hold, and the cut is said.
+        assert!(data.len() <= 64, "{radix}: {} bytes", data.len());
+        assert!(data.ends_with(" \u{2026}"), "{radix}: {data}");
+        let first = data.split(' ').next().unwrap();
+        assert_eq!(first.len(), shown_length, "{radix}: {data}");
+        // Fewer than the thirty bytes are shown.
+        assert!(data.split(' ').count() < 30, "{radix}: {data}");
+    }
+}
+
+#[test]
+fn a_ten_bit_address_is_read_in_full_in_the_text_of_the_packet() {
+    // A write to the 10-bit address 0x123: the header byte 11110 01 0 and the low byte 0x23.
+    let mut bus = lead();
+    bus.start();
+    bus.byte(0xF0 | 1 << 1, true);
+    bus.byte(0x23, true);
+    bus.byte(0x77, true);
+    bus.stop();
+    bus.idle(64);
+    let (key, args) = packet_text(&bus, &[]);
+    assert_eq!(key, "ann-i2c-transaction-write-long");
+    assert_eq!(args, ["0x123", "0x77"]);
 }

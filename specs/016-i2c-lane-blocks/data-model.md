@@ -27,8 +27,8 @@ Rules:
 |-------|------|-------|--------|------|------------|
 | start | upper | `Part` | blue | `ann-i2c-start` | no |
 | repeated start | upper | `Part` | blue | `ann-i2c-repeated-start` | no |
-| address | upper | `Part` | yellow (write) / green (read) | `ann-i2c-address-write/read` | no |
-| data | upper | `Part` | yellow / green | `ann-i2c-data` | no |
+| address | upper | `Part` | orange (write) / yellow (read) | `ann-i2c-address-write/read` | no |
+| data | upper | `Part` | orange / yellow | `ann-i2c-data` | no |
 | ack | upper | `Part` | green | `ann-i2c-ack` | no |
 | nak | upper | `Part` | red | `ann-i2c-nak` | yes if the NAK is an error |
 | stop | upper | `Part` | blue | `ann-i2c-stop` | no |

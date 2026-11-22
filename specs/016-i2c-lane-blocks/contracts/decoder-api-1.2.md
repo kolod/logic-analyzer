@@ -17,9 +17,14 @@ DECODER_API_VERSION    // "1.2"
 1. `Part` and `Whole` are accepted for ranges only; a point or an edge with such a shape is an invalid
    record (dropped and counted, `decoder.invalid_output`).
 2. `lanes::plan(snapshot, window, rows)` is called with the descriptor's `lane_rows` for a lane. A `Part`
-   goes to row 0, a `Whole` to row `min(1, rows - 1)`. They are not packed: a cell whose place in its row is
-   taken becomes a dense cell (counted, with its error count). Annotations of other shapes are packed into
-   the rows as before.
+   goes to row 0, a `Whole` to row `min(1, rows - 1)`. They are not packed: every one is placed in its row
+   whatever the columns of the blocks before it (the decoder keeps the blocks of a band from overlapping, and
+   two that meet inside one column are told apart by their exact positions). A block narrower than a column is
+   a mark and is grouped by column like any mark; the interface does not draw it. Annotations of other shapes
+   are packed into the rows as before.
+2a. A message text may have a second form: if its key ends in `-long`, the interface shows it when all of it
+   fits in the block and otherwise tries the same message without that ending (same arguments), and then
+   nothing.
 3. The interface draws a `Part` or `Whole` as a solid rectangle in the palette colour of the style, whatever
    the `error` flag says: the flag adds a heavier outline and is counted, it does not replace the colour. Its
    text is drawn only if all of it fits.

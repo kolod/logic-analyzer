@@ -224,6 +224,8 @@ ann-i2c-repeated-start = リピートスタート
 ann-i2c-stop = ストップ
 ann-i2c-transaction-write = { $value } への書き込み
 ann-i2c-transaction-read = { $value } からの読み出し
+ann-i2c-transaction-write-long = { $value } への書き込み: { $second }
+ann-i2c-transaction-read-long = { $value } からの読み出し: { $second }
 ann-i2c-address-write = アドレス { $value }（書き込み）
 ann-i2c-address-read = アドレス { $value }（読み出し）
 ann-i2c-data = データ { $value }
@@ -255,7 +257,6 @@ decoder-needs-channels = デコードを開始するチャンネルを選んで�
 decoder-channel-none = （なし）
 decoder-channel-unavailable = { $name }（記録されていません）
 decoder-channels-unrecorded = このデコーダーのチャンネルが記録されていないため、デコーダーは実行されません。
-decoder-lane-show = レーンを表示
 decoder-annotations = 注釈数: { $number }
 decoder-incomplete = 結果は不完全です
 decoder-selected = 選択中の注釈
@@ -268,7 +269,6 @@ decoder-generator-errors = シミュレートした信号にわざとエラー�
 decoder-generator-rate = おおよそこの数に 1 バイトが途中で切れます
 
 ### Decoders: running, cancelling and the memory limit
-decoder-run = もう一度実行
 decoder-cancel = キャンセル
 settings-decoder-memory = デコーダーの結果のメモリ上限
 settings-decoder-memory-note = すべてのデコーダーで共有します。次の実行から有効です。

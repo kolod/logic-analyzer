@@ -15,8 +15,8 @@
 mod common;
 
 use common::i2c::{
-    Bus, Decoded, Expected, GREEN, HALF, SCL, SDA, YELLOW, ack_end, byte_arrows, byte_lane, decode,
-    dot, read_tx, sorted, start_block, stop_block, whole, write_tx,
+    Bus, Decoded, Expected, GREEN, HALF, ORANGE, SCL, SDA, YELLOW, ack_end, byte_arrows, byte_lane,
+    decode, dot, read_tx, restart_block, sorted, start_block, stop_block, whole, write_tx,
 };
 use la_decoders::model::Shape;
 
@@ -72,7 +72,7 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
         a,
         "ann-i2c-address-write",
         "0x50",
-        YELLOW,
+        ORANGE,
         "ann-i2c-ack",
         false,
     ));
@@ -82,20 +82,21 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
         register,
         "ann-i2c-data",
         "0x10",
-        YELLOW,
+        ORANGE,
         "ann-i2c-ack",
         false,
     ));
     expected.extend(byte_arrows(register, 0x10, "ann-i2c-ack"));
     let restart = bus.repeated_start();
-    expected.push(start_block(restart, "ann-i2c-repeated-start"));
+    // A start with no stop before it begins where the acknowledge before it ended.
+    expected.push(restart_block(ack_end(register), restart));
     expected.push(dot(SDA, restart, "ann-i2c-repeated-start"));
     let b = bus.byte(0xA1, true);
     expected.extend(byte_lane(
         b,
         "ann-i2c-address-read",
         "0x50",
-        GREEN,
+        YELLOW,
         "ann-i2c-ack",
         false,
     ));
@@ -105,7 +106,7 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
         data,
         "ann-i2c-data",
         "0x55",
-        GREEN,
+        YELLOW,
         "ann-i2c-nak",
         false,
     ));
@@ -115,12 +116,13 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
     expected.push(dot(SDA, stop, "ann-i2c-stop"));
     // One transaction, named after its first part: green, the controller's NAK at the end of a read
     // is not an error.
-    expected.push(whole(
+    expected.push(common::i2c::packet(
         start - HALF,
         stop,
         GREEN,
-        "ann-i2c-transaction-write",
-        &["0x50"],
+        false,
+        "0x50",
+        "0x10 | 0x55",
     ));
     bus.idle(64);
     let decoded = decode(&bus.words());

@@ -285,3 +285,16 @@ with a commit per task or logical group.
   decoder lanes interleaved), `decoder_view::fitting_height` and rows that fill the lane without a margin
   wasted below.
 - [X] T044 Documents: `docs/host-api.md`, `docs/user-guide.md`, `contracts/layt-section-2.md`; this spec.
+
+- [X] T045 [P] Tests: the packet names the data with a bar at a repeated start, cuts a long list with a sign in
+  every radix and keeps the argument within its limit, a 10-bit address is read in full
+  (`i2c_blocks.rs`); the repeated start block begins at the end of the acknowledge (`i2c.rs`, `i2c_options.rs`,
+  the recorded fixture `repeated_start`); the blocks of a band stay in their row when they meet inside a column
+  (`lanes.rs`); the rows fill the lane and sub-pixel blocks do not hide other marks (`decoder_view.rs`); the long
+  text has a short form (`decoder_i2c.rs`, host).
+- [X] T046 Decoder and framework: the data of the packet in `bus.rs` and `text.rs`, the long and short texts
+  (`-long` keys in six languages), the repeated start from the end of the acknowledge, SCL before SDA in one
+  sample whatever the order of the signals, the order SDA, SCL; bands not packed by column in `lanes.rs`.
+- [X] T047 Interface: the grey bar and the name after it, rows that fill the lane, blocks narrower than a pixel
+  not drawn, the long text and then the short one, no "Show the lane" and no "Run again" (their texts are gone
+  from the six languages).

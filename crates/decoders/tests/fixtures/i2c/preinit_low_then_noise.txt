@@ -194,12 +194,12 @@
 11 65
 --- expect
 lane part 2473 2481 4 ann-i2c-start
-lane whole 2473 2924 2 ann-i2c-transaction-write 0x50
-lane part 2481 2607 1 ann-i2c-address-write 0x50
+lane whole 2473 2924 2 ann-i2c-transaction-write-long 0x50 0x12_0x34
+lane part 2481 2607 6 ann-i2c-address-write 0x50
 lane part 2609 2623 2 ann-i2c-ack
-lane part 2625 2751 1 ann-i2c-data 0x12
+lane part 2625 2751 6 ann-i2c-data 0x12
 lane part 2753 2767 2 ann-i2c-ack
-lane part 2769 2895 1 ann-i2c-data 0x34
+lane part 2769 2895 6 ann-i2c-data 0x34
 lane part 2897 2911 2 ann-i2c-ack
 lane part 2911 2924 4 ann-i2c-stop
 ch1 point 2480 ann-i2c-start

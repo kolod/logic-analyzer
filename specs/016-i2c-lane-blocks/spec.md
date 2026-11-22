@@ -51,7 +51,7 @@ user.
 ### User Story 1 - Read a transaction at a glance (Priority: P1)
 
 A user looks at an I2C capture decoded by the I2C decoder. The row of the decoder shows, in its upper
-sub-band, a blue **Start**, a yellow **Address 0x43 (write)**, a green **ACK**, a yellow **Data 0x75**,
+sub-band, a blue **Start**, an orange **Address 0x43 (write)**, a green **ACK**, an orange **Data 0x75**,
 a green **ACK** and a blue **Stop**, side by side; in its lower sub-band one green block, **Write to
 0x43**, across all of them.
 
@@ -64,11 +64,11 @@ check the blocks, their text, their colours and their places against the clock p
 **Acceptance Scenarios**:
 
 1. **Given** a good write of one byte, **When** the lane is shown with enough room, **Then** the upper
-   sub-band holds six blocks in order — start (blue, "Start"), address (yellow, text as before), ack
-   (green), data (yellow, text as before), ack (green), stop (blue, "Stop") — and the lower sub-band one
+   sub-band holds six blocks in order — start (blue, "Start"), address (orange, text as before), ack
+   (green), data (orange, text as before), ack (green), stop (blue, "Stop") — and the lower sub-band one
    green block with the transaction's text.
-2. **Given** a read, **When** the lane is shown, **Then** the address and data blocks are green, not
-   yellow.
+2. **Given** a read, **When** the lane is shown, **Then** the address and data blocks are yellow, not
+   orange.
 3. **Given** a read whose last byte is not acknowledged by the controller, **When** the lane is shown,
    **Then** the nak block is red, but the packet block below it is green.
 4. **Given** blocks too narrow for their text, **When** the lane is shown, **Then** a block shows its
@@ -174,7 +174,7 @@ every block and compare them with the drawn blocks.
 
 - **FR-007**: A start, a repeated start and a stop block MUST be blue; their text is "Start", "Repeated
   start" and "Stop".
-- **FR-008**: An address or data block MUST be yellow when its direction is write and green when it is
+- **FR-008**: An address or data block MUST be orange when its direction is write and yellow when it is
   read; its text is what feature 008 gives it now (the address, with its direction, or the value in the
   chosen notation).
 - **FR-009**: An ack block MUST be green with the text "ACK"; a nak block MUST be red with the text
@@ -212,6 +212,25 @@ every block and compare them with the drawn blocks.
   margin above and below and none wasted below the last row.
 - **FR-018**: The height of a decoder lane MUST be saved with the session and come back when it is opened;
   the place of the lane, like the order of the channels, is not saved.
+
+**More changes after the owner looked at the running application**
+
+- **FR-019**: The height of the blocks MUST follow the height of the lane: the rows share the lane with a
+  small margin above and below, so a higher lane has higher blocks and no space is left below the last row.
+- **FR-020**: The legend of a decoder lane MUST have a grey bar at its left edge, as the legend of a channel
+  has a colour bar, so that the rows look alike.
+- **FR-021**: A repeated start (a start with no stop before it, as when a memory is read) MUST begin where the
+  block before it, the acknowledge, ends.
+- **FR-022**: When the view is zoomed out a block MUST lose its text as soon as the text no longer fits, and
+  the rectangle stays; a block that is less than a pixel wide is not drawn. All blocks follow this rule alike,
+  whatever their neighbours are.
+- **FR-023**: The block of a packet MUST say the data that were written and read when the text fits (a bar
+  between the data before and after a repeated start, a sign when there are too many to show), and the
+  shorter text with the address only when it does not; a 10-bit address MUST be read in full.
+- **FR-024**: The lists of the channels of the I2C decoder MUST be in the order SDA, SCL.
+- **FR-025**: There MUST be no check box that hides the lane of a decoder (the lane is always shown) and no
+  button that runs a decoder again (a pass runs by itself when a channel or an option changes); the button
+  that cancels a pass that runs stays.
 
 ### Key Entities
 

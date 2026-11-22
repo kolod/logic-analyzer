@@ -2246,32 +2246,15 @@ impl App {
         if folded {
             return block.into();
         }
-        block = block.push(
-            checkbox(instance.setup.lane_visible)
-                .label(self.t("decoder-lane-show"))
-                .size(14)
-                .on_toggle(move |visible| Message::Run(Command::ShowDecoderLane { id, visible })),
-        );
+        // The lane is always shown, and a pass runs by itself whenever a channel or an option
+        // changes: all that is left to offer is stopping one that runs.
         if !instance.ready {
             block = block.push(text(self.t("decoder-needs-channels")).size(12));
-        } else {
-            // Stop a pass that runs; run a new one when nothing does.
-            let running = instance.state == InstanceState::Running;
+        } else if instance.state == InstanceState::Running {
             block = block.push(
-                button(
-                    text(self.t(if running {
-                        "decoder-cancel"
-                    } else {
-                        "decoder-run"
-                    }))
-                    .size(12),
-                )
-                .padding([2, 8])
-                .on_press(Message::Run(if running {
-                    Command::CancelDecoder(id)
-                } else {
-                    Command::RunDecoder(id)
-                })),
+                button(text(self.t("decoder-cancel")).size(12))
+                    .padding([2, 8])
+                    .on_press(Message::Run(Command::CancelDecoder(id))),
             );
         }
         if let Some(entry) = entry {
@@ -3420,7 +3403,7 @@ mod tests {
         let name = app.shell.state().decoders.catalogue[0].name.clone();
         let _ = app.update(Message::Run(Command::AddDecoder { decoder: id }));
         let instance = app.shell.state().decoders.instances[0].id;
-        let properties = app.t("decoder-lane-show");
+        let properties = app.t("decoder-needs-channels");
         let find = |app: &App, label: &str| {
             let mut ui = iced_test::Simulator::with_size(
                 crate::fonts::settings(),
@@ -5101,12 +5084,7 @@ mod tests {
                 iced::Size::new(280.0, 400.0),
                 app.decoders_panel(),
             );
-            for key in [
-                "panel-decoders",
-                "decoder-lane-show",
-                "decoder-run",
-                "decoder-state-finished",
-            ] {
+            for key in ["panel-decoders", "decoder-state-finished"] {
                 let label = app.t(key);
                 assert!(
                     ui.find(label.as_str()).is_ok() || key == "decoder-state-finished",

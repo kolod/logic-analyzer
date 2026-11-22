@@ -163,7 +163,7 @@ fn ten_thousand_seeds() {
 // Planted errors, truncated captures and start-up (spec 008, user story 3, task T023).
 // ---------------------------------------------------------------------------------------------
 
-use common::i2c::{Decoded, GREEN, GREY, HALF, RED, YELLOW};
+use common::i2c::{Decoded, GREEN, GREY, HALF, ORANGE, RED, YELLOW};
 use la_decoders::generators::i2c::{PlantedError, expected_errors};
 use la_decoders::model::{Item, Payload};
 
@@ -202,6 +202,8 @@ fn reported(decoded: &Decoded, length: u64) -> Vec<PlantedError> {
             "ann-i2c-nak"
             | "ann-i2c-transaction-write"
             | "ann-i2c-transaction-read"
+            | "ann-i2c-transaction-write-long"
+            | "ann-i2c-transaction-read-long"
             | "ann-i2c-incomplete" => {}
             other => panic!(
                 "an error that was not planted: {other} at {:?}",
@@ -289,7 +291,7 @@ fn check_blocks(decoded: &Decoded, items: &[Item], seed: u64) {
             continue;
         };
         let ten_bit = b[3] & 1 == 1;
-        let colour = if b[1] == 1 { GREEN } else { YELLOW };
+        let colour = if b[1] == 1 { YELLOW } else { ORANGE };
         match b[0] {
             1 | 2 => {
                 let key = if b[0] == 1 {
@@ -299,7 +301,7 @@ fn check_blocks(decoded: &Decoded, items: &[Item], seed: u64) {
                 };
                 assert!(
                     lane.iter()
-                        .any(|e| e.key == key && e.positions[0] == item.start - HALF),
+                        .any(|e| e.key == key && e.positions[1] == item.start + HALF),
                     "seed {seed}: no {key} block at {}",
                     item.start
                 );

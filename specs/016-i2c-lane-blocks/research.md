@@ -54,13 +54,13 @@ placing the start block by the first bit would delay it and need the packet to r
 ## R3. Colours
 
 **Decision**: roles map to indices of the existing palette of eight annotation colours (the colours the
-user already knows from markers; chosen for the three variants of the interface): blue 4, yellow 1, green 2,
+user already knows from markers; chosen for the three variants of the interface): blue 4, orange 6, yellow 1, green 2,
 red 0, grey 7.
 
 | Block | Colour |
 |-------|--------|
 | start, repeated start, stop | blue (4) |
-| address, data: write | yellow (1) |
+| address, data: write | orange (6) |
 | address, data: read | green (2) |
 | ack | green (2) |
 | nak | red (0) |

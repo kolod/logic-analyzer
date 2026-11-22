@@ -63,12 +63,13 @@ earlier is cut where the later begins).
 
 | What | Band | Where | Colour | Text |
 |------|------|-------|--------|------|
-| start, repeated start | upper | `T` centred on the falling edge of SDA | blue | `Start`, `Repeated start` |
-| an address | upper | the eight bits (for 10 bits, a block for each byte, both naming the address) | yellow (write), green (read) | `Address 0x50 (write)` |
-| a data byte | upper | the eight bits | yellow (write), green (read) | `Data 0x12` |
+| start | upper | `T` centred on the falling edge of SDA | blue | `Start` |
+| repeated start | upper | from the end of the block before it (the acknowledge) to half a period after the falling edge of SDA | blue | `Repeated start` |
+| an address | upper | the eight bits (for 10 bits, a block for each byte, both naming the address) | orange (write), yellow (read) | `Address 0x50 (write)` |
+| a data byte | upper | the eight bits | orange (write), yellow (read) | `Data 0x12` |
 | an acknowledge bit | upper | the one period of the bit | green (ACK), red (NAK) | `ACK`, `NAK` |
 | stop | upper | from the end of the last block (at most `T`) to the rising edge of SDA | blue | `Stop` |
-| a transaction | lower | from the start of its start block to the end of its stop block | green, red if it has an error | `Write to 0x50` or `Read from 0x50`, named after its first part |
+| a transaction | lower | from the start of its start block to the end of its stop block | green, red if it has an error | `Write to 0x50: 0x12 0x34` or `Read from 0x50: 0x01`, named after its first part, with the data bytes that went over the bus (a bar between the parts at a repeated start, a cut sign when they are too many for the text); the interface shows the shorter `Write to 0x50` when the long text does not fit |
 
 A block shows its text only if all of it fits. On the signals: a dot on SDA at every start and stop and an
 arrow on SCL at the rising edge of every bit (the text is the bit, or ACK/NAK); marks on the signals name

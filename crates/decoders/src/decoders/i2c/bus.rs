@@ -25,7 +25,7 @@ use la_storage::Gap;
 
 use super::items::{self, Event};
 use super::text::{self, Display};
-use crate::input::{Level, SignalReader};
+use crate::input::{Edge, Level, SignalReader};
 use crate::model::{Annotation, Kind, Style, Target, Text};
 use crate::run::{DecodeError, Sink};
 
@@ -137,7 +137,17 @@ pub struct Bus {
     held: Option<Held>,
     /// Where the last block of the upper band ended.
     last_end: u64,
+    /// The data bytes of the transaction in progress as they are shown in its block (the bytes after
+    /// an address, with a bar where a repeated start separates two parts), as many as fit in an
+    /// argument of a text.
+    data_text: String,
+    /// More bytes went over the bus than `data_text` holds.
+    data_cut: bool,
 }
+
+/// The longest `data_text`, in bytes, leaving room for the sign that says it is cut (an argument of
+/// a text is at most 64 bytes).
+const DATA_TEXT_LIMIT: usize = 54;
 
 fn put(
     sink: &mut Sink,
@@ -180,7 +190,38 @@ impl Bus {
             length: u64::MAX,
             held: None,
             last_end: 0,
+            data_text: String::new(),
+            data_cut: false,
         }
+    }
+
+    /// Adds a data byte, as shown, to the text of the transaction's block.
+    fn note_data(&mut self, shown: &str) {
+        let separator = usize::from(!self.data_text.is_empty());
+        if self.data_cut
+            || self
+                .data_text
+                .len()
+                .saturating_add(separator)
+                .saturating_add(shown.len())
+                > DATA_TEXT_LIMIT
+        {
+            self.data_cut = true;
+            return;
+        }
+        if separator == 1 {
+            self.data_text.push(' ');
+        }
+        self.data_text.push_str(shown);
+    }
+
+    /// The data of the transaction that ended, for its block, and the state ready for the next one.
+    fn take_data(&mut self) -> Option<String> {
+        let mut text = std::mem::take(&mut self.data_text);
+        if std::mem::take(&mut self.data_cut) {
+            text.push_str(" \u{2026}");
+        }
+        (!text.is_empty()).then_some(text)
     }
 
     /// Half a bus period, rounded down: how far a bit's cell reaches before its rising edge.
@@ -385,18 +426,42 @@ impl Bus {
         to: u64,
         sink: &mut Sink,
     ) -> Result<(), DecodeError> {
+        // Edges of one sample are processed SCL first, whatever the order of the roles of the
+        // descriptor (which is the order the two lists are shown in): an SDA edge waits for an SCL
+        // edge of the same sample.
+        let mut waiting: Option<Edge> = None;
         for edge in reader.edges(from, to) {
-            // An edge at the first position after a gap compares with an unknown level.
-            if self.resynced_at == Some(edge.position) {
-                continue;
+            if let Some(held) = waiting.take() {
+                if edge.position == held.position && edge.role == "scl" {
+                    self.edge(edge, sink)?;
+                    self.edge(held, sink)?;
+                    continue;
+                }
+                self.edge(held, sink)?;
             }
-            match edge.role {
-                "scl" => self.scl_edge(edge.position, edge.rising, sink)?,
-                "sda" => self.sda_edge(edge.position, edge.rising, sink)?,
-                _ => {}
+            if edge.role == "sda" {
+                waiting = Some(edge);
+            } else {
+                self.edge(edge, sink)?;
             }
         }
+        if let Some(held) = waiting {
+            self.edge(held, sink)?;
+        }
         Ok(())
+    }
+
+    /// One edge of one of the two lines.
+    fn edge(&mut self, edge: Edge, sink: &mut Sink) -> Result<(), DecodeError> {
+        // An edge at the first position after a gap compares with an unknown level.
+        if self.resynced_at == Some(edge.position) {
+            return Ok(());
+        }
+        match edge.role {
+            "scl" => self.scl_edge(edge.position, edge.rising, sink),
+            "sda" => self.sda_edge(edge.position, edge.rising, sink),
+            _ => Ok(()),
+        }
     }
 
     /// Samples were lost: what is in progress ends (as an error where something was in progress)
@@ -534,7 +599,7 @@ impl Bus {
             }
         }
         self.byte = Byte::default();
-        let from = at.saturating_sub(self.before());
+        let mut from = at.saturating_sub(self.before());
         let to = at.saturating_add(self.after());
         let repeated = match &mut self.transaction {
             Some(transaction) if between_bytes => {
@@ -543,9 +608,20 @@ impl Bus {
             }
             _ => false,
         };
+        // A start with no stop before it (a repeated start, as when a memory is read) begins where the
+        // block before it, the acknowledge, ends.
+        if repeated && self.last_end < from {
+            from = self.last_end;
+        }
         let (text, style) = if repeated {
+            // The data before and after a repeated start are told apart by a bar.
+            if !self.data_text.is_empty() && !self.data_cut {
+                self.data_text.push_str(" |");
+            }
             text::repeated_start()
         } else {
+            self.data_text.clear();
+            self.data_cut = false;
             self.transaction = Some(Transaction {
                 from,
                 errored: false,
@@ -613,6 +689,7 @@ impl Bus {
             false,
         )?;
         let bad = transaction.errored || cut;
+        let data = self.take_data();
         if let Some(address) = transaction.address {
             self.emit_block(
                 sink,
@@ -625,6 +702,7 @@ impl Bus {
                         transaction.first_read,
                         transaction.first_ten_bit,
                     ),
+                    data,
                     bad,
                 ),
                 bad,
@@ -805,6 +883,7 @@ impl Bus {
                 // a byte it reads is how a read ends.
                 let error = !ack && !transaction.read;
                 let shown = self.display.byte(byte.value);
+                self.note_data(&shown);
                 self.push_part(
                     sink,
                     byte_from,

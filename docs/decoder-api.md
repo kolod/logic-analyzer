@@ -112,8 +112,11 @@ emit(Item)           -> Result<(), Limit>     // what a decoder above it in a st
 The shapes `Dot`, `Arrow`, `Bar`, `Flag` and `Cross` are drawn as marks or bars and packed into the free
 rows of the lane. Two shapes are for ranges only (1.2): `Part` is a solid block of the **upper** band of the
 lane and `Whole` a solid block of the **lower** band; they are not packed, a `Part` is always in the first
-row and a `Whole` in the second (or the last when the lane has one row), and one whose place in its row is
-taken is counted in a dense cell. The interface fills a block with the colour of its style, whatever the
+row and a `Whole` in the second (or the last when the lane has one row), whatever the columns of the blocks
+before them (a decoder keeps the blocks of a band from overlapping; a block narrower than a pixel is a mark
+that the interface does not draw). A message text may come in two forms: the key ending in `-long` is shown when
+it fits in the block and the same message without that ending, which takes the same arguments, when only that
+does. The interface fills a block with the colour of its style, whatever the
 error flag says (the flag makes the outline heavier and is counted), and draws its text only when all of it
 fits.
 

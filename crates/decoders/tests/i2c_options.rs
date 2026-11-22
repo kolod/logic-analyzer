@@ -10,8 +10,8 @@
 mod common;
 
 use common::i2c::{
-    Bus, Decoded, Expected, GREEN, HALF, SDA, YELLOW, ack_end, byte_arrows, byte_lane, decode_with,
-    dot, part, read_tx, sorted, start_block, stop_block, whole, write_tx,
+    Bus, Decoded, Expected, GREEN, HALF, ORANGE, SDA, YELLOW, ack_end, byte_arrows, byte_lane,
+    decode_with, dot, part, read_tx, sorted, start_block, stop_block, write_tx,
 };
 use la_decoders::decoders::i2c::items;
 use la_decoders::model::{Item, Payload};
@@ -59,14 +59,16 @@ fn the_eight_bit_notation_adds_the_direction_bit_and_changes_nothing_else() {
     let decoded = decode_with_options(&words, &[("address", choice("addr8"))]);
     // Only the text of addresses and transactions differs: 0x50 write is 0xA0, 0x51 read is 0xA3.
     let rewrite = |mut e: Expected| {
-        let read = e.key.ends_with("read");
+        let read = e.key.contains("read");
         match e.key.as_str() {
             "ann-i2c-address-write"
             | "ann-i2c-address-read"
             | "ann-i2c-transaction-write"
-            | "ann-i2c-transaction-read" => {
+            | "ann-i2c-transaction-read"
+            | "ann-i2c-transaction-write-long"
+            | "ann-i2c-transaction-read-long" => {
                 let address = u8::from_str_radix(e.args[0].trim_start_matches("0x"), 16).unwrap();
-                e.args = vec![format!("0x{:02X}", address << 1 | u8::from(read))];
+                e.args[0] = format!("0x{:02X}", address << 1 | u8::from(read));
             }
             _ => {}
         }
@@ -133,7 +135,7 @@ fn ten_bit_write(bus: &mut Bus, address: u16, data: &[u8]) -> Vec<Expected> {
             at,
             "ann-i2c-address-write",
             &text,
-            YELLOW,
+            ORANGE,
             "ann-i2c-ack",
             false,
         ));
@@ -148,7 +150,7 @@ fn ten_bit_write(bus: &mut Bus, address: u16, data: &[u8]) -> Vec<Expected> {
             at,
             "ann-i2c-data",
             &format!("0x{value:02X}"),
-            YELLOW,
+            ORANGE,
             "ann-i2c-ack",
             false,
         ));
@@ -157,12 +159,14 @@ fn ten_bit_write(bus: &mut Bus, address: u16, data: &[u8]) -> Vec<Expected> {
     let stop = bus.stop();
     expected.push(stop_block(last_ack_end, stop));
     expected.push(dot(SDA, stop, "ann-i2c-stop"));
-    expected.push(whole(
+    let shown: Vec<String> = data.iter().map(|v| format!("0x{v:02X}")).collect();
+    expected.push(common::i2c::packet(
         start - HALF,
         stop,
         GREEN,
-        "ann-i2c-transaction-write",
-        &[&text],
+        false,
+        &text,
+        &shown.join(" "),
     ));
     expected
 }
@@ -227,7 +231,7 @@ fn the_read_part_of_a_ten_bit_transaction_shows_the_address_already_known() {
         assert!(lane.contains(&part(
             at.first - HALF,
             at.ack - HALF,
-            YELLOW,
+            ORANGE,
             "ann-i2c-address-write",
             &["0x123"]
         )));
@@ -236,22 +240,24 @@ fn the_read_part_of_a_ten_bit_transaction_shows_the_address_already_known() {
     assert!(lane.contains(&part(
         read_header.first - HALF,
         read_header.ack - HALF,
-        GREEN,
+        YELLOW,
         "ann-i2c-address-read",
         &["0x123"]
     )));
-    assert!(lane.contains(&start_block(restart, "ann-i2c-repeated-start")));
-    assert!(lane.contains(&whole(
+    assert!(lane.contains(&common::i2c::restart_block(ack_end(low), restart)));
+    // The data after the repeated start, with the bar that tells the two parts apart: none before.
+    assert!(lane.contains(&common::i2c::packet(
         start - HALF,
         stop,
         GREEN,
-        "ann-i2c-transaction-write",
-        &["0x123"]
+        false,
+        "0x123",
+        "0x99"
     )));
     assert!(lane.contains(&part(
         data.first - HALF,
         data.ack - HALF,
-        GREEN,
+        YELLOW,
         "ann-i2c-data",
         &["0x99"]
     )));

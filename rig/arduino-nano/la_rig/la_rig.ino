@@ -144,7 +144,10 @@ static bool lcd_alive() {
 
 // ----- I2C: SCL is bit 0, SDA is bit 1 of the pins; a bit takes four steps -----
 
+static bool i2c_sda = true;  // SDA as last driven
+
 static void i2c_line(bool scl, bool sda, uint8_t steps) {
+  i2c_sda = sda;
   write_pins((uint8_t)((scl ? 1 : 0) | (sda ? 2 : 0)));
   wait_us(step_us * steps);
 }
@@ -161,9 +164,12 @@ static void i2c_stop() {
   i2c_line(true, true, 2);    // SDA rises while SCL is high
 }
 
-// SDA changes with the falling edge of SCL.
+// SCL falls first and SDA changes one step later, in the middle of the low phase: two inputs of
+// an analyzer are never sampled with a skew across a simultaneous edge, which a decoder would
+// read as a START or STOP.
 static void i2c_bit(bool b) {
-  i2c_line(false, b, 2);
+  i2c_line(false, i2c_sda, 1);
+  i2c_line(false, b, 1);
   i2c_line(true, b, 2);
 }
 

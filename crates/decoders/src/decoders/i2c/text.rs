@@ -10,6 +10,10 @@ const MSG_REPEATED_START: &str = "ann-i2c-repeated-start";
 const MSG_STOP: &str = "ann-i2c-stop";
 const MSG_TRANSACTION_WRITE: &str = "ann-i2c-transaction-write";
 const MSG_TRANSACTION_READ: &str = "ann-i2c-transaction-read";
+/// The same with the data of the transaction after the address; the interface shows it when it fits
+/// and the plain one (the key without `-long`) when it does not.
+const MSG_TRANSACTION_WRITE_LONG: &str = "ann-i2c-transaction-write-long";
+const MSG_TRANSACTION_READ_LONG: &str = "ann-i2c-transaction-read-long";
 const MSG_ADDRESS_WRITE: &str = "ann-i2c-address-write";
 const MSG_ADDRESS_READ: &str = "ann-i2c-address-read";
 const MSG_DATA: &str = "ann-i2c-data";
@@ -27,6 +31,7 @@ const MSG_GAP: &str = "ann-i2c-error-gap";
 /// the colour of their signal.
 const BLUE: u8 = 4;
 const YELLOW: u8 = 1;
+const ORANGE: u8 = 6;
 const GREEN: u8 = 2;
 const RED: u8 = 0;
 const GREY: u8 = 7;
@@ -51,9 +56,9 @@ fn whole(colour: u8) -> Style {
     }
 }
 
-/// The colour of an address or data block: yellow for a write, green for a read.
+/// The colour of an address or data block: orange for a write, yellow for a read.
 const fn direction_colour(read: bool) -> u8 {
-    if read { GREEN } else { YELLOW }
+    if read { YELLOW } else { ORANGE }
 }
 
 /// A style that leaves the colour to the signal the mark is on.
@@ -160,17 +165,16 @@ pub fn stop_text() -> Text {
     message(MSG_STOP, Vec::new())
 }
 
-/// The block of a whole transaction, named after its first part: red when it has an error.
-pub fn transaction(read: bool, address: String, bad: bool) -> (Text, Style) {
-    let key = if read {
-        MSG_TRANSACTION_READ
-    } else {
-        MSG_TRANSACTION_WRITE
+/// The block of a whole transaction, named after its first part and with the data that went over the
+/// bus when there are some: red when it has an error.
+pub fn transaction(read: bool, address: String, data: Option<String>, bad: bool) -> (Text, Style) {
+    let (key, args) = match (read, data) {
+        (true, Some(data)) => (MSG_TRANSACTION_READ_LONG, vec![address, data]),
+        (false, Some(data)) => (MSG_TRANSACTION_WRITE_LONG, vec![address, data]),
+        (true, None) => (MSG_TRANSACTION_READ, vec![address]),
+        (false, None) => (MSG_TRANSACTION_WRITE, vec![address]),
     };
-    (
-        message(key, vec![address]),
-        whole(if bad { RED } else { GREEN }),
-    )
+    (message(key, args), whole(if bad { RED } else { GREEN }))
 }
 
 /// The block of an address byte (eight bits).

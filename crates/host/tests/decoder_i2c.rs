@@ -192,7 +192,7 @@ fn the_i2c_decoder_is_in_the_catalogue_and_reads_a_capture_of_a_bus() {
         .find(|c| c.id == ID)
         .expect("the decoder is registered");
     let roles: Vec<&str> = entry.signals.iter().map(|s| s.role.as_str()).collect();
-    assert_eq!(roles, ["scl", "sda"]);
+    assert_eq!(roles, ["sda", "scl"], "data first, then the clock");
     assert!(entry.has_generator);
 
     done(
@@ -655,5 +655,42 @@ fn a_decoder_on_a_channel_that_is_not_recorded_does_not_run() {
     assert!(
         !instance.ready,
         "a decoder on a channel that is not recorded must wait"
+    );
+}
+
+/// The text of a block has a short form: the same message without `-long`.
+#[test]
+fn a_long_text_has_a_short_form_and_other_texts_have_none() {
+    use la_decoders::model::Text;
+    use la_host::decoders::{annotation_text, annotation_text_short};
+    let localizer = la_i18n::Localizer::new(la_i18n::Language::En);
+    let long = Text::Message {
+        key: "ann-i2c-transaction-write-long",
+        args: vec!["0x50".to_owned(), "0x12 0x34".to_owned()],
+    };
+    // The formatter wraps each argument in invisible isolating marks.
+    let plain = |text: String| -> String {
+        text.chars()
+            .filter(|c| !('\u{2066}'..='\u{2069}').contains(c))
+            .collect()
+    };
+    assert_eq!(
+        plain(annotation_text(&localizer, &long)),
+        "Write to 0x50: 0x12 0x34"
+    );
+    assert_eq!(
+        annotation_text_short(&localizer, &long)
+            .map(plain)
+            .as_deref(),
+        Some("Write to 0x50")
+    );
+    let plain = Text::Message {
+        key: "ann-i2c-transaction-read",
+        args: vec!["0x50".to_owned()],
+    };
+    assert_eq!(annotation_text_short(&localizer, &plain), None);
+    assert_eq!(
+        annotation_text_short(&localizer, &Text::Literal("x".into())),
+        None
     );
 }

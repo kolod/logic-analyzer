@@ -16,7 +16,7 @@ mod common;
 use std::sync::atomic::AtomicBool;
 
 use common::i2c::{
-    Bus, Decoded, Expected, GREY, HALF, RED, SCL, YELLOW, ack_end, arrow, byte_lane, collect,
+    Bus, Decoded, Expected, GREY, HALF, ORANGE, RED, SCL, ack_end, arrow, byte_lane, collect,
     decode, decode_capture, erroneous, new_pass, part, setup, sorted, start_block, stop_block,
     whole, write_tx,
 };
@@ -104,12 +104,14 @@ fn a_nak_on_a_written_data_byte_is_an_error_and_on_the_last_read_byte_it_is_not(
     bus.idle(64);
     let decoded = decode(&bus.words());
     let nak = erroneous(part(d.ack - HALF, d.ack + HALF, RED, "ann-i2c-nak", &[]));
-    let packet = erroneous(whole(
+    // The byte that was not acknowledged went over the bus: the text says so.
+    let packet = erroneous(common::i2c::packet(
         start - HALF,
         stop,
         RED,
-        "ann-i2c-transaction-write",
-        &["0x50"],
+        false,
+        "0x50",
+        "0x12",
     ));
     assert_eq!(errors(&decoded), sorted(vec![nak, packet]));
     assert!(decoded.overlay(SCL).contains(&erroneous(arrow(
@@ -139,12 +141,13 @@ fn a_nak_on_a_written_data_byte_is_an_error_and_on_the_last_read_byte_it_is_not(
         "ann-i2c-nak",
         &[]
     )));
-    assert!(lane(&decoded).contains(&whole(
+    assert!(lane(&decoded).contains(&common::i2c::packet(
         start - HALF,
         stop,
         common::i2c::GREEN,
-        "ann-i2c-transaction-read",
-        &["0x50"]
+        true,
+        "0x50",
+        "0x12"
     )));
 }
 
@@ -166,7 +169,7 @@ fn a_stop_in_the_middle_of_a_byte_cuts_it_short_and_the_next_transaction_decodes
     let cut = erroneous(part(
         first_bit - HALF,
         first_bit + 2 * 16 + HALF,
-        YELLOW,
+        ORANGE,
         "ann-i2c-error-byte-cut",
         &["3"],
     ));
@@ -187,7 +190,7 @@ fn a_stop_in_the_middle_of_a_byte_cuts_it_short_and_the_next_transaction_decodes
             a,
             "ann-i2c-address-write",
             "0x50",
-            YELLOW,
+            ORANGE,
             "ann-i2c-ack",
             false
         )[0]
@@ -225,7 +228,7 @@ fn a_start_in_the_middle_of_a_byte_cuts_it_short_and_begins_a_new_transaction() 
     let cut = erroneous(part(
         first_bit - HALF,
         first_bit + 2 * 16 + HALF,
-        YELLOW,
+        ORANGE,
         "ann-i2c-error-byte-cut",
         &["3"],
     ));
@@ -243,12 +246,13 @@ fn a_start_in_the_middle_of_a_byte_cuts_it_short_and_begins_a_new_transaction() 
     let lane = lane(&decoded);
     assert!(lane.contains(&start_block(second, "ann-i2c-start")));
     assert!(!lane.iter().any(|e| e.key == "ann-i2c-repeated-start"));
-    assert!(lane.contains(&whole(
+    assert!(lane.contains(&common::i2c::packet(
         second - HALF,
         stop,
         common::i2c::GREEN,
-        "ann-i2c-transaction-write",
-        &["0x51"]
+        false,
+        "0x51",
+        "0x77"
     )));
 }
 
@@ -331,7 +335,7 @@ fn a_capture_that_ends_inside_a_byte_or_between_bytes_shows_the_transaction_as_u
     let cut = erroneous(part(
         first_bit - HALF,
         first_bit + 2 * 16 + HALF,
-        YELLOW,
+        ORANGE,
         "ann-i2c-error-byte-cut",
         &["3"],
     ));

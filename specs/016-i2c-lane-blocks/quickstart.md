@@ -21,7 +21,7 @@ round trip names the seed.
 1. Run the application, choose the virtual device, add the **I2C** decoder with SCL and SDA on two
    channels, start a capture of about 100,000 samples.
 2. Zoom to one transaction. In the row of the decoder: an upper band of blocks side by side without gaps,
-   in order: **Start** (blue), **Address 0x.. (write)** (yellow), **ACK** (green), **Data 0x..** (yellow),
+   in order: **Start** (blue), **Address 0x.. (write)** (orange), **ACK** (green), **Data 0x..** (orange),
    **ACK**, **Stop** (blue); a lower band with one green block, **Write to 0x..**, as wide as the upper blocks
    together.
 3. Put a pair marker around the start block, the stop block and one ack block: its two lines sit on the edges

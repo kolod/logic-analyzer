@@ -562,22 +562,32 @@ fn a_lane_with_blocks_has_all_its_rows_even_when_one_band_is_empty() {
 }
 
 #[test]
-fn a_part_that_overlaps_another_part_becomes_a_dense_cell_not_a_second_row() {
+fn blocks_of_a_band_stay_in_their_row_even_when_they_meet_inside_a_column() {
+    // Ten samples to a column: the blocks meet at 105, in the middle of column 10, and neither is
+    // pushed into a dense cell or another row.
     let window = Window {
         start: 0,
         end: 1_000,
         columns: 100,
     };
     let mut store = store_of(&[
+        block(60, 105, Shape::Part, false),
+        block(105, 160, Shape::Part, false),
+        block(160, 215, Shape::Part, false),
+    ]);
+    let p = plan(&store.snapshot(), &window, 2);
+    assert_eq!(row_shapes(&p, 0), vec![Shape::Part; 3]);
+    assert!(p.rows.get(1).is_none_or(Vec::is_empty));
+    assert!(p.dense.is_empty());
+    assert_eq!(p.represented(), 3);
+    // Even blocks that overlap are all kept in their row, in the order of their starts.
+    let mut store = store_of(&[
         block(0, 300, Shape::Part, false),
         block(100, 200, Shape::Part, true),
     ]);
     let p = plan(&store.snapshot(), &window, 2);
-    assert_eq!(row_shapes(&p, 0), vec![Shape::Part]);
-    assert!(p.rows.get(1).is_none_or(Vec::is_empty));
-    assert_eq!(p.dense.iter().map(|d| d.count).sum::<u64>(), 1);
-    assert_eq!(p.dense.iter().map(|d| d.errors).sum::<u64>(), 1);
-    assert_eq!(p.represented(), 2);
+    assert_eq!(row_shapes(&p, 0), vec![Shape::Part; 2]);
+    assert!(p.dense.is_empty());
 }
 
 #[test]

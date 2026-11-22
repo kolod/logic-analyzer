@@ -31,16 +31,17 @@ pub const ID: &str = "i2c";
 /// The kind of the items it produces for a decoder stacked on it.
 pub const ITEM: &str = "i2c";
 
+/// Data first, then the clock: the order the two lists are shown in.
 static SIGNALS: [Signal; 2] = [
     Signal {
-        role: "scl",
-        label: "decoder-i2c-signal-scl",
+        role: "sda",
+        label: "decoder-i2c-signal-sda",
         required: true,
         may_share: false,
     },
     Signal {
-        role: "sda",
-        label: "decoder-i2c-signal-sda",
+        role: "scl",
+        label: "decoder-i2c-signal-scl",
         required: true,
         may_share: false,
     },
