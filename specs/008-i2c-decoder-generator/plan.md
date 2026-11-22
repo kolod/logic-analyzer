@@ -16,7 +16,10 @@ period), reproducible from a seed, with planted errors on request, and the round
 decode → compare is a test over a thousand seeds. The decoder is added by registration; the only change
 to the framework contract is one optional method, `Run::final_through` (decoder API 1.0 → 1.1), needed
 so that a decoder that waits for the bus period keeps the watermark of a stack truthful. The
-application shell is not touched.
+application shell is not touched by the decoder itself. After the owner tried the running application
+(clarifications of 2026-11-22) the generator's start, repeated start and stop were redrawn (R15, FR-025)
+and the Decoders panel was corrected (R16, FR-026 to FR-028): the channel lists, the width of the lists and
+the frames; these are the only edits of `crates/app`.
 
 ## Technical Context
 

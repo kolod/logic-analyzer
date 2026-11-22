@@ -349,3 +349,49 @@ fn ten_bit_addresses_round_trip_with_and_without_errors() {
     }
     assert!(ten_bit_items > 400, "{ten_bit_items}");
 }
+
+/// FR-025: SDA changes in the sample where SCL falls, or, in a start, a repeated start and a stop, 8
+/// samples from an edge of SCL while SCL is high; and no clock pulse is narrower than a data pulse.
+#[test]
+fn sda_changes_with_the_falling_edge_of_scl_or_eight_samples_from_an_edge_in_start_and_stop() {
+    for seed in 0..seeds().min(300) {
+        let setup = setup_with(&[
+            ("max_bytes", 1 + (seed % 6) as i64),
+            ("ten_bit", (seed % 2) as i64),
+            ("errors", 1),
+            ("error_rate", 2 + (seed % 3) as i64),
+        ]);
+        let words = generate(&setup, seed, frames(&setup, 6), 4_096);
+        let bit = |word: u32, line: u8| word >> line & 1;
+        let scl_at = |at: usize| bit(words[at], SCL);
+        let (mut sda_edges, mut scl_edges) = (Vec::new(), Vec::new());
+        for at in 1..words.len() {
+            if bit(words[at], SDA) != bit(words[at - 1], SDA) {
+                sda_edges.push(at);
+            }
+            if scl_at(at) != scl_at(at - 1) {
+                scl_edges.push(at);
+            }
+        }
+        for &sda in &sda_edges {
+            let with_fall = scl_at(sda - 1) == 1 && scl_at(sda) == 0;
+            let from_edge = scl_at(sda) == 1
+                && (scl_edges.contains(&(sda + 8)) || scl_edges.contains(&(sda - 8)));
+            assert!(
+                with_fall || from_edge,
+                "seed {seed}: SDA changes at {sda} with SCL {}",
+                scl_at(sda)
+            );
+        }
+        // A clock pulse with a low before and after it is never narrower than eight samples.
+        for pair in scl_edges.windows(2) {
+            if scl_at(pair[0]) == 1 {
+                assert!(
+                    pair[1] - pair[0] >= 8,
+                    "seed {seed}: a pulse at {}",
+                    pair[0]
+                );
+            }
+        }
+    }
+}

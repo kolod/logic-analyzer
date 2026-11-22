@@ -447,7 +447,36 @@ impl Shell {
             .collect()
     }
 
+    /// The channels that are recorded: those of the capture on screen, or, while a capture runs, those
+    /// it is recording. `None` when there is nothing to tell (no capture).
+    #[must_use]
+    pub fn recorded_channels(state: &State) -> Option<Vec<u8>> {
+        if state.activity != crate::Activity::Idle {
+            let mask = state.config.enabled_channels;
+            return Some(
+                (0..32_u8)
+                    .filter(|c| mask >> u32::from(*c) & 1 == 1)
+                    .collect(),
+            );
+        }
+        state
+            .capture
+            .as_ref()
+            .map(crate::capture::CaptureView::enabled_channels)
+    }
+
+    /// Whether every channel the setup reads is recorded (FR-026): a decoder on a channel that was
+    /// switched off has nothing to read.
+    #[must_use]
+    pub fn channels_are_recorded(state: &State, setup: &Setup) -> bool {
+        Self::recorded_channels(state)
+            .is_none_or(|recorded| setup.channels.values().all(|c| recorded.contains(c)))
+    }
+
     pub(crate) fn setup_is_ready(&self, state: &State, setup: &Setup) -> bool {
+        if !Self::channels_are_recorded(state, setup) {
+            return false;
+        }
         let others = Self::other_setups(state, setup.instance);
         setup
             .validate(

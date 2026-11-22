@@ -2130,7 +2130,8 @@ impl App {
                 list = list.push(
                     pick_list(choices, None::<Choice<String>>, Message::AddDecoderPicked)
                         .placeholder(self.t("decoders-add"))
-                        .text_size(13),
+                        .text_size(13)
+                        .width(Fill),
                 );
             }
             if state.decoders.instances.is_empty() {
@@ -2177,10 +2178,10 @@ impl App {
                 );
             }
         }
+        // No frame around the panel: each decoder has its own.
         container(scrollable(list))
             .width(Fill)
             .height(Length::FillPortion(4))
-            .style(container::bordered_box)
             .into()
     }
 
@@ -2336,27 +2337,11 @@ impl App {
                         Message::DecoderSourcePicked(id, choice)
                     })
                     .text_size(13)
+                    .width(Fill)
                     .into(),
                 ));
             }
-            let mut channel_choices: Vec<Choice<Option<u8>>> = vec![Choice {
-                value: None,
-                label: self.t("decoder-channel-none"),
-            }];
-            for style in &state.presentation.channels {
-                let label = if style.name.is_empty() {
-                    localizer.message(
-                        &Key::from_static("channel-default"),
-                        &Args::new().uint("number", u64::from(style.index)),
-                    )
-                } else {
-                    style.name.clone()
-                };
-                channel_choices.push(Choice {
-                    value: Some(style.index),
-                    label,
-                });
-            }
+            let (channel_choices, unrecorded_assigned) = self.channel_choices(instance);
             for signal in &entry.signals {
                 let current = instance.setup.channels.get(&signal.role).copied();
                 let selected = channel_choices.iter().find(|c| c.value == current).cloned();
@@ -2367,8 +2352,16 @@ impl App {
                         Message::DecoderChannelPicked(id, role.clone(), choice)
                     })
                     .text_size(13)
+                    .width(Fill)
                     .into(),
                 ));
+            }
+            if unrecorded_assigned {
+                block = block.push(
+                    text(self.t("decoder-channels-unrecorded"))
+                        .size(12)
+                        .style(text::danger),
+                );
             }
             for option in &entry.options {
                 let option_id = option.id.clone();
@@ -2394,6 +2387,7 @@ impl App {
                             Message::DecoderOptionPicked(id, option_id.clone(), choice)
                         })
                         .text_size(13)
+                        .width(Fill)
                         .into()
                     }
                     CatalogueOptionKind::Integer { default, .. } => {
@@ -2478,8 +2472,56 @@ impl App {
         container(block)
             .padding(4)
             .width(Fill)
-            .style(container::rounded_box)
+            .style(container::bordered_box)
             .into()
+    }
+
+    /// The channels a decoder's signals can be assigned to (FR-026): "none" and the channels that are
+    /// recorded. A channel that is assigned but not recorded stays in the list, marked, so that the
+    /// assignment is not lost silently; the flag tells whether there is one.
+    fn channel_choices(
+        &self,
+        instance: &la_host::decoders::InstanceView,
+    ) -> (Vec<Choice<Option<u8>>>, bool) {
+        let state = self.shell.state();
+        let localizer = self.shell.localizer();
+        let mut choices: Vec<Choice<Option<u8>>> = vec![Choice {
+            value: None,
+            label: self.t("decoder-channel-none"),
+        }];
+        let recorded = la_host::Shell::recorded_channels(state);
+        let assigned: Vec<u8> = instance.setup.channels.values().copied().collect();
+        let mut unrecorded_assigned = false;
+        for style in &state.presentation.channels {
+            let is_recorded = recorded
+                .as_ref()
+                .is_none_or(|channels| channels.contains(&style.index));
+            if !is_recorded && !assigned.contains(&style.index) {
+                continue;
+            }
+            let label = if style.name.is_empty() {
+                localizer.message(
+                    &Key::from_static("channel-default"),
+                    &Args::new().uint("number", u64::from(style.index)),
+                )
+            } else {
+                style.name.clone()
+            };
+            let label = if is_recorded {
+                label
+            } else {
+                unrecorded_assigned = true;
+                localizer.message(
+                    &Key::from_static("decoder-channel-unavailable"),
+                    &Args::new().text("name", &label),
+                )
+            };
+            choices.push(Choice {
+                value: Some(style.index),
+                label,
+            });
+        }
+        (choices, unrecorded_assigned)
     }
 
     /// How many rows of eight buttons `channels` channels need.
@@ -5371,6 +5413,85 @@ mod tests {
                 app.shell.state().devices.len()
             );
         }
+    }
+
+    /// FR-026: the lists of a decoder's signals hold the channels that are recorded; one that is
+    /// assigned but was not recorded stays, marked, and the decoder does not run.
+    #[test]
+    fn the_channel_lists_of_a_decoder_offer_only_the_recorded_channels() {
+        let _turn = render_turn();
+        let dir = std::env::temp_dir().join(format!("la-app-lists-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        let capture = |app: &mut App, mask: u32| {
+            for edit in [
+                ConfigEdit::Realtime(false),
+                ConfigEdit::SampleRate(1_000_000),
+                ConfigEdit::Length(20_000),
+                ConfigEdit::Seed(Some(8)),
+                ConfigEdit::Channels(mask),
+            ] {
+                let _ = app.update(Message::Run(Command::EditConfig(edit)));
+            }
+            let _ = app.update(Message::Run(Command::StartCapture));
+            // The capture on screen is not saved: the new one replaces it.
+            let _ = app.shell.apply(Command::Decide(Decision::Discard));
+            while app.shell.state().activity != Activity::Idle {
+                let _ = app.update(Message::Tick(Instant::now()));
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        };
+        capture(&mut app, 0b1111);
+        let _ = app.update(Message::AddDecoderPicked(Choice {
+            value: la_decoders::decoders::clocked_bits::ID.to_owned(),
+            label: String::new(),
+        }));
+        let id = app.shell.state().decoders.instances[0].id;
+        let numbers = |app: &App| -> Vec<Option<u8>> {
+            let instance = app.shell.state().decoders.instance(id).unwrap().clone();
+            app.channel_choices(&instance)
+                .0
+                .iter()
+                .map(|c| c.value)
+                .collect()
+        };
+        assert_eq!(
+            numbers(&app),
+            vec![None, Some(0), Some(1), Some(2), Some(3)]
+        );
+        // Channel 3 is assigned, then the next capture does not record it.
+        let _ = app.update(Message::DecoderChannelPicked(
+            id,
+            "clock".to_owned(),
+            Choice {
+                value: Some(3),
+                label: String::new(),
+            },
+        ));
+        capture(&mut app, 0b0111);
+        let instance = app.shell.state().decoders.instance(id).unwrap().clone();
+        let (choices, unrecorded) = app.channel_choices(&instance);
+        assert!(unrecorded);
+        assert_eq!(
+            choices.iter().map(|c| c.value).collect::<Vec<_>>(),
+            vec![None, Some(0), Some(1), Some(2), Some(3)],
+            "the assigned channel stays"
+        );
+        assert!(
+            choices[4].label.contains("not recorded"),
+            "{}",
+            choices[4].label
+        );
+        // Unassigned, it is no longer offered.
+        let _ = app.update(Message::DecoderChannelPicked(
+            id,
+            "clock".to_owned(),
+            Choice {
+                value: None,
+                label: String::new(),
+            },
+        ));
+        assert_eq!(numbers(&app), vec![None, Some(0), Some(1), Some(2)]);
     }
 
     #[test]

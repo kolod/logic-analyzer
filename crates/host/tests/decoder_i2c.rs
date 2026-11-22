@@ -74,6 +74,11 @@ impl Bus {
 
 /// Saves a session file holding a closed capture of these words (two channels).
 fn session_file(dir: &TempDir, words: &[u32]) -> PathBuf {
+    session_file_recording(dir, words, 0b11)
+}
+
+/// The same, with only the channels of `mask` recorded (the others hold data but were switched off).
+fn session_file_recording(dir: &TempDir, words: &[u32], mask: u32) -> PathBuf {
     let mut capture = Capture::new(CaptureConfig {
         channels: 2,
         sample_rate_hz: 1_000_000,
@@ -94,7 +99,7 @@ fn session_file(dir: &TempDir, words: &[u32]) -> PathBuf {
         requested_sample_rate_hz: 1_000_000,
         sample_rate_hz: 1_000_000,
         channels: 2,
-        enabled_mask: 0b11,
+        enabled_mask: mask,
         trigger: None,
         samples_before_trigger: 0,
         started_at: std::time::SystemTime::UNIX_EPOCH,
@@ -433,8 +438,14 @@ fn error_positions(shell: &Shell, id: u32) -> Vec<u64> {
 fn errors_are_planted_when_the_generator_option_is_on_and_not_otherwise() {
     let dir = TempDir::new("i2c-errors");
     let (mut shell, id) = shell_with_decoder(&dir);
-    // Whole frames (984 samples with the default of four bytes), so that no byte is cut by the end.
-    let length = 984 * 80;
+    // Whole frames, so that no byte is cut by the end.
+    let frame = la_decoders::generators::i2c::Params::from_setup(
+        &shell.state().decoders.instance(id).unwrap().setup,
+        SEED,
+    )
+    .unwrap()
+    .frame_length();
+    let length = frame * 80;
     // The same command the application sends when the checkbox and the rate field are used.
     let mut setup = shell.state().decoders.instance(id).unwrap().setup.clone();
     setup.generator.insert("errors".to_owned(), 1);
@@ -560,7 +571,7 @@ fn a_decoder_stacked_on_i2c_reads_its_items_and_removing_i2c_asks_first() {
             source: la_decoders::setup::Source::Instance(id),
         },
     );
-    let length = 984 * 30;
+    let length = 1_008 * 30; // whole frames of the default setup
     capture_again(&mut shell, SEED, length);
     wait_all(&mut shell);
     let setup = shell.state().decoders.instance(id).unwrap().setup.clone();
@@ -582,4 +593,37 @@ fn a_decoder_stacked_on_i2c_reads_its_items_and_removing_i2c_asks_first() {
     );
     done(&mut shell, Command::Decide(Decision::Discard));
     assert!(shell.state().decoders.instances.is_empty());
+}
+
+/// FR-026: a decoder whose channel was not recorded does not run, and the shell can tell which
+/// channels are recorded (the lists of the panel offer only those).
+#[test]
+fn a_decoder_on_a_channel_that_is_not_recorded_does_not_run() {
+    let dir = TempDir::new("i2c-unrecorded");
+    let mut bus = Bus::default();
+    bus.write(0x2A, &[0x11]);
+    let path = session_file_recording(&dir, &bus.words(), 0b01);
+    let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
+    done(&mut shell, Command::OpenSession(path));
+    poll_until(&mut shell, "the load", |s| {
+        s.state().operation.is_none() && s.state().capture.is_some()
+    });
+    assert_eq!(Shell::recorded_channels(shell.state()), Some(vec![0]));
+    done(
+        &mut shell,
+        Command::AddDecoder {
+            decoder: ID.to_owned(),
+        },
+    );
+    let id = shell.state().decoders.instances[0].id;
+    channels(&mut shell, id, Some(SCL), Some(SDA));
+    let instance = shell.state().decoders.instance(id).unwrap();
+    assert!(!Shell::channels_are_recorded(
+        shell.state(),
+        &instance.setup
+    ));
+    assert!(
+        !instance.ready,
+        "a decoder on a channel that is not recorded must wait"
+    );
 }

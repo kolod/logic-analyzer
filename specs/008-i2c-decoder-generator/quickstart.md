@@ -63,6 +63,15 @@ Expected: no missing or unused key in any of the six languages.
 Start-up (R2, spec clarifications): in the host tests, a capture whose first part is noise and low
 lines decodes to the same transactions as the same capture without the noise.
 
+## 4a. The edges and the panel (after the owner's review)
+
+- Generated signal: SDA changes in the sample where SCL falls; in a start, a repeated start and a stop its
+  edge is 8 samples from an edge of SCL (automated: `i2c_round_trip.rs`, the signal-shape test).
+- Turn channel 3 off in the capture settings: the lists of SDA and SCL of a decoder do not offer it; a
+  decoder already assigned to it shows it as unavailable and does not run.
+- The comboboxes of a decoder fill the width of the panel; the panel has no frame of its own, each decoder
+  has one.
+
 ## 5. Performance and the baseline (automated, manual comparison)
 
 ```text

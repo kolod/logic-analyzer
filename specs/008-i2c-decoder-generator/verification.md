@@ -97,6 +97,19 @@ the menu, and two counts went from 1 and 2 to 2 and 3). No behaviour of the shel
   passes alone and on rerun. It names its settings directory after the process id, so two tests that
   write settings can meet. It is not touched by this feature.
 
+## Changes after the owner tried the application (2026-11-22)
+
+| Requirement | Proved by |
+|-------------|-----------|
+| FR-025 SDA changes with the falling edge of SCL, or 8 samples from an edge in a start, a repeated start and a stop; no pulse narrower than 8 | `i2c_round_trip.rs::sda_changes_with_the_falling_edge_of_scl_or_eight_samples_from_an_edge_in_start_and_stop` (the first form of this test failed on the first version at sample 620 of seed 0); the round trip, chunking and stacking tests pass on the new frame length |
+| FR-026 channel lists, decoder on an unrecorded channel waits | `app.rs::the_channel_lists_of_a_decoder_offer_only_the_recorded_channels`; `decoder_i2c.rs::a_decoder_on_a_channel_that_is_not_recorded_does_not_run` |
+| FR-027, FR-028 width of the lists, frames | by the code (`Length::Fill` on every list of the block, `bordered_box` per decoder, none around the panel); to be looked at by a person |
+
+SC-008 now has an exception: `crates/app/src/app.rs` (the Decoders panel) and `crates/host/src/decoders.rs`
+(`recorded_channels`, `channels_are_recorded`). The start of the generated signal is a start of 12 samples,
+a repeated start of 24 and a stop of 12 (frame length 1008 instead of 984 with the defaults); the start-up noise before
+frame 0 is not part of FR-025 (it is noise on purpose).
+
 ## Left to a person
 
 - Look at the lane and the overlays on **Windows 10/11 and Debian 13** (quickstart, section 4): add I2C
