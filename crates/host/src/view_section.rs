@@ -26,7 +26,7 @@ pub const MAX_NAME_BYTES: u64 = 256;
 /// The longest comment in bytes (80 characters of at most 4 bytes).
 pub const MAX_COMMENT_BYTES: u64 = 320;
 /// The most channels a payload can describe.
-pub const MAX_CHANNELS: u64 = 32;
+pub const MAX_CHANNELS: u64 = la_storage::MAX_CHANNELS as u64;
 
 const FLAG_VISIBLE: u8 = 0b01;
 const FLAG_CUSTOM_COLOUR: u8 = 0b10;
@@ -234,7 +234,7 @@ fn read_presentation(r: &mut Reader<'_>, bounds: Bounds) -> Result<Option<Presen
     if count > MAX_CHANNELS || count != u64::from(bounds.channels) {
         return invalid("the channel count does not match the capture");
     }
-    let mut seen = 0_u32;
+    let mut seen = la_devices::ChannelSet::empty();
     let mut channels = Vec::new();
     for _ in 0..count {
         let index = r.varint()?;
@@ -242,11 +242,10 @@ fn read_presentation(r: &mut Reader<'_>, bounds: Bounds) -> Result<Option<Presen
             return invalid("a channel index is beyond the capture");
         }
         let index = u8::try_from(index).or_else(|_| invalid("a channel index does not fit"))?;
-        let bit = 1_u32.checked_shl(u32::from(index)).unwrap_or(0);
-        if seen & bit != 0 {
+        if seen.contains(index) {
             return invalid("a channel index repeats");
         }
-        seen |= bit;
+        seen.insert(index);
         let flags = r.byte()?;
         if flags & !(FLAG_VISIBLE | FLAG_CUSTOM_COLOUR) != 0 {
             return invalid("a reserved flag bit is set");

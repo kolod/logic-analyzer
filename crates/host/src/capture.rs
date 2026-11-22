@@ -111,7 +111,7 @@ impl CaptureView {
     pub fn enabled_channels(&self) -> Vec<u8> {
         let mask = self.description.enabled_mask();
         (0..self.snapshot.channels())
-            .filter(|c| u32::from(*c) < 32 && mask >> u32::from(*c) & 1 == 1)
+            .filter(|c| mask.contains(*c))
             .collect()
     }
 }

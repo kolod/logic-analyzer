@@ -117,6 +117,7 @@ pub(crate) fn launch(launch: Launch) -> Result<Acquisition> {
     let max_chunk = usize::try_from(options.limits.max_chunk_samples).unwrap_or(usize::MAX);
     let chunk = options.chunk_samples.min(max_chunk).max(1);
 
+    let stride = la_storage::words_per_sample(config.channels());
     let driver_control = Arc::clone(&control);
     let device_id = descriptor.id.clone();
     let driver_id = device_id.clone();
@@ -135,6 +136,7 @@ pub(crate) fn launch(launch: Launch) -> Result<Acquisition> {
         capture,
         receiver,
         max_chunk,
+        stride,
         stall_timeout: options.stall_timeout,
         device: device_id.clone(),
         driver,
@@ -182,10 +184,11 @@ fn flush_losses(sender: &SyncSender<Message>, pending_lost: &mut u64) -> bool {
 fn deliver_samples(
     sender: &SyncSender<Message>,
     samples: Vec<u32>,
+    stride: usize,
     pending_lost: &mut u64,
     spare: &mut Vec<u32>,
 ) -> bool {
-    let count = u64::try_from(samples.len()).unwrap_or(u64::MAX);
+    let count = u64::try_from(samples.len().checked_div(stride).unwrap_or(0)).unwrap_or(u64::MAX);
     if !flush_losses(sender, pending_lost) {
         return false;
     }
@@ -216,6 +219,7 @@ fn driver_main(
     control: &Control,
     sender: &SyncSender<Message>,
 ) {
+    let stride = la_storage::words_per_sample(config.channels());
     let mut device = match provider.open(id) {
         Ok(device) => device,
         Err(error) => {
@@ -248,7 +252,8 @@ fn driver_main(
     }
 
     let flow = device.flow();
-    let mut buffer: Vec<u32> = Vec::with_capacity(chunk);
+    let words = chunk.saturating_mul(stride);
+    let mut buffer: Vec<u32> = Vec::with_capacity(words);
     let mut pending_lost = 0_u64;
     let end = loop {
         control.beat();
@@ -259,7 +264,7 @@ fn driver_main(
         match device.read(chunk, &mut buffer) {
             Ok(ReadOutcome::Samples) => {
                 if !buffer.is_empty() {
-                    let full = std::mem::replace(&mut buffer, Vec::with_capacity(chunk));
+                    let full = std::mem::replace(&mut buffer, Vec::with_capacity(words));
                     let alive = match flow {
                         // A device that can wait is held back by the store, so nothing is lost.
                         Flow::Throttleable => {
@@ -269,7 +274,7 @@ fn driver_main(
                         }
                         // A device that cannot wait never waits: excess becomes recorded losses.
                         Flow::Realtime => {
-                            deliver_samples(sender, full, &mut pending_lost, &mut buffer)
+                            deliver_samples(sender, full, stride, &mut pending_lost, &mut buffer)
                         }
                     };
                     if !alive {
@@ -324,6 +329,8 @@ struct Ingest {
     capture: Capture,
     receiver: Receiver<Message>,
     max_chunk: usize,
+    /// Words per sample of the capture.
+    stride: usize,
     stall_timeout: Duration,
     device: DeviceId,
     driver: WorkerHandle<()>,
@@ -336,12 +343,14 @@ fn append_all(
     capture: &mut Capture,
     samples: &[u32],
     max_chunk: usize,
+    stride: usize,
     control: &Control,
     delivered: &mut u64,
 ) -> Result<()> {
-    for part in samples.chunks(max_chunk.max(1)) {
+    let stride = stride.max(1);
+    for part in samples.chunks(max_chunk.max(1).saturating_mul(stride)) {
         capture.append(capture.length(), part)?;
-        let count = u64::try_from(part.len()).unwrap_or(u64::MAX);
+        let count = u64::try_from(part.len().checked_div(stride).unwrap_or(0)).unwrap_or(u64::MAX);
         *delivered = delivered.saturating_add(count);
         control.samples.store(*delivered, Ordering::Release);
         control.positions.store(capture.length(), Ordering::Release);
@@ -366,6 +375,7 @@ fn ingest_main(ingest: Ingest) {
         mut capture,
         receiver,
         max_chunk,
+        stride,
         stall_timeout,
         device,
         driver,
@@ -386,9 +396,14 @@ fn ingest_main(ingest: Ingest) {
                 control.emit(AcquisitionEvent::Started { applied });
             }
             Ok(Message::Samples(samples)) => {
-                if let Err(error) =
-                    append_all(&mut capture, &samples, max_chunk, &control, &mut delivered)
-                {
+                if let Err(error) = append_all(
+                    &mut capture,
+                    &samples,
+                    max_chunk,
+                    stride,
+                    &control,
+                    &mut delivered,
+                ) {
                     break Ending::Storage(error);
                 }
             }

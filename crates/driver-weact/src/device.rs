@@ -165,7 +165,7 @@ impl Device for WeActDevice {
         }
         self.run = Some(Run {
             stream,
-            mask: config.enabled_channels(),
+            mask: config.enabled_channels().to_u32(),
             requested: config.capture_length(),
             received: 0,
             pending: Vec::new(),

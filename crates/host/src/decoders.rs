@@ -458,11 +458,7 @@ pub(crate) fn shown_channels(state: &State) -> Vec<u8> {
         .presentation
         .channels
         .iter()
-        .filter(|style| {
-            style.visible
-                && u32::from(style.index) < 32
-                && recorded >> u32::from(style.index) & 1 == 1
-        })
+        .filter(|style| style.visible && recorded.contains(style.index))
         .map(|style| style.index)
         .collect()
 }
@@ -491,8 +487,8 @@ impl Shell {
         if state.activity != crate::Activity::Idle {
             let mask = state.config.enabled_channels;
             return Some(
-                (0..32_u8)
-                    .filter(|c| mask >> u32::from(*c) & 1 == 1)
+                (0..la_storage::MAX_CHANNELS)
+                    .filter(|c| mask.contains(*c))
                     .collect(),
             );
         }

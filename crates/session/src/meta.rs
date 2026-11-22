@@ -3,7 +3,7 @@
 use std::time::{Duration, SystemTime};
 
 use la_core::Result;
-use la_devices::{CaptureDescription, SavedDescription, Trigger, TriggerKind};
+use la_devices::{CaptureDescription, ChannelSet, SavedDescription, Trigger, TriggerKind};
 
 use crate::error;
 use crate::limits::MAX_TEXT_BYTES;
@@ -113,7 +113,12 @@ pub fn encode(description: &CaptureDescription) -> Result<Vec<u8>> {
     put_text(&saved.device_id, &mut out)?;
     put_text(&saved.device_name, &mut out)?;
     out.push(saved.channels);
-    out.extend_from_slice(&saved.enabled_mask.to_le_bytes());
+    // The first word is always there; a capture of more than 32 channels adds the other words
+    // of the set right after it, so the description of a capture of 32 channels or fewer is
+    // byte for byte what it always was.
+    for k in 0..la_storage::words_per_sample(saved.channels) {
+        out.extend_from_slice(&saved.enabled_mask.word(k).to_le_bytes());
+    }
     out.extend_from_slice(&saved.requested_sample_rate_hz.to_le_bytes());
     out.extend_from_slice(&saved.sample_rate_hz.to_le_bytes());
     out.extend_from_slice(&saved.samples_before_trigger.to_le_bytes());
@@ -147,7 +152,16 @@ pub fn decode(payload: &[u8]) -> Result<CaptureDescription> {
     let device_id = cursor.string(MAX_TEXT_BYTES)?;
     let device_name = cursor.string(MAX_TEXT_BYTES)?;
     let channels = cursor.u8()?;
-    let enabled_mask = cursor.u32()?;
+    if channels == 0 || channels > la_storage::MAX_CHANNELS {
+        return Err(error::inconsistent(
+            "the channel count is outside what a capture can have",
+        ));
+    }
+    let mut words = Vec::new();
+    for _ in 0..la_storage::words_per_sample(channels) {
+        words.push(cursor.u32()?);
+    }
+    let enabled_mask = ChannelSet::from_words(&words);
     let requested_sample_rate_hz = cursor.u64()?;
     let sample_rate_hz = cursor.u64()?;
     let samples_before_trigger = cursor.u64()?;
@@ -201,7 +215,7 @@ mod tests {
             requested_sample_rate_hz: 1_000_000,
             sample_rate_hz: 2_000_000,
             channels: 8,
-            enabled_mask: 0b0000_0110,
+            enabled_mask: ChannelSet::from_u32(0b0000_0110),
             trigger: Some(Trigger {
                 channel: 2,
                 kind: TriggerKind::FallingEdge,
@@ -346,7 +360,7 @@ mod tests {
         // Layout offsets of the fixed part: flags(1) seed(8) id(1+6) name(1+9) channels(1) mask(4) ...
         let channels_at = 1 + 8 + 7 + 1 + "Gerät ж".len();
         assert!(inconsistent(&|b| b[channels_at] = 0));
-        assert!(inconsistent(&|b| b[channels_at] = 33));
+        assert!(inconsistent(&|b| b[channels_at] = 161));
         assert!(inconsistent(
             &|b| b[channels_at + 1..channels_at + 5].copy_from_slice(&0_u32.to_le_bytes())
         ));

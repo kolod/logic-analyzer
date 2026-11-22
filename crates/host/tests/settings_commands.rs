@@ -64,7 +64,7 @@ fn the_memory_limit_is_validated_and_applies_to_the_next_capture_only() {
     ));
     // A slow capture starts with the first limit.
     for edit in [
-        ConfigEdit::Channels(0b11),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b11)),
         ConfigEdit::SampleRate(20_000),
         ConfigEdit::Length(10_000_000),
         ConfigEdit::Seed(Some(51)),

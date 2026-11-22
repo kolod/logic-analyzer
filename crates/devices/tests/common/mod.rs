@@ -42,7 +42,7 @@ pub fn descriptor(provider: &str, unique: &str, channels: u8) -> DeviceDescripto
 /// no trigger, no length limit.
 pub fn std_config(enabled_channels: u32, sample_rate_hz: u64) -> DeviceConfig {
     DeviceConfig {
-        enabled_channels,
+        enabled_channels: la_devices::ChannelSet::from_u32(enabled_channels),
         sample_rate_hz,
         trigger: None,
         capture_length: None,
@@ -68,7 +68,7 @@ pub fn virtual_config(
     seed: u64,
 ) -> DeviceConfig {
     DeviceConfig {
-        enabled_channels,
+        enabled_channels: la_devices::ChannelSet::from_u32(enabled_channels),
         sample_rate_hz,
         trigger: None,
         capture_length,

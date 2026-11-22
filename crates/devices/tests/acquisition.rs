@@ -161,7 +161,10 @@ fn the_capture_description_reports_where_the_data_came_from() {
     assert_eq!(d.requested_sample_rate_hz(), 2_000_000);
     assert_eq!(d.sample_rate_hz(), 2_000_000);
     assert_eq!(d.channels(), 32);
-    assert_eq!(d.enabled_mask(), 0x0000_00F0);
+    assert_eq!(
+        d.enabled_mask(),
+        la_devices::ChannelSet::from_u32(0x0000_00F0)
+    );
     assert!(d.trigger().is_none());
     wait_outcome(&acq);
     let snap = acq.capture().snapshot();

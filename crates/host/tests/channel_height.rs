@@ -83,7 +83,7 @@ fn it_works_without_a_capture_and_while_one_runs() {
     // A capture that runs: the heights, like names and colours, can still be edited.
     for edit in [
         ConfigEdit::Realtime(true),
-        ConfigEdit::Channels(0b1111),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1111)),
         ConfigEdit::SampleRate(1_000),
         ConfigEdit::Length(100_000),
     ] {

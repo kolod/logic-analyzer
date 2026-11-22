@@ -29,7 +29,7 @@ fn saved() -> SavedDescription {
         requested_sample_rate_hz: 24_000_000,
         sample_rate_hz: 24_000_000,
         channels: 16,
-        enabled_mask: 0x00FF,
+        enabled_mask: la_devices::ChannelSet::from_u32(0x00FF),
         trigger: Some(Trigger {
             channel: 3,
             kind: TriggerKind::RisingEdge,
@@ -55,7 +55,7 @@ fn restore_gives_a_description_equal_in_every_accessor() {
     assert_eq!(d.requested_sample_rate_hz(), 24_000_000);
     assert_eq!(d.sample_rate_hz(), 24_000_000);
     assert_eq!(d.channels(), 16);
-    assert_eq!(d.enabled_mask(), 0x00FF);
+    assert_eq!(d.enabled_mask(), la_devices::ChannelSet::from_u32(0x00FF));
     assert_eq!(d.trigger().unwrap().channel, 3);
     assert_eq!(d.samples_before_trigger(), 7);
     assert_eq!(
@@ -116,10 +116,19 @@ fn simulated_seed_and_times_around_the_epoch_are_kept() {
 fn restore_rejects_everything_a_real_acquisition_cannot_produce() {
     use error::{INVALID_CAPABILITIES, INVALID_CHANNEL};
     assert_eq!(fails(|s| s.channels = 0), INVALID_CAPABILITIES);
-    assert_eq!(fails(|s| s.channels = 33), INVALID_CAPABILITIES);
-    assert_eq!(fails(|s| s.enabled_mask = 0), INVALID_CHANNEL);
-    assert_eq!(fails(|s| s.enabled_mask = 1 << 16), INVALID_CHANNEL);
-    assert_eq!(fails(|s| s.enabled_mask = u32::MAX), INVALID_CHANNEL);
+    assert_eq!(fails(|s| s.channels = 161), INVALID_CAPABILITIES);
+    assert_eq!(
+        fails(|s| s.enabled_mask = la_devices::ChannelSet::from_u32(0)),
+        INVALID_CHANNEL
+    );
+    assert_eq!(
+        fails(|s| s.enabled_mask = la_devices::ChannelSet::from_u32(1 << 16)),
+        INVALID_CHANNEL
+    );
+    assert_eq!(
+        fails(|s| s.enabled_mask = la_devices::ChannelSet::from_u32(u32::MAX)),
+        INVALID_CHANNEL
+    );
     assert_eq!(
         fails(|s| s.requested_sample_rate_hz = 0),
         INVALID_CAPABILITIES

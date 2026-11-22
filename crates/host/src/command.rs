@@ -6,7 +6,7 @@
 use std::ops::BitOr;
 use std::path::PathBuf;
 
-use la_devices::{DeviceId, Trigger};
+use la_devices::{ChannelSet, DeviceId, Trigger};
 use la_i18n::Language;
 
 use la_decoders::setup::{Setup, Source, Value};
@@ -22,8 +22,8 @@ use crate::window::ViewSize;
 /// A change of the device configuration the user is editing.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConfigEdit {
-    /// The enabled channels as a bit mask (bit `i` is channel `i`).
-    Channels(u32),
+    /// The enabled channels.
+    Channels(ChannelSet),
     /// The sample rate in hertz.
     SampleRate(u64),
     /// The capture length in samples.

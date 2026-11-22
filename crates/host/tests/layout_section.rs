@@ -22,7 +22,7 @@ use la_host::{Command, Outcome, Shell, ShellConfig};
 use la_session::{Control, LoadLimits, Section, SectionTag, SessionData};
 
 fn presentation_with(heights: &[(u8, u16)]) -> Presentation {
-    let mut presentation = Presentation::defaults(32, u32::MAX);
+    let mut presentation = Presentation::defaults(32, la_devices::ChannelSet::from_u32(u32::MAX));
     for (channel, height) in heights {
         assert!(presentation.set_height(*channel, *height));
     }
@@ -162,7 +162,8 @@ fn random_bytes_never_panic_and_what_is_accepted_is_canonical() {
         }) = decode(&payload, 32)
         {
             accepted += 1;
-            let mut presentation = Presentation::defaults(32, u32::MAX);
+            let mut presentation =
+                Presentation::defaults(32, la_devices::ChannelSet::from_u32(u32::MAX));
             for (channel, height) in &heights {
                 assert!(presentation.set_height(*channel, *height));
             }
@@ -199,19 +200,19 @@ fn decoder_lane_heights_make_a_version_two_payload_and_none_keep_version_one() {
         heights(vec![(1, 40)], vec![(2, 60), (300, 240)])
     );
     // Only decoder lanes: the count of channels is zero.
-    let mut only = Presentation::defaults(8, 0xff);
+    let mut only = Presentation::defaults(8, la_devices::ChannelSet::from_u32(0xff));
     only.set_decoder_height(7, 24);
     let payload = encode(&only).unwrap();
     assert_eq!(payload, vec![0x02, 0x00, 0x01, 0x07, 0x18]);
     // Without a decoder height the payload is version 1, as before.
     assert_eq!(encode(&presentation_with(&[(1, 40)])).unwrap()[0], 0x01);
     // A height of 0 is automatic: no entry.
-    let mut automatic = Presentation::defaults(8, 0xff);
+    let mut automatic = Presentation::defaults(8, la_devices::ChannelSet::from_u32(0xff));
     automatic.set_decoder_height(7, 60);
     automatic.set_decoder_height(7, 0);
     assert_eq!(encode(&automatic), None);
     // The limits of a height are those of a channel.
-    let mut limits = Presentation::defaults(8, 0xff);
+    let mut limits = Presentation::defaults(8, la_devices::ChannelSet::from_u32(0xff));
     limits.set_decoder_height(1, 5);
     limits.set_decoder_height(2, 900);
     assert_eq!(limits.decoder_heights[&1], 24);

@@ -116,7 +116,7 @@ fn the_description_survives_in_every_field() {
     assert!(d.simulated());
     assert_eq!(d.seed(), Some(u64::MAX));
     assert_eq!(d.sample_rate_hz(), 12_500_000);
-    assert_eq!(d.enabled_mask(), 0xFF);
+    assert_eq!(d.enabled_mask(), la_devices::ChannelSet::from_u32(0xFF));
     assert_eq!(d.samples_before_trigger(), 3);
     assert_eq!(d.trigger().unwrap().channel, 0);
     assert_eq!(*d, *original.description());

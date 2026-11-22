@@ -141,7 +141,7 @@ pub enum TriggerKind {
 /// the device.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Capabilities {
-    /// Number of channels, `1..=32`.
+    /// Number of channels, `1..=160`.
     pub channels: u8,
     /// Supported sample rates.
     pub sample_rates: SampleRates,
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn a_valid_descriptor_passes() {
         assert!(descriptor().validate().is_ok());
-        for channels in [1, 32] {
+        for channels in [1, 32, 160] {
             let mut d = descriptor();
             d.capabilities.channels = channels;
             assert!(d.validate().is_ok());
@@ -238,7 +238,7 @@ mod tests {
         type Mutation = Box<dyn Fn(&mut DeviceDescriptor)>;
         let cases: Vec<Mutation> = vec![
             Box::new(|d| d.capabilities.channels = 0),
-            Box::new(|d| d.capabilities.channels = 33),
+            Box::new(|d| d.capabilities.channels = 161),
             Box::new(|d| d.capabilities.sample_rates = SampleRates::List(Vec::new())),
             Box::new(|d| d.capabilities.sample_rates = SampleRates::List(vec![2_000, 1_000])),
             Box::new(|d| d.capabilities.sample_rates = SampleRates::List(vec![1_000, 1_000])),

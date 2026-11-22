@@ -107,9 +107,7 @@ fn config_for(
         (n, None) => n,
     };
     Ok(DeviceConfig {
-        enabled_channels: 1_u32
-            .checked_shl(u32::from(caps.channels))
-            .map_or(u32::MAX, |bit| bit.wrapping_sub(1)),
+        enabled_channels: crate::ChannelSet::all(caps.channels),
         sample_rate_hz,
         trigger: None,
         capture_length,
@@ -243,19 +241,23 @@ pub fn check_capability_enforcement(provider: &Provider, id: &DeviceId) -> Check
     let mut cases: Vec<(String, DeviceConfig, &'static str)> = vec![(
         "no channel enabled".to_owned(),
         DeviceConfig {
-            enabled_channels: 0,
+            enabled_channels: crate::ChannelSet::empty(),
             ..base.clone()
         },
         error::INVALID_CHANNEL,
     )];
-    if let Some(bit) = 1_u32.checked_shl(u32::from(caps.channels)) {
+    if caps.channels < la_storage::MAX_CHANNELS {
         cases.push((
             format!(
                 "channel {} on a {}-channel device",
                 caps.channels, caps.channels
             ),
             DeviceConfig {
-                enabled_channels: bit,
+                enabled_channels: {
+                    let mut set = crate::ChannelSet::empty();
+                    set.insert(caps.channels);
+                    set
+                },
                 ..base.clone()
             },
             error::INVALID_CHANNEL,

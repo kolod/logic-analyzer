@@ -49,7 +49,7 @@ fn small_budget() -> Limits {
 
 fn base() -> DeviceConfig {
     DeviceConfig {
-        enabled_channels: 0b11,
+        enabled_channels: la_devices::ChannelSet::from_u32(0b11),
         sample_rate_hz: 1_000_000,
         trigger: None,
         capture_length: Some(1_000),
@@ -107,7 +107,7 @@ fn invalid_cases() -> Vec<Case> {
             "no channel enabled",
             &b,
             &big,
-            |c| c.enabled_channels = 0,
+            |c| c.enabled_channels = la_devices::ChannelSet::from_u32(0),
             ch,
             "no channel",
         ),
@@ -115,7 +115,7 @@ fn invalid_cases() -> Vec<Case> {
             "ninth channel",
             &b,
             &big,
-            |c| c.enabled_channels = 1 << 8,
+            |c| c.enabled_channels = la_devices::ChannelSet::from_u32(1 << 8),
             ch,
             "8",
         ),
@@ -123,7 +123,7 @@ fn invalid_cases() -> Vec<Case> {
             "mask bit 31 on 8 channels",
             &b,
             &big,
-            |c| c.enabled_channels = 1 << 31,
+            |c| c.enabled_channels = la_devices::ChannelSet::from_u32(1 << 31),
             ch,
             "31",
         ),
@@ -131,7 +131,7 @@ fn invalid_cases() -> Vec<Case> {
             "all bits set",
             &b,
             &big,
-            |c| c.enabled_channels = u32::MAX,
+            |c| c.enabled_channels = la_devices::ChannelSet::from_u32(u32::MAX),
             ch,
             "8",
         ),
@@ -139,7 +139,7 @@ fn invalid_cases() -> Vec<Case> {
             "valid plus channel 9",
             &b,
             &big,
-            |c| c.enabled_channels = 0b11 | (1 << 9),
+            |c| c.enabled_channels = la_devices::ChannelSet::from_u32(0b11 | (1 << 9)),
             ch,
             "9",
         ),
@@ -355,7 +355,7 @@ fn invalid_cases() -> Vec<Case> {
             &s,
             &small,
             |c| {
-                c.enabled_channels = 1;
+                c.enabled_channels = la_devices::ChannelSet::from_u32(1);
                 c.capture_length = Some(1_000_000_000);
             },
             MEMORY_BUDGET,
@@ -366,7 +366,7 @@ fn invalid_cases() -> Vec<Case> {
             &s,
             &small,
             |c| {
-                c.enabled_channels = 0xFF;
+                c.enabled_channels = la_devices::ChannelSet::from_u32(0xFF);
                 c.capture_length = Some(40_000);
             },
             MEMORY_BUDGET,
@@ -431,7 +431,7 @@ fn valid_configurations_are_accepted_and_resolve_to_exactly_the_request() {
             b.clone(),
             big,
             DeviceConfig {
-                enabled_channels: 1,
+                enabled_channels: la_devices::ChannelSet::from_u32(1),
                 ..base()
             },
         ),
@@ -439,7 +439,7 @@ fn valid_configurations_are_accepted_and_resolve_to_exactly_the_request() {
             b.clone(),
             big,
             DeviceConfig {
-                enabled_channels: 0xFF,
+                enabled_channels: la_devices::ChannelSet::from_u32(0xFF),
                 ..base()
             },
         ),
@@ -447,7 +447,7 @@ fn valid_configurations_are_accepted_and_resolve_to_exactly_the_request() {
             b.clone(),
             big,
             DeviceConfig {
-                enabled_channels: 0b1010,
+                enabled_channels: la_devices::ChannelSet::from_u32(0b1010),
                 ..base()
             },
         ),
@@ -607,7 +607,7 @@ fn thirty_two_channel_devices_accept_every_channel() {
     };
     for mask in [1_u32, 1 << 31, u32::MAX, 0xFFFF_0000] {
         let config = DeviceConfig {
-            enabled_channels: mask,
+            enabled_channels: la_devices::ChannelSet::from_u32(mask),
             ..base()
         };
         assert!(
@@ -618,7 +618,7 @@ fn thirty_two_channel_devices_accept_every_channel() {
     let e = validate(
         &caps,
         &DeviceConfig {
-            enabled_channels: 0,
+            enabled_channels: la_devices::ChannelSet::from_u32(0),
             ..base()
         },
         &Limits::default(),

@@ -8,7 +8,7 @@ use crate::block::{Block, OpenBlock, block_bytes};
 use crate::channel::{ChannelData, Tail};
 use crate::config::CaptureConfig;
 use crate::error;
-use crate::ingest::ingest_chunk;
+use crate::ingest::{Word, ingest_chunk};
 use crate::math::{checked_position_add, chunk_temp_bytes};
 use crate::published::{CaptureReader, Published, Shared};
 use crate::segment::{self, SEGMENT_BYTES, SEGMENT_SLOTS, SegmentList};
@@ -87,7 +87,7 @@ pub struct Capture {
     pub(crate) config: CaptureConfig,
     pub(crate) channels: Vec<ChannelState>,
     pub(crate) length: u64,
-    last_word: Option<u32>,
+    last_word: Option<Word>,
     pub(crate) used_bytes: u64,
     pub(crate) gaps: Arc<Vec<Gap>>,
     pub(crate) lost_positions: u64,
@@ -226,13 +226,16 @@ impl Capture {
 
     /// Appends a chunk of consecutive samples for all channels.
     ///
-    /// `start` must equal [`Capture::length`]. Bit `i` of every word is the level of
-    /// channel `i`; bits above the channel count are ignored. The chunk is accepted
+    /// `start` must equal [`Capture::length`]. A sample takes
+    /// [`CaptureConfig::words_per_sample`] words (one for up to 32 channels); bit `i` of
+    /// word `k` is the level of channel `32k + i`, and bits above the channel count are
+    /// ignored. `samples` holds a whole number of samples. The chunk is accepted
     /// completely or not at all.
     ///
     /// # Errors
     ///
-    /// `storage.closed`, `storage.chunk_empty`, `storage.chunk_too_large`,
+    /// `storage.closed`, `storage.chunk_empty` (also for a length that is not a whole
+    /// number of samples), `storage.chunk_too_large`,
     /// `storage.chunk_out_of_order` or `storage.position_overflow` for invalid input;
     /// `storage.memory_limit` when the chunk would exceed the memory budget (the capture
     /// is then stopped: stored data stays readable, every later append fails the same
@@ -244,12 +247,14 @@ impl Capture {
             return Err(error::closed());
         }
         // Validate before doing any work proportional to the chunk size.
-        if samples.is_empty() {
+        let stride = self.config.words_per_sample();
+        let count = samples.len().checked_div(stride).unwrap_or(0);
+        if count == 0 || samples.len().checked_rem(stride) != Some(0) {
             return Err(error::chunk_empty());
         }
-        if samples.len() > usize::try_from(self.config.limits.max_chunk_samples).unwrap_or(0) {
+        if count > usize::try_from(self.config.limits.max_chunk_samples).unwrap_or(0) {
             return Err(error::chunk_too_large(
-                samples.len(),
+                count,
                 self.config.limits.max_chunk_samples,
             ));
         }
@@ -265,17 +270,17 @@ impl Capture {
         // channel. A chunk whose worst case alone exceeds the whole budget is rejected
         // before anything is allocated; this does not stop the capture, a smaller chunk
         // is still accepted.
-        let temp = chunk_temp_bytes(samples.len(), self.config.channels).unwrap_or(u64::MAX);
+        let temp = chunk_temp_bytes(count, self.config.channels).unwrap_or(u64::MAX);
         if temp > budget {
             return Err(error::memory_limit(self.used_bytes, temp, budget));
         }
-        let samples_len = u64::try_from(samples.len()).map_err(|_| error::position_overflow())?;
+        let samples_len = u64::try_from(count).map_err(|_| error::position_overflow())?;
         let new_length = checked_position_add(self.length, samples_len)?;
 
         let ingested = ingest_chunk(samples, self.last_word, self.config.channels);
 
         // Prepare the new state of every channel without touching shared state.
-        // Bounded by the validated channel count (at most 32); no allocation below is sized
+        // Bounded by the validated channel count (at most 160); no allocation below is sized
         // from an unvalidated caller value (FR-018): the chunk length was checked against
         // `max_chunk_samples` and the memory budget above.
         let mut prepared = Vec::with_capacity(self.channels.len());
@@ -319,9 +324,10 @@ impl Capture {
         let first_ever = self.last_word.is_none();
         for (channel, (state, new)) in self.channels.iter_mut().zip(prepared).enumerate() {
             if first_ever {
-                let bit = u32::try_from(channel)
+                let word = ingested.first_word.get(channel / 32).copied();
+                let bit = u32::try_from(channel % 32)
                     .ok()
-                    .and_then(|c| ingested.first_word.checked_shr(c));
+                    .and_then(|c| word.and_then(|w| w.checked_shr(c)));
                 state.initial_high = bit.is_some_and(|w| w & 1 == 1);
             }
             for block in new.sealed {

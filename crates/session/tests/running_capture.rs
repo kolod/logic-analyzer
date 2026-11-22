@@ -28,7 +28,7 @@ const STALL_LIMIT: Duration = Duration::from_millis(10);
 
 fn config(length: Option<u64>) -> DeviceConfig {
     DeviceConfig {
-        enabled_channels: 0xFFFF,
+        enabled_channels: la_devices::ChannelSet::from_u32(0xFFFF),
         sample_rate_hz: 10_000_000,
         trigger: None,
         capture_length: length,

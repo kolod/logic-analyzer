@@ -320,7 +320,10 @@ fn a_capture_is_not_simulated_and_records_the_device_and_the_rate() {
     assert_eq!(description.device_name(), "WeAct LogicAnalyzer V1");
     assert_eq!(description.sample_rate_hz(), 1_000_000);
     assert_eq!(description.requested_sample_rate_hz(), 1_000_000);
-    assert_eq!(description.enabled_mask(), 0xFF);
+    assert_eq!(
+        description.enabled_mask(),
+        la_devices::ChannelSet::from_u32(0xFF)
+    );
     assert_eq!(description.channels(), 8);
 }
 

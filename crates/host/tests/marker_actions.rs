@@ -362,7 +362,7 @@ fn a_cut_is_not_possible_while_a_capture_runs() {
     let dir = TempDir::new("crop-running");
     let mut shell = Shell::new(la_host::ShellConfig::for_tests(dir.path()));
     for edit in [
-        ConfigEdit::Channels(0b1),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1)),
         ConfigEdit::SampleRate(1_000_000),
         ConfigEdit::Length(5_000_000),
         ConfigEdit::Seed(Some(3)),

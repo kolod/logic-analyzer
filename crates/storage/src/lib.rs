@@ -27,7 +27,7 @@ mod types;
 
 pub use capture::Capture;
 pub use channel::TransitionIter;
-pub use config::{CaptureConfig, Limits, MAX_CHANNELS};
+pub use config::{CaptureConfig, Limits, MAX_CHANNELS, MAX_WORDS_PER_SAMPLE, words_per_sample};
 pub use crop::{CropControl, crop};
 pub use published::{CaptureReader, Snapshot};
 pub use restore::{CaptureRestorer, RestoredStatus};

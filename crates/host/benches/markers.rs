@@ -30,7 +30,7 @@ const LENGTH_GROWTH_LIMIT: f64 = 4.0;
 fn record(shell: &mut Shell, samples: u64) {
     for edit in [
         ConfigEdit::Realtime(false),
-        ConfigEdit::Channels(0xffff),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0xffff)),
         ConfigEdit::SampleRate(100_000_000),
         ConfigEdit::Length(samples),
         ConfigEdit::Seed(Some(1)),

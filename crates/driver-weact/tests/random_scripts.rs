@@ -149,7 +149,9 @@ fn run_script(seed: u64) {
                     let rate = SAMPLE_RATES[rng.below(16) as usize];
                     let length = (rng.below(3) != 0).then(|| 1 + rng.below(20_000));
                     let config = DeviceConfig {
-                        enabled_channels: 1 + rng.below(255) as u32,
+                        enabled_channels: la_devices::ChannelSet::from_u32(
+                            1 + rng.below(255) as u32,
+                        ),
                         sample_rate_hz: rate,
                         trigger: None,
                         capture_length: length,

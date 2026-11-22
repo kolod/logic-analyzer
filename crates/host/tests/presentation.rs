@@ -93,7 +93,7 @@ fn names_colours_and_order_can_be_set_before_any_capture_and_stay_for_the_next_o
     // Record 0, 1 and 2; then the flag of channel 1 is turned off, which also stops recording it.
     for edit in [
         ConfigEdit::Realtime(false),
-        ConfigEdit::Channels(0b111),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b111)),
         ConfigEdit::Length(2_000),
         ConfigEdit::SampleRate(1_000_000),
         ConfigEdit::Seed(Some(3)),
@@ -107,7 +107,10 @@ fn names_colours_and_order_can_be_set_before_any_capture_and_stay_for_the_next_o
             visible: false,
         },
     );
-    assert_eq!(shell.state().config.enabled_channels, 0b101);
+    assert_eq!(
+        shell.state().config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0b101)
+    );
     done(&mut shell, Command::StartCapture);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     while shell.state().activity != la_host::Activity::Idle {
@@ -160,7 +163,10 @@ fn one_flag_per_channel_shows_it_and_records_it_in_the_next_capture() {
     let lanes = |shell: &Shell| -> Vec<u8> { plan_channels(shell).iter().map(|c| c.0).collect() };
     // The capture on screen has data for channels 0 and 1.
     assert_eq!(lanes(&shell), [0, 1]);
-    assert_eq!(shell.state().config.enabled_channels, 0b11);
+    assert_eq!(
+        shell.state().config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0b11)
+    );
 
     // Turning a channel off hides its lane and leaves it out of the next capture.
     done(
@@ -171,7 +177,10 @@ fn one_flag_per_channel_shows_it_and_records_it_in_the_next_capture() {
         },
     );
     assert_eq!(lanes(&shell), [1]);
-    assert_eq!(shell.state().config.enabled_channels, 0b10);
+    assert_eq!(
+        shell.state().config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0b10)
+    );
 
     // Turning on a channel the capture has no data for records it next time; there is no lane
     // for it until there is data.
@@ -182,7 +191,10 @@ fn one_flag_per_channel_shows_it_and_records_it_in_the_next_capture() {
             visible: true,
         },
     );
-    assert_eq!(shell.state().config.enabled_channels, 0b10_0010);
+    assert_eq!(
+        shell.state().config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0b10_0010)
+    );
     assert_eq!(lanes(&shell), [1]);
 
     // Turning channel 0 on again brings its lane back, because the data is still there.
@@ -194,10 +206,16 @@ fn one_flag_per_channel_shows_it_and_records_it_in_the_next_capture() {
         },
     );
     assert_eq!(lanes(&shell), [0, 1]);
-    assert_eq!(shell.state().config.enabled_channels, 0b10_0011);
+    assert_eq!(
+        shell.state().config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0b10_0011)
+    );
 
     // Choosing the channels to record by the configuration moves the flags the same way.
-    done(&mut shell, Command::EditConfig(ConfigEdit::Channels(0b1)));
+    done(
+        &mut shell,
+        Command::EditConfig(ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1))),
+    );
     let flagged: Vec<u8> = shell
         .state()
         .presentation
@@ -215,7 +233,7 @@ fn the_flag_is_locked_while_a_capture_runs() {
     let dir = TempDir::new("pres-locked");
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
-        ConfigEdit::Channels(0b11),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b11)),
         ConfigEdit::SampleRate(20_000),
         ConfigEdit::Length(10_000_000),
         ConfigEdit::Seed(Some(9)),
@@ -230,7 +248,10 @@ fn the_flag_is_locked_while_a_capture_runs() {
         }),
         Outcome::Ignored(error::INVALID_COMMAND)
     );
-    assert_eq!(shell.state().config.enabled_channels, 0b11);
+    assert_eq!(
+        shell.state().config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0b11)
+    );
     done(&mut shell, Command::StopCapture);
 }
 

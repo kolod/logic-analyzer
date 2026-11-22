@@ -147,7 +147,7 @@ fn everything_fails_with_closed_after_close() {
 
 #[test]
 fn creation_with_invalid_configurations_fails_cleanly() {
-    for channels in [0_u8, 33, 255] {
+    for channels in [0_u8, 161, 255] {
         assert_eq!(
             code(Capture::new(config(channels))),
             error::INVALID_CHANNEL_COUNT

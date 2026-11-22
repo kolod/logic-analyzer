@@ -29,7 +29,7 @@ pub const SYNTHETIC_FIRST: u64 = 3;
 ///
 /// # Errors
 ///
-/// `storage.invalid_channel_count` if `channels` is not in `1..=32`.
+/// `storage.invalid_channel_count` if `channels` is not in `1..=`[`MAX_CHANNELS`].
 pub fn synthetic_capture(channels: u8, transitions_per_channel: u64) -> Result<Snapshot> {
     if channels == 0 || channels > MAX_CHANNELS {
         return Err(error::invalid_channel_count(channels));

@@ -98,6 +98,59 @@ fn run_case(name: &str, channels: u8, data: &[u32], total_samples: usize, realis
     }
 }
 
+/// A capture of more than 32 channels (feature 017): the words of `CHUNK` samples where every
+/// channel flips with the given probability per mille, ingested like the narrow cases.
+fn run_wide_case(
+    name: &str,
+    channels: u8,
+    per_mille: u64,
+    total_samples: usize,
+    state: &mut u64,
+) -> Case {
+    let stride = usize::from(channels).div_ceil(32);
+    let mut levels = vec![false; usize::from(channels)];
+    let mut data = Vec::with_capacity(CHUNK * stride);
+    for _ in 0..CHUNK {
+        for level in &mut levels {
+            if next(state) % 1000 < per_mille {
+                *level = !*level;
+            }
+        }
+        for k in 0..stride {
+            let mut word = 0_u32;
+            for bit in 0..32 {
+                if levels.get(k * 32 + bit).copied().unwrap_or(false) {
+                    word |= 1 << bit;
+                }
+            }
+            data.push(word);
+        }
+    }
+    let mut capture = Capture::new(CaptureConfig {
+        channels,
+        sample_rate_hz: 100_000_000,
+        limits: Limits::default(),
+    })
+    .unwrap();
+    let started = Instant::now();
+    let mut written = 0;
+    while written < total_samples {
+        capture.append(capture.length(), black_box(&data)).unwrap();
+        written += CHUNK;
+    }
+    let seconds = started.elapsed().as_secs_f64();
+    let msps = written as f64 / seconds / 1e6;
+    println!(
+        "{name:<22} {msps:>9.1} MS/s   ({written} samples in {seconds:.2} s, {:.1} MiB used)",
+        capture.memory_used() as f64 / (1024.0 * 1024.0)
+    );
+    Case {
+        name: name.to_owned(),
+        msps,
+        realistic: false,
+    }
+}
+
 /// Reads `"<name>": {"msps": X` from a baseline without a JSON parser.
 fn baseline_msps(text: &str, name: &str) -> Option<f64> {
     let at = text.find(&format!("\"{name}\""))?;
@@ -152,6 +205,17 @@ fn main() {
             &worst,
             2_000_000,
             false,
+        ));
+    }
+
+    // Wide captures (information only): the cost per sample grows with the channels that change.
+    for channels in [64_u8, 160] {
+        cases.push(run_wide_case(
+            &format!("{channels}ch_typical"),
+            channels,
+            20,
+            4_000_000,
+            &mut state,
         ));
     }
 

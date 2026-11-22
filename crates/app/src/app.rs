@@ -1464,17 +1464,12 @@ impl App {
             }
             Message::ChannelsAll(on) => {
                 // One edit of the recording mask: the flags of the channels follow it.
-                let mask = if on {
-                    self.shell
-                        .state()
-                        .presentation
-                        .channels
-                        .iter()
-                        .filter(|c| c.index < 32)
-                        .fold(0_u32, |mask, c| mask | 1_u32 << c.index)
-                } else {
-                    0
-                };
+                let mut mask = la_devices::ChannelSet::empty();
+                if on {
+                    for style in &self.shell.state().presentation.channels {
+                        mask.insert(style.index);
+                    }
+                }
                 self.run(Command::EditConfig(ConfigEdit::Channels(mask)))
             }
             Message::ChannelVisible(channel, visible) => {
@@ -2514,7 +2509,7 @@ impl App {
             rows = rows.push(line.width(Fill));
         }
         let mut block = column![text(self.t("capture-channels")).size(13), rows].spacing(4);
-        if state.config.enabled_channels == 0 {
+        if state.config.enabled_channels.is_empty() {
             block = block.push(
                 text(self.t("capture-no-channel"))
                     .size(12)
@@ -3008,7 +3003,7 @@ mod tests {
         let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
         for edit in [
             ConfigEdit::Realtime(false),
-            ConfigEdit::Channels(0xffff),
+            ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0xffff)),
             ConfigEdit::SampleRate(100_000_000),
             ConfigEdit::Length(100_000_000),
             ConfigEdit::Seed(Some(5)),
@@ -3156,7 +3151,7 @@ mod tests {
         let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
         for edit in [
             ConfigEdit::Realtime(false),
-            ConfigEdit::Channels(0b1111),
+            ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1111)),
             ConfigEdit::SampleRate(1_000_000),
             ConfigEdit::Length(300_000),
             ConfigEdit::Seed(Some(3)),
@@ -3309,11 +3304,14 @@ mod tests {
         };
         let _ = app.update(Message::ChannelsAll(false));
         assert!(flags(&app).iter().all(|v| !v));
-        assert_eq!(app.shell.state().config.enabled_channels, 0);
+        assert_eq!(
+            app.shell.state().config.enabled_channels,
+            la_devices::ChannelSet::from_u32(0)
+        );
         let _ = app.update(Message::ChannelsAll(true));
         assert!(flags(&app).iter().all(|v| *v));
         assert_eq!(
-            app.shell.state().config.enabled_channels.count_ones() as usize,
+            app.shell.state().config.enabled_channels.count(),
             app.shell.state().presentation.channels.len().min(32)
         );
         // The buttons and the two new ones render in three languages.
@@ -3590,6 +3588,60 @@ mod tests {
         assert_eq!(App::button_rows(9), 2);
         assert_eq!(App::button_rows(16), 2);
         assert_eq!(App::button_rows(32), 4);
+    }
+
+    /// Feature 017: a capture of 160 channels has twenty rows of eight buttons, every channel
+    /// button works and the capture view and the signal view render.
+    #[test]
+    fn a_capture_of_160_channels_fits_the_panel_and_renders() {
+        let _turn = render_turn();
+        assert_eq!(App::button_rows(160), 20);
+        let dir = std::env::temp_dir().join(format!("la-app-wide-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        app.shell
+            .add_provider(std::sync::Arc::new(la_devices::WideVirtualProvider::new(
+                160,
+            )));
+        let id = la_devices::virtual_descriptor_with_channels(160).id;
+        let deadline = Instant::now().checked_add(Duration::from_secs(10)).unwrap();
+        while !app.shell.state().devices.iter().any(|d| d.id == id) {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the wide device was not listed");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = app.update(Message::Run(Command::SelectDevice(id)));
+        for edit in [
+            ConfigEdit::Realtime(false),
+            ConfigEdit::Channels(la_devices::ChannelSet::all(160)),
+            ConfigEdit::SampleRate(1_000_000),
+            ConfigEdit::Length(5_000),
+            ConfigEdit::Seed(Some(2)),
+            ConfigEdit::AcceptBudgetRisk(true),
+        ] {
+            let _ = app.update(Message::Run(Command::EditConfig(edit)));
+        }
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        assert_eq!(app.shell.state().presentation.channels.len(), 160);
+        let _ = app.update(Message::ChannelVisible(159, false));
+        assert!(!app.shell.state().config.enabled_channels.contains(159));
+        let _ = app.update(Message::ChannelVisible(159, true));
+        assert!(app.shell.state().config.enabled_channels.contains(159));
+        let _ = app.update(Message::Run(Command::StartCapture));
+        let deadline = Instant::now().checked_add(Duration::from_secs(20)).unwrap();
+        while app.shell.state().activity != Activity::Idle {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the capture did not end");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = app.update(Message::AreaResized(1000.0));
+        let mut ui = iced_test::Simulator::with_size(
+            crate::fonts::settings(),
+            iced::Size::new(1180.0, 720.0),
+            app.view(),
+        );
+        assert!(ui.snapshot(&app.theme()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -5179,7 +5231,7 @@ mod tests {
         let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
         for edit in [
             ConfigEdit::Realtime(false),
-            ConfigEdit::Channels(0xffff),
+            ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0xffff)),
             ConfigEdit::SampleRate(100_000_000),
             ConfigEdit::Length(100_000_000),
             ConfigEdit::Seed(Some(5)),
@@ -5355,7 +5407,7 @@ mod tests {
                 ConfigEdit::SampleRate(1_000_000),
                 ConfigEdit::Length(20_000),
                 ConfigEdit::Seed(Some(8)),
-                ConfigEdit::Channels(mask),
+                ConfigEdit::Channels(la_devices::ChannelSet::from_u32(mask)),
             ] {
                 let _ = app.update(Message::Run(Command::EditConfig(edit)));
             }
@@ -5459,7 +5511,10 @@ mod tests {
         for channel in 0..32 {
             let _ = app.update(Message::ChannelVisible(channel, false));
         }
-        assert_eq!(app.shell.state().config.enabled_channels, 0);
+        assert_eq!(
+            app.shell.state().config.enabled_channels,
+            la_devices::ChannelSet::from_u32(0)
+        );
         assert!(
             !app.shell.state().config_problems.is_empty(),
             "no channel at all keeps Start unavailable (without a message: the flags show it)"
@@ -5467,7 +5522,10 @@ mod tests {
         for channel in [0, 2, 5] {
             let _ = app.update(Message::ChannelVisible(channel, true));
         }
-        assert_eq!(app.shell.state().config.enabled_channels, 0b100101);
+        assert_eq!(
+            app.shell.state().config.enabled_channels,
+            la_devices::ChannelSet::from_u32(0b100101)
+        );
         assert!(app.shell.state().config_problems.is_empty());
 
         // The Capture view before a capture lists the channels as buttons.
@@ -5499,7 +5557,10 @@ mod tests {
         // With the capture on screen the same flags still choose what the next capture records,
         // and names and colours can be changed whether or not there is a capture.
         let _ = app.update(Message::ChannelVisible(7, true));
-        assert_eq!(app.shell.state().config.enabled_channels, 0b1010_0101);
+        assert_eq!(
+            app.shell.state().config.enabled_channels,
+            la_devices::ChannelSet::from_u32(0b1010_0101)
+        );
         let still: Vec<u8> = app.plan.channels.iter().map(|c| c.channel).collect();
         assert_eq!(
             still,

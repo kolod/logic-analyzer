@@ -254,7 +254,7 @@ fn a_marker_can_be_placed_while_a_capture_runs() {
     let dir = TempDir::new("place-running");
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
-        ConfigEdit::Channels(0b1),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1)),
         ConfigEdit::SampleRate(1_000_000),
         ConfigEdit::Length(5_000_000),
         ConfigEdit::Seed(Some(3)),

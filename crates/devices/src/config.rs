@@ -8,6 +8,7 @@ use la_core::Result;
 use la_storage::Limits;
 
 use crate::capabilities::{Capabilities, TriggerKind};
+use crate::channel_set::ChannelSet;
 use crate::error;
 use crate::virtual_device::VirtualOptions;
 
@@ -34,9 +35,9 @@ pub enum DeviceOptions {
 /// What the user chooses for one acquisition.
 #[derive(Debug, Clone)]
 pub struct DeviceConfig {
-    /// Enabled channels as a mask: bit `i` enables channel `i`. At least one bit must be
-    /// set and every set bit must be below the device's channel count.
-    pub enabled_channels: u32,
+    /// The enabled channels. At least one must be enabled and every one must be below the
+    /// device's channel count.
+    pub enabled_channels: ChannelSet,
     /// The sample rate in hertz; it must be one the device supports (never rounded).
     pub sample_rate_hz: u64,
     /// Optional trigger.
@@ -57,7 +58,7 @@ pub struct DeviceConfig {
 /// unchecked configuration.
 #[derive(Debug, Clone)]
 pub struct ResolvedConfig {
-    enabled_channels: u32,
+    enabled_channels: ChannelSet,
     sample_rate_hz: u64,
     trigger: Option<Trigger>,
     capture_length: Option<u64>,
@@ -77,9 +78,9 @@ impl ResolvedConfig {
         }
     }
 
-    /// Enabled channels as a mask.
+    /// The enabled channels.
     #[must_use]
-    pub fn enabled_channels(&self) -> u32 {
+    pub fn enabled_channels(&self) -> ChannelSet {
         self.enabled_channels
     }
 
@@ -135,18 +136,11 @@ impl AppliedConfig {
     }
 }
 
-/// Mask with the lowest `channels` bits set.
-fn channel_mask(channels: u8) -> u32 {
-    1_u32
-        .checked_shl(u32::from(channels))
-        .map_or(u32::MAX, |bit| bit.wrapping_sub(1))
-}
-
 /// Worst-case bytes the store needs for `samples` samples on `channels` channels: 4 bytes per
 /// transition plus 32 bytes per 1,024 transitions (about 4.03 bytes per channel and sample),
 /// assuming a level change on every channel at every sample. `None` on overflow.
-fn worst_case_bytes(samples: u64, channels: u32) -> Option<u64> {
-    let transitions = samples.checked_mul(u64::from(channels))?;
+fn worst_case_bytes(samples: u64, channels: usize) -> Option<u64> {
+    let transitions = samples.checked_mul(u64::try_from(channels).ok()?)?;
     transitions.checked_mul(129)?.checked_div(32)
 }
 
@@ -172,16 +166,18 @@ pub fn validate(
     limits: &Limits,
 ) -> Result<ResolvedConfig> {
     // Channels.
-    if config.enabled_channels == 0 {
+    if config.enabled_channels.is_empty() {
         return Err(error::invalid_channel(format!(
             "no channel is enabled; enable at least one of the {} channels (0..={})",
             caps.channels,
             caps.channels.saturating_sub(1)
         )));
     }
-    let invalid = config.enabled_channels & !channel_mask(caps.channels);
-    if invalid != 0 {
-        let highest = 31_u32.saturating_sub(invalid.leading_zeros());
+    if let Some(highest) = config
+        .enabled_channels
+        .highest()
+        .filter(|&highest| highest >= caps.channels)
+    {
         return Err(error::invalid_channel(format!(
             "channel {highest} does not exist: the device has {} channels (0..={})",
             caps.channels,
@@ -219,10 +215,7 @@ pub fn validate(
                 caps.channels.saturating_sub(1)
             )));
         }
-        let enabled = 1_u32
-            .checked_shl(u32::from(trigger.channel))
-            .is_some_and(|bit| config.enabled_channels & bit != 0);
-        if !enabled {
+        if !config.enabled_channels.contains(trigger.channel) {
             return Err(error::unsupported_trigger(format!(
                 "trigger channel {} is not enabled; enable it or trigger on an enabled channel",
                 trigger.channel
@@ -253,7 +246,7 @@ pub fn validate(
 
     // Memory budget (worst case), unless the caller accepts the risk.
     if let (Some(length), false) = (config.capture_length, config.accept_budget_risk) {
-        let enabled = config.enabled_channels.count_ones();
+        let enabled = config.enabled_channels.count();
         let budget = limits.memory_budget_bytes;
         match worst_case_bytes(length, enabled) {
             Some(cost) if cost <= budget => {}

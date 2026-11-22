@@ -57,7 +57,7 @@ fn run_case(
         .start(
             &DeviceId::new("virtual", "0"),
             DeviceConfig {
-                enabled_channels: mask,
+                enabled_channels: la_devices::ChannelSet::from_u32(mask),
                 sample_rate_hz: 100_000_000,
                 trigger: None,
                 capture_length: Some(samples),

@@ -34,7 +34,10 @@ fn edit(shell: &mut Shell, edit: ConfigEdit) {
 /// Fast (unpaced) capture of `length` samples on `channels` at `rate` with `seed`.
 fn configure(shell: &mut Shell, rate: u64, length: u64, channels: u32, seed: u64) {
     edit(shell, ConfigEdit::Realtime(false));
-    edit(shell, ConfigEdit::Channels(channels));
+    edit(
+        shell,
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(channels)),
+    );
     edit(shell, ConfigEdit::SampleRate(rate));
     edit(shell, ConfigEdit::Length(length));
     edit(shell, ConfigEdit::Seed(Some(seed)));
@@ -95,7 +98,10 @@ fn the_default_configuration_is_valid_and_fits_the_device() {
     let dir = TempDir::new("defaults");
     let shell = shell_in(&dir);
     let config = &shell.state().config;
-    assert_eq!(config.enabled_channels, 0xff);
+    assert_eq!(
+        config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0xff)
+    );
     assert_eq!(config.sample_rate_hz, 1_000_000);
     assert_eq!(config.length, 1_000_000);
     assert!(config.realtime);
@@ -119,7 +125,7 @@ fn an_invalid_setting_is_reported_with_its_code_and_start_is_refused() {
             la_devices::error::UNSUPPORTED_SAMPLE_RATE,
         ),
         (
-            ConfigEdit::Channels(0),
+            ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0)),
             Setting::Channels,
             la_devices::error::INVALID_CHANNEL,
         ),
@@ -210,7 +216,10 @@ fn polling_reports_progress_while_running_and_nothing_when_idle() {
     assert_eq!(shell.wants_ticks(), Tick::Slow);
     assert!(shell.poll(Instant::now()).is_empty());
     // Real-time pacing at 10 kHz keeps the capture running for a while.
-    edit(&mut shell, ConfigEdit::Channels(0b11));
+    edit(
+        &mut shell,
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b11)),
+    );
     edit(&mut shell, ConfigEdit::SampleRate(10_000));
     edit(&mut shell, ConfigEdit::Length(100_000));
     edit(&mut shell, ConfigEdit::Seed(Some(3)));
@@ -242,7 +251,10 @@ fn polling_reports_progress_while_running_and_nothing_when_idle() {
 fn stop_ends_a_running_capture_within_a_second_and_keeps_the_data() {
     let dir = TempDir::new("stop");
     let mut shell = shell_in(&dir);
-    edit(&mut shell, ConfigEdit::Channels(0b11));
+    edit(
+        &mut shell,
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b11)),
+    );
     edit(&mut shell, ConfigEdit::SampleRate(10_000));
     edit(&mut shell, ConfigEdit::Length(1_000_000));
     shell.apply(Command::StartCapture);
@@ -361,7 +373,10 @@ fn la_storage_memory_limit() -> &'static str {
 fn a_second_start_while_running_is_ignored() {
     let dir = TempDir::new("twice");
     let mut shell = shell_in(&dir);
-    edit(&mut shell, ConfigEdit::Channels(0b1));
+    edit(
+        &mut shell,
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1)),
+    );
     edit(&mut shell, ConfigEdit::SampleRate(10_000));
     edit(&mut shell, ConfigEdit::Length(1_000_000));
     assert!(matches!(
