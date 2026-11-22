@@ -56,7 +56,7 @@ pub fn wait_until(timeout: Duration, mut condition: impl FnMut() -> bool) -> boo
 /// A configuration for the board: the mask, the rate, the length (none: until stopped).
 pub fn config(mask: u32, rate: u64, length: Option<u64>) -> DeviceConfig {
     DeviceConfig {
-        enabled_channels: mask,
+        enabled_channels: la_devices::ChannelSet::from_u32(mask),
         sample_rate_hz: rate,
         trigger: None,
         capture_length: length,

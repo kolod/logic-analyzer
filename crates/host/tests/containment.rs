@@ -72,7 +72,7 @@ fn shell_with_panicking_device(dir: &TempDir) -> Shell {
         Outcome::Done(_)
     ));
     for edit in [
-        ConfigEdit::Channels(0b1111),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1111)),
         ConfigEdit::SampleRate(1_000_000),
         ConfigEdit::Length(10_000),
     ] {

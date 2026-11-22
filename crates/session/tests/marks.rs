@@ -39,7 +39,7 @@ fn virtual_run(
         .start(
             &DeviceId::new("virtual", "0"),
             DeviceConfig {
-                enabled_channels: 0xFFFF,
+                enabled_channels: la_devices::ChannelSet::from_u32(0xFFFF),
                 sample_rate_hz: 1_000_000,
                 trigger: None,
                 capture_length: length,

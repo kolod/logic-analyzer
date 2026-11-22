@@ -1936,7 +1936,7 @@ mod tests {
         let mut shell = Shell::new(ShellConfig::for_tests(&dir));
         for edit in [
             ConfigEdit::Realtime(false),
-            ConfigEdit::Channels(0b1111),
+            ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1111)),
             ConfigEdit::SampleRate(1_000_000),
             ConfigEdit::Length(50_000),
             ConfigEdit::Seed(Some(3)),

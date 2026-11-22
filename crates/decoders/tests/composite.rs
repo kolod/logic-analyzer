@@ -38,9 +38,19 @@ fn factory() -> CompositeFactory {
 #[test]
 fn claimed_channels_come_from_the_generator_and_the_rest_from_the_random_source() {
     let mask = 0b1111_1111;
-    let composite = fill(factory().create(mask, 1_000_000, 42).as_mut(), 5_000, 5_000);
+    let composite = fill(
+        factory()
+            .create(la_devices::ChannelSet::from_u32(mask), 1_000_000, 42)
+            .as_mut(),
+        5_000,
+        5_000,
+    );
     let generated = fill(&mut source(&setup(), 42).unwrap(), 5_000, 5_000);
-    let random = fill(&mut RandomSource::new(mask & !0b110, 42, 10), 5_000, 5_000);
+    let random = fill(
+        &mut RandomSource::new(la_devices::ChannelSet::from_u32(mask & !0b110), 42, 10),
+        5_000,
+        5_000,
+    );
     for (i, word) in composite.iter().enumerate() {
         assert_eq!(
             word & 0b110,
@@ -57,27 +67,39 @@ fn claimed_channels_come_from_the_generator_and_the_rest_from_the_random_source(
 #[test]
 fn disabled_channels_stay_at_zero() {
     // Only channels 0 and 1 are enabled: the data channel (2) is claimed but disabled.
-    let words = fill(factory().create(0b11, 1_000_000, 7).as_mut(), 4_000, 4_000);
+    let words = fill(
+        factory()
+            .create(la_devices::ChannelSet::from_u32(0b11), 1_000_000, 7)
+            .as_mut(),
+        4_000,
+        4_000,
+    );
     assert!(words.iter().all(|w| w & !0b11 == 0));
 }
 
 #[test]
 fn the_same_seed_gives_the_same_signal_for_any_chunking() {
     let reference = fill(
-        factory().create(u32::MAX, 1_000_000, 5).as_mut(),
+        factory()
+            .create(la_devices::ChannelSet::from_u32(u32::MAX), 1_000_000, 5)
+            .as_mut(),
         9_000,
         9_000,
     );
     for chunk in [1, 7, 4_096] {
         let words = fill(
-            factory().create(u32::MAX, 1_000_000, 5).as_mut(),
+            factory()
+                .create(la_devices::ChannelSet::from_u32(u32::MAX), 1_000_000, 5)
+                .as_mut(),
             9_000,
             chunk,
         );
         assert_eq!(words, reference, "chunk {chunk}");
     }
     let other = fill(
-        factory().create(u32::MAX, 1_000_000, 6).as_mut(),
+        factory()
+            .create(la_devices::ChannelSet::from_u32(u32::MAX), 1_000_000, 6)
+            .as_mut(),
         9_000,
         9_000,
     );
@@ -87,8 +109,17 @@ fn the_same_seed_gives_the_same_signal_for_any_chunking() {
 #[test]
 fn without_claims_it_is_the_random_source() {
     let none = CompositeFactory::new(Vec::new(), 10);
-    let a = fill(none.create(0b1111, 1_000_000, 3).as_mut(), 3_000, 3_000);
-    let b = fill(&mut RandomSource::new(0b1111, 3, 10), 3_000, 3_000);
+    let a = fill(
+        none.create(la_devices::ChannelSet::from_u32(0b1111), 1_000_000, 3)
+            .as_mut(),
+        3_000,
+        3_000,
+    );
+    let b = fill(
+        &mut RandomSource::new(la_devices::ChannelSet::from_u32(0b1111), 3, 10),
+        3_000,
+        3_000,
+    );
     assert_eq!(a, b);
 }
 
@@ -107,9 +138,19 @@ fn the_i2c_claim_fills_only_its_two_channels_and_an_incomplete_setup_gives_none(
     assert_eq!(claim.channels, 0b110);
     let mask = 0b1111_1111;
     let factory = CompositeFactory::new(vec![claim], 10);
-    let composite = fill(factory.create(mask, 1_000_000, 42).as_mut(), 5_000, 5_000);
+    let composite = fill(
+        factory
+            .create(la_devices::ChannelSet::from_u32(mask), 1_000_000, 42)
+            .as_mut(),
+        5_000,
+        5_000,
+    );
     let generated = fill(&mut i2c::source(&setup, 42).unwrap(), 5_000, 5_000);
-    let random = fill(&mut RandomSource::new(mask & !0b110, 42, 10), 5_000, 5_000);
+    let random = fill(
+        &mut RandomSource::new(la_devices::ChannelSet::from_u32(mask & !0b110), 42, 10),
+        5_000,
+        5_000,
+    );
     for (i, word) in composite.iter().enumerate() {
         assert_eq!(
             word & 0b110,

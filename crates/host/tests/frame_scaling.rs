@@ -20,7 +20,7 @@ fn probes_for(length: u64, window_fraction: (u64, u64)) -> (u64, usize) {
         let mut shell = la_host::Shell::new(la_host::ShellConfig::for_tests(dir.path()));
         for edit in [
             ConfigEdit::Realtime(false),
-            ConfigEdit::Channels(0xffff),
+            ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0xffff)),
             ConfigEdit::SampleRate(1_000_000),
             ConfigEdit::Length(length),
             ConfigEdit::Seed(Some(11)),

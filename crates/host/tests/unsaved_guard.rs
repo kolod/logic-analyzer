@@ -61,7 +61,7 @@ fn dirty_shell(dir: &TempDir) -> Shell {
 fn running_shell(dir: &TempDir) -> Shell {
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
-        ConfigEdit::Channels(0b11),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b11)),
         ConfigEdit::SampleRate(20_000),
         ConfigEdit::Length(10_000_000),
         ConfigEdit::Seed(Some(33)),
@@ -392,7 +392,7 @@ fn no_sequence_of_commands_discards_unsaved_data_without_a_decision() {
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
         ConfigEdit::Realtime(false),
-        ConfigEdit::Channels(0b11),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b11)),
         ConfigEdit::SampleRate(1_000_000),
         ConfigEdit::Length(3_000),
         ConfigEdit::Seed(Some(35)),

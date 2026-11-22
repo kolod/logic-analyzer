@@ -266,16 +266,16 @@ fn check_invariants(shell: &Shell) -> Result<(), String> {
         .as_ref()
         .and_then(|id| state.devices.iter().find(|d| d.id == *id))
         .map_or(8, |d| d.capabilities.channels);
-    let limit = if device >= 32 {
-        u32::MAX
-    } else {
-        (1_u32 << device) - 1
-    };
-    if state.presentation.visible_mask() & limit != state.config.enabled_channels & limit {
+    let limit = la_devices::ChannelSet::all(device);
+    let (flags, recorded) = (
+        state.presentation.visible_mask().and(&limit),
+        state.config.enabled_channels.and(&limit),
+    );
+    if flags != recorded {
         return Err(format!(
-            "the flags {:#x} differ from the recording mask {:#x}",
-            state.presentation.visible_mask() & limit,
-            state.config.enabled_channels & limit
+            "the flags {:?} differ from the recording mask {:?}",
+            flags.iter().collect::<Vec<_>>(),
+            recorded.iter().collect::<Vec<_>>()
         ));
     }
     // Activity and unsaved state.
@@ -669,7 +669,9 @@ fn random_action(rng: &mut Lcg, files: &Files, shell: &Shell) -> Command {
             scale: 1.0,
         }),
         45 => Command::EditConfig(match rng.below(6) {
-            0 => ConfigEdit::Channels([0, 1, 3, 0xffff, u32::MAX][rng.below(5) as usize]),
+            0 => ConfigEdit::Channels(la_devices::ChannelSet::from_u32(
+                [0, 1, 3, 0xffff, u32::MAX][rng.below(5) as usize],
+            )),
             1 => ConfigEdit::SampleRate([0, 1, 20_000, 1_000_000, u64::MAX][rng.below(5) as usize]),
             2 => ConfigEdit::Length([0, 1, 3_000, 50_000, 200_000][rng.below(5) as usize]),
             3 => ConfigEdit::Seed(if rng.below(2) == 0 {
@@ -751,7 +753,7 @@ fn walk(seed: u64, steps: u64) {
         });
         for edit in [
             ConfigEdit::Realtime(false),
-            ConfigEdit::Channels(0b11),
+            ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b11)),
             ConfigEdit::SampleRate(1_000_000),
             ConfigEdit::Length(3_000),
             ConfigEdit::Seed(Some(seed)),

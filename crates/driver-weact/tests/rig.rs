@@ -98,7 +98,7 @@ impl Fixture {
     /// Captures `length` samples at `rate` with all eight channels and returns one byte a sample.
     fn capture(&self, rate: u64, length: u64) -> Result<Vec<u8>, String> {
         let config = DeviceConfig {
-            enabled_channels: 0xFF,
+            enabled_channels: la_devices::ChannelSet::from_u32(0xFF),
             sample_rate_hz: rate,
             trigger: None,
             capture_length: Some(length),

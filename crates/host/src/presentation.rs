@@ -3,6 +3,7 @@
 //! The presentation is the user's choice, kept apart from the signal data: the capture is never
 //! changed by it. Names are user text: they are sanitized for display and never translated.
 
+use la_devices::ChannelSet;
 use std::collections::BTreeMap;
 
 use crate::sanitize::{MAX_NAME_CHARS, sanitize_text};
@@ -58,13 +59,13 @@ impl Presentation {
     /// The defaults for a capture of `channel_count` channels of which those in `enabled_mask`
     /// were enabled: index order, palette colours cycled, only the enabled channels shown.
     #[must_use]
-    pub fn defaults(channel_count: u8, enabled_mask: u32) -> Self {
+    pub fn defaults(channel_count: u8, enabled: ChannelSet) -> Self {
         let channels = (0..channel_count)
             .map(|index| ChannelStyle {
                 index,
                 name: String::new(),
                 colour: Colour::Palette(index % PALETTE_SIZE),
-                visible: u32::from(index) < 32 && enabled_mask >> u32::from(index) & 1 == 1,
+                visible: enabled.contains(index),
                 height: 0,
             })
             .collect();
@@ -76,7 +77,7 @@ impl Presentation {
 
     /// Makes the list exactly `channel_count` long. What the user set for the channels that stay
     /// (name, colour, order) is kept; a new channel is shown when `enabled_mask` records it.
-    pub fn resize(&mut self, channel_count: u8, enabled_mask: u32) {
+    pub fn resize(&mut self, channel_count: u8, enabled: ChannelSet) {
         self.channels.retain(|s| s.index < channel_count);
         for index in 0..channel_count {
             if !self.channels.iter().any(|s| s.index == index) {
@@ -84,7 +85,7 @@ impl Presentation {
                     index,
                     name: String::new(),
                     colour: Colour::Palette(index % PALETTE_SIZE),
-                    visible: u32::from(index) < 32 && enabled_mask >> u32::from(index) & 1 == 1,
+                    visible: enabled.contains(index),
                     height: 0,
                 });
             }
@@ -94,22 +95,20 @@ impl Presentation {
     /// Sets the flag of every channel below `limit` from the recording mask: the one flag of a
     /// channel means both "shown" and "recorded by the next capture". Channels at or above the
     /// limit (a capture opened from a file made with a bigger device) keep their flag.
-    pub fn visible_from_mask(&mut self, enabled_mask: u32, limit: u8) {
+    pub fn visible_from_mask(&mut self, enabled: ChannelSet, limit: u8) {
         for style in self.channels.iter_mut().filter(|s| s.index < limit) {
-            style.visible =
-                u32::from(style.index) < 32 && enabled_mask >> u32::from(style.index) & 1 == 1;
+            style.visible = enabled.contains(style.index);
         }
     }
 
-    /// The channels whose flag is on, as a mask.
+    /// The channels whose flag is on.
     #[must_use]
-    pub fn visible_mask(&self) -> u32 {
-        self.channels
-            .iter()
-            .filter(|s| s.visible && s.index < 32)
-            .fold(0, |mask, s| {
-                mask | 1_u32.checked_shl(u32::from(s.index)).unwrap_or(0)
-            })
+    pub fn visible_mask(&self) -> ChannelSet {
+        let mut set = ChannelSet::empty();
+        for style in self.channels.iter().filter(|s| s.visible) {
+            set.insert(style.index);
+        }
+        set
     }
 
     fn style_mut(&mut self, channel: u8) -> Option<&mut ChannelStyle> {

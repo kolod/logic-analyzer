@@ -542,14 +542,15 @@ fn opening_a_file_sets_the_flags_and_what_the_next_capture_records_together() {
     wait_operation(&mut fresh);
     let state = fresh.state();
     assert_eq!(
-        state.config.enabled_channels, 0,
+        state.config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0),
         "the next capture records nothing yet"
     );
     assert!(
         !state.config_problems.is_empty(),
         "and Start says that no channel is chosen"
     );
-    assert_eq!(state.presentation.visible_mask() & 0b11, 0);
+    assert_eq!(state.presentation.visible_mask().to_u32() & 0b11, 0);
     // One flag turns the channel on for both: it is recorded next time and its lane is back.
     done(
         &mut fresh,
@@ -558,6 +559,9 @@ fn opening_a_file_sets_the_flags_and_what_the_next_capture_records_together() {
             visible: true,
         },
     );
-    assert_eq!(fresh.state().config.enabled_channels, 0b10);
+    assert_eq!(
+        fresh.state().config.enabled_channels,
+        la_devices::ChannelSet::from_u32(0b10)
+    );
     assert!(fresh.state().config_problems.is_empty());
 }

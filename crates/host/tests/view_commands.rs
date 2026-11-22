@@ -179,7 +179,7 @@ fn following_the_newest_data_tracks_the_end_until_the_user_pans() {
     let dir = TempDir::new("view-follow");
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
-        ConfigEdit::Channels(0b1),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1)),
         ConfigEdit::SampleRate(20_000),
         ConfigEdit::Length(1_000_000),
         ConfigEdit::Seed(Some(4)),
@@ -231,7 +231,7 @@ fn a_huge_window_size_and_a_new_short_capture_keep_the_stored_window_valid() {
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
         ConfigEdit::Realtime(false),
-        ConfigEdit::Channels(0b1),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1)),
         ConfigEdit::SampleRate(1_000_000),
         ConfigEdit::Length(10),
         ConfigEdit::Seed(Some(61)),

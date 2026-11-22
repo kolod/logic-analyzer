@@ -458,8 +458,10 @@ impl Shell {
         state.presentation = presentation;
         // The one flag of a channel is also what the next capture records.
         // Even "none": then Start says that no channel is chosen, and the flags show it.
-        state.config.enabled_channels =
-            state.presentation.visible_mask() & device_channel_mask(state);
+        state.config.enabled_channels = state
+            .presentation
+            .visible_mask()
+            .and(&device_channel_mask(state));
         revalidate(state);
         state.markers = markers;
         state.placement = None;

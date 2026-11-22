@@ -122,7 +122,7 @@ pub fn finished_shell(dir: &TempDir, mask: u32, length: u64, seed: u64) -> Shell
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
         ConfigEdit::Realtime(false),
-        ConfigEdit::Channels(mask),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(mask)),
         ConfigEdit::SampleRate(1_000_000),
         ConfigEdit::Length(length),
         ConfigEdit::Seed(Some(seed)),

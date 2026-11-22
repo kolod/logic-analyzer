@@ -174,7 +174,7 @@ pub fn description(channels: u8, simulated: bool, seed: Option<u64>) -> CaptureD
         requested_sample_rate_hz: 12_500_000,
         sample_rate_hz: 12_500_000,
         channels,
-        enabled_mask: mask,
+        enabled_mask: la_devices::ChannelSet::from_u32(mask),
         trigger: Some(Trigger {
             channel: 0,
             kind: TriggerKind::RisingEdge,

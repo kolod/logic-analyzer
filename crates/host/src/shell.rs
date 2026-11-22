@@ -7,7 +7,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use la_core::Error;
 use la_decoders::setup::Setup;
-use la_devices::{AcquisitionOptions, DeviceDescriptor, DeviceId, DeviceRegistry, RegistryConfig};
+use la_devices::{
+    AcquisitionOptions, ChannelSet, DeviceDescriptor, DeviceId, DeviceRegistry, RegistryConfig,
+};
 use la_i18n::{Args, Key, Language, Localizer};
 use la_storage::Limits;
 
@@ -333,11 +335,7 @@ impl Shell {
                 .presentation
                 .channels
                 .iter()
-                .filter(|style| {
-                    style.visible
-                        && u32::from(style.index) < 32
-                        && recorded >> u32::from(style.index) & 1 == 1
-                })
+                .filter(|style| style.visible && recorded.contains(style.index))
                 .map(|style| ChannelView {
                     channel: style.index,
                     name: style.name.clone(),
@@ -1046,12 +1044,12 @@ impl Shell {
                 {
                     return Err(Reject::Ignored(error::INVALID_COMMAND));
                 }
-                let bit =
-                    1_u32.checked_shl(u32::from(channel)).unwrap_or(0) & device_channel_mask(state);
                 if visible {
-                    state.config.enabled_channels |= bit;
+                    if channel < device_channels(state) {
+                        state.config.enabled_channels.insert(channel);
+                    }
                 } else {
-                    state.config.enabled_channels &= !bit;
+                    state.config.enabled_channels.remove(channel);
                 }
                 revalidate(state);
                 mark_dirty(state);
@@ -1100,8 +1098,7 @@ impl Shell {
                     .capture
                     .as_ref()
                     .ok_or(Reject::Ignored(error::INVALID_COMMAND))?;
-                let shown = capture.description.enabled_mask() >> u32::from(channel).min(31) & 1
-                    == 1
+                let shown = capture.description.enabled_mask().contains(channel)
                     && state
                         .presentation
                         .channels
@@ -1426,11 +1423,9 @@ pub(crate) fn sync_visibility(state: &mut State) {
     state.presentation.visible_from_mask(mask, limit);
 }
 
-/// The mask that has every channel of the selected device.
-pub(crate) fn device_channel_mask(state: &State) -> u32 {
-    1_u32
-        .checked_shl(u32::from(device_channels(state)))
-        .map_or(u32::MAX, |bit| bit.wrapping_sub(1))
+/// The set that has every channel of the selected device.
+pub(crate) fn device_channel_mask(state: &State) -> ChannelSet {
+    ChannelSet::all(device_channels(state))
 }
 
 /// How many channels the presentation describes: those of the capture on screen, or else those of

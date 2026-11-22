@@ -431,7 +431,7 @@ fn assert_agrees(model: &Model, session: &la_session::Session, what: &str) {
     assert_eq!(model.device_id, d.device_id().as_str(), "{what}");
     assert_eq!(model.device_name, d.device_name(), "{what}");
     assert_eq!(model.desc_channels, d.channels(), "{what}");
-    assert_eq!(model.enabled_mask, d.enabled_mask(), "{what}");
+    assert_eq!(model.enabled_mask, d.enabled_mask().to_u32(), "{what}");
     assert_eq!(model.requested_rate, d.requested_sample_rate_hz(), "{what}");
     assert_eq!(model.applied_rate, d.sample_rate_hz(), "{what}");
     assert_eq!(

@@ -96,7 +96,7 @@ fn a_finished_capture_shows_samples_end_reason_rate_and_flags() {
     let mut shell = Shell::new(ShellConfig::for_tests(dir.path()));
     for edit in [
         ConfigEdit::Realtime(false),
-        ConfigEdit::Channels(0b1),
+        ConfigEdit::Channels(la_devices::ChannelSet::from_u32(0b1)),
         ConfigEdit::SampleRate(1000),
         ConfigEdit::Length(21),
         ConfigEdit::Seed(Some(1)),

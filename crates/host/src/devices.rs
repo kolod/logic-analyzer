@@ -7,8 +7,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use la_devices::{
-    Capabilities, DeviceConfig, DeviceDescriptor, DeviceOptions, Pacing, ScriptedFailure, Trigger,
-    VIRTUAL_PROVIDER_NAME, VirtualOptions, error as device_error, validate,
+    Capabilities, ChannelSet, DeviceConfig, DeviceDescriptor, DeviceOptions, Pacing,
+    ScriptedFailure, Trigger, VIRTUAL_PROVIDER_NAME, VirtualOptions, error as device_error,
+    validate,
 };
 use la_storage::Limits;
 
@@ -64,8 +65,8 @@ pub struct ConfigProblem {
 /// What the user is configuring for the next capture.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConfigDraft {
-    /// Enabled channels as a mask (bit `i` is channel `i`).
-    pub enabled_channels: u32,
+    /// The enabled channels.
+    pub enabled_channels: ChannelSet,
     /// The sample rate in hertz.
     pub sample_rate_hz: u64,
     /// The capture length in samples.
@@ -94,9 +95,7 @@ impl ConfigDraft {
     #[must_use]
     pub fn for_device(capabilities: &Capabilities) -> Self {
         let channels = capabilities.channels.min(DEFAULT_CHANNELS);
-        let enabled_channels = 1_u32
-            .checked_shl(u32::from(channels))
-            .map_or(u32::MAX, |bit| bit.wrapping_sub(1));
+        let enabled_channels = ChannelSet::all(channels);
         Self {
             enabled_channels,
             sample_rate_hz: capabilities
