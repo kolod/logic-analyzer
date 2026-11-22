@@ -27,8 +27,15 @@ Unknown keys and out-of-range values are clamped, never an error (they come from
 
 ## The signal
 
-- One SCL period is 16 samples: SCL is high on samples 4 to 11 of a bit slot; SDA changes on sample 0 of
-  a slot, while SCL is low, and is stable around the rising edge.
+- One SCL period is 16 samples: SCL is high on samples 4 to 11 of a bit slot; SDA takes the bit in the
+  sample where SCL falls (sample 12 of the slot before) and is stable around the rising edge.
+- SDA changes in the sample where SCL falls, except in a start, a repeated start and a stop, where its
+  edge is 8 samples from an edge of SCL; no clock pulse is narrower than 8 samples (FR-025). A start is
+  12 samples: SDA low with SCL high for 8, then SCL falls and SDA takes the first bit (4 samples before
+  the clock pulse of that bit). A repeated start is 24: SDA high (it was set when SCL fell) with SCL low
+  (4), SCL high (8), SDA low with SCL high (8), SCL falls with the first bit set (4). A stop is 12: SDA
+  low with SCL low (4), SCL high with SDA low (8), then SDA rises. Frame length grows by 24 samples with
+  respect to the first version (1008 with the defaults).
 - A frame is `lead-in (64 samples, both lines high) + transaction + idle`, of one fixed length sized for
   `max_bytes` (and twice the address length for 10-bit), so frame `k` starts at `k × frame length` and
   `sample(position)` needs no state.

@@ -53,6 +53,11 @@ decoders written by users.
 - Q: How does the decoder decide that a start condition is real when the capture begins before the MCU has set up I2C (lines stuck, floating or noisy)? → A: It synchronises: the first start is accepted only after the bus has been seen idle, meaning both SDA and SCL high for at least one bus period (the bus clock period is determined automatically from the signal, which may take two passes). Everything before that, including falling edges of SDA while SCL is high, is ignored silently.
 - Q: What happens while the bus period is not yet known (a growing capture, or too few clock pulses)? → A: The decoder waits: nothing is decoded or shown until enough SCL clock pulses have been seen to determine the period; then it decodes from the start of the capture, giving the same result as for the whole capture. If the capture ends without the period ever being determined, the result is empty and no error is reported.
 
+### Session 2026-11-22
+
+- Q: When does SDA change with respect to SCL in the generated signal? → A: First answer, four samples apart; replaced by the owner on 2026-11-22: SDA changes in the same sample in which SCL falls, and in a start, a repeated start and a stop the edge of SDA is 8 samples from an edge of SCL.
+- Q: What does the list of channels for SDA and SCL show when a channel is assigned but not recorded? → A: The list holds only the channels that are recorded; an assigned channel that is not recorded stays selected, marked unavailable, and the decoder decodes nothing and says why.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Read the transactions on an I2C bus (Priority: P1)
@@ -239,6 +244,9 @@ I2C decoder and check that it receives exactly the transactions the I2C lane sho
 - What happens when the capture has fewer samples per bit than the decoder can read (a clock sampled
   too coarsely, so edges are missing)? The decoder reports the byte that cannot be completed and
   carries on; it never reads beyond the data it has and never panics.
+- What happens when the channel assigned to SDA or SCL is not recorded (turned off after the assignment)?
+  The assignment is kept and shown as unavailable; the decoder does not start and the user is told
+  that the channel is not recorded.
 - What happens with a generator seed and a capture length too short for even one transaction? The
   capture holds idle bus (both lines high) and decodes to nothing; this is not an error.
 
@@ -310,6 +318,11 @@ I2C decoder and check that it receives exactly the transactions the I2C lane sho
   configured on channels, the virtual device MUST produce on those channels random, protocol-valid I2C
   traffic (addresses, directions, data, repeated starts), at a bit rate that suits the capture's
   sample rate, with idle time between transactions.
+- **FR-025**: In the generated signal SDA MUST change in the same sample in which SCL falls (the data
+  bits, the acknowledge bit and the level before a repeated start or a stop); in a start, a repeated
+  start and a stop the edge of SDA MUST be 8 samples from an edge of SCL: SDA falls 8 samples before SCL
+  falls (start, repeated start), SDA rises 8 samples after SCL rose (stop). No clock pulse is narrower
+  than a data pulse (eight samples).
 - **FR-014**: The generator MUST be able to plant errors on request: a NAK on the address, a NAK on a
   written data byte, and a transaction cut short; the rate of errors MUST be a generator option, and
   with the rate at zero no error is produced.
@@ -335,6 +348,13 @@ I2C decoder and check that it receives exactly the transactions the I2C lane sho
 - **FR-021**: The decoder, its options, its overlays, its stacking output and its generator MUST be
   documented in English; the user guide MUST explain I2C decoding, the address notation and how to
   read the overlays.
+- **FR-026**: The lists from which a signal (SDA, SCL) is assigned to a channel MUST offer only the
+  channels that are recorded in the capture, not every channel of the selected device.
+- **FR-027**: The drop-down lists of a decoder's settings MUST be as wide as the Decoders panel, like
+  the other fields of the panel.
+- **FR-028**: The Decoders panel MUST NOT have a frame around the whole panel; each decoder has its own
+  frame, as each marker has in the Markers panel. (FR-026 to FR-028 change the panel of the shell,
+  an exception to FR-022 for this feature.)
 - **FR-022**: Adding this decoder MUST NOT require a change to the application shell or to the
   decoder framework contract beyond registering it (feature 007 promise); if a change is found
   necessary it MUST be recorded and justified in the plan.
@@ -378,7 +398,9 @@ I2C decoder and check that it receives exactly the transactions the I2C lane sho
 - **SC-007**: All new text is available in the six languages and the key-parity check of the
   application passes with no missing or unused keys.
 - **SC-008**: Adding the decoder changes no file of the application shell (the UI crate and the shell
-  of the host) other than the place where decoders are registered.
+  of the host) other than the place where decoders are registered; the panel changes of FR-026 to FR-028
+  (made after the review of the running application) are the only other edits, confined to the Decoders
+  panel.
 
 ## Assumptions
 

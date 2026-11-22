@@ -475,3 +475,21 @@ one pull request for the feature is the plan (as 007), with a commit per task or
 - Never commit with failing clippy, fmt or tests; commits are signed (ask the owner to unlock GPG if
   signing fails; never bypass it).
 - The shell (`crates/app`, `crates/host/src`) is not edited by any task (SC-008, T040).
+
+## Phase 9: Changes after looking at the running application (2026-11-22)
+
+- [X] T043 [P] `crates/decoders/tests/i2c_generator.rs`: a test over many seeds and option sets that every
+  SCL high pulse is 8 samples (except one cut by the frame's end) and that no sample changes SDA and SCL
+  together (FR-025); it must fail on the present generator (check before the fix).
+- [X] T044 Fix `generators/i2c.rs` per R15: `START` 12, `RESTART` 16, the new `levels` for both; the
+  expected-item positions (`slot_start`, start edge, repeated-start edge) follow; update the doc comment of
+  the module and the contract text. Round trip, chunk invariance and the stacking tests stay green.
+- [X] T045 [P] `crates/app/src/app.rs` tests: the channel lists hold only the recorded channels, an assigned
+  channel that is not recorded stays selected and is marked unavailable (FR-026); a decoder on such a channel
+  is not started and says why.
+- [X] T046 [P] Key `decoder-channel-unavailable` (and the message of T045) in six languages; parity and
+  budget tests pass.
+- [X] T047 Implement R16 in `decoder_block`: recorded channels only, `Length::Fill` on the lists, no outer
+  frame and a `bordered_box` per decoder (FR-026 to FR-028).
+- [X] T048 Update `verification.md` (FR-025 to FR-028, SC-008's exception), `docs/decoders/i2c.md` if it
+  describes the start timing, and run fmt, clippy, the workspace tests and the quickstart section 4a.

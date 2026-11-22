@@ -266,3 +266,41 @@ constants the shell uses for these keys live in the sample decoder's module toda
 I2C generator reads the same literal key strings (`errors`, `error_rate`) and the keys are documented
 in `docs/decoder-api.md` as the generator options every generator may use. No file of the shell is
 touched, which is what SC-008 asks.
+
+## R15. The edges of the generated signal (FR-025)
+
+**Problem**: in `generators::i2c::Frame::levels` the start is 4 samples of SDA low with SCL high and the
+repeated start has SCL high for 4 samples; SCL then falls in the very sample where SDA takes the first
+bit, so the pulse of a start is half as wide as the others and, when the first bit is 1, SDA and SCL
+change together.
+
+**Decision** (the owner's, 2026-11-22; a first version with a gap of 4 samples was replaced): SDA
+changes in the sample where SCL falls, so the bit of a slot is set 4 samples before its clock pulse and
+held to the end of the pulse (set-up and hold of 8 samples either side of the rising edge); in a start, a
+repeated start and a stop the edge of SDA is 8 samples from an edge of SCL. Start = SDA low with SCL high
+for 8, then SCL falls and SDA takes the first bit, 4 samples before that bit's pulse (12 in all).
+Repeated start = SDA is set high when SCL falls at the end of the acknowledge slot; SCL low for 4, high
+for 8, SDA falls and 8 samples later SCL falls with the first bit set (24 in all). Stop = SDA is set low
+when SCL falls; SCL low for 4, SCL high for 8, SDA rises (12). `START`, `RESTART` and `STOP` become 12, 24
+and 12, so the frame length (1008 with the defaults) and every position computed from them (`slot_start`,
+the expected-item times: the repeated start at the SDA fall, 8 after the SCL rise; the stop 12 after the
+end of the body) follow from the constants; the lead-in stays 64 samples with both lines high.
+
+**Alternatives**: a gap of 4 samples everywhere (the first answer; the owner preferred the look of SDA
+changing with the falling edge of SCL); a gap of 1 sample (hides defects from a decoder that samples
+coarsely). The decoder needs no change: it reads SDA at the rising edge of SCL and reacts to SDA edges
+while SCL is high.
+
+## R16. The Decoders panel (FR-026 to FR-028)
+
+**Decision**: in `crates/app/src/app.rs` (`decoder_block`): (a) build `channel_choices` from the channels
+that are recorded (the bit of the channel in `state.config.enabled_channels`), keeping the channel that is
+already assigned even if it is not recorded, marked with the key `decoder-channel-unavailable`; a decoder
+whose channel is not recorded is not ready (`Shell::channels_are_recorded` in `setup_is_ready`, with
+`Shell::recorded_channels`: the channels of the capture on screen, or those being recorded while a capture
+runs) and the panel says so (new keys in six languages); (b) every `pick_list` of the block gets `width(Length::Fill)`; (c) the panel's outer frame is
+removed and the block of each decoder is a `container` with the `bordered_box` style, as the blocks of the
+Markers panel.
+
+**Alternatives**: dropping the assignment when the channel is switched off (loses the user's setting
+silently); forbidding switching the channel off (a capture setting would depend on a decoder).
