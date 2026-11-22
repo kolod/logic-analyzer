@@ -36,7 +36,7 @@ Rules:
 | lost samples | upper | `Part` | red | `ann-i2c-error-gap` | yes |
 | packet | lower | `Whole` | green / red / grey | `ann-i2c-transaction-write/read` | yes if red |
 | empty packet | lower | `Whole` | red | `ann-i2c-error-empty` | yes |
-| unfinished packet | lower | `Whole` | grey | `ann-i2c-incomplete` | no |
+| unfinished packet | lower | `Whole` | grey; red if a part of it was already an error (cut byte, lost samples) | `ann-i2c-incomplete` | yes if red |
 
 Positions follow research R2. Blocks of the upper band never overlap (the decoder shortens the earlier);
 a packet block is as wide as its parts together. The overlays on SDA (dots) and SCL (arrows) are as in

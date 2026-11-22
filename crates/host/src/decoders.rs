@@ -1227,7 +1227,14 @@ impl Shell {
                 state: instance.state,
                 incomplete: instance.incomplete,
                 outdated: instance.outdated,
-                plan: lanes::plan(&results.lane, &view, LANE_ROWS),
+                plan: lanes::plan(
+                    &results.lane,
+                    &view,
+                    self.decoders
+                        .registry
+                        .get(&instance.setup.decoder)
+                        .map_or(LANE_ROWS, |d| usize::from(d.lane_rows)),
+                ),
             });
             for channel in shown_channels {
                 if let Some(snapshot) = results.overlays.get(channel) {

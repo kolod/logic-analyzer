@@ -60,3 +60,16 @@ fn every_error_code_a_decoder_can_cause_is_named_where_it_matters() {
         assert!(doc.contains(code), "{code} is not in the document");
     }
 }
+
+#[test]
+fn the_block_shapes_and_the_rows_of_a_lane_are_in_the_document() {
+    let doc = document();
+    for name in ["Part", "Whole", "lane_rows"] {
+        assert!(doc.contains(name), "`{name}` is not in the document");
+    }
+    assert_eq!(la_decoders::DECODER_API_VERSION, "1.2");
+    assert!(
+        doc.contains("1.2 added"),
+        "the versioning paragraph does not say what 1.2 added"
+    );
+}

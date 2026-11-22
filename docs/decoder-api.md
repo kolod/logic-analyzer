@@ -1,6 +1,6 @@
 # Decoder API
 
-Version: 1.1
+Version: 1.2
 
 This is the authoritative description of the contract between the decoder framework (`la-decoders`)
 and a decoder (constitution Principle IX). Its constant `la_decoders::DECODER_API_VERSION` and the
@@ -74,6 +74,7 @@ finish(&mut self, end: End, reader: &SignalReader, sink: &mut Sink) -> Result<()
 | `input` | `Input::Signals` (reads channels) or `Input::Items(kind)` (reads the output of another instance; has no signals) |
 | `outputs` | the item kinds it produces |
 | `generator` | whether a generator exists for it |
+| `lane_rows` | the rows of spans and marks of its lane, 1 to 3 (1.2); 3 packs its annotations as before, 2 is for a decoder that draws blocks of the two bands |
 
 `Descriptor::validate` checks all of this; registering an invalid descriptor is refused and logged.
 
@@ -107,6 +108,14 @@ change anything.
 annotate(Annotation) -> Result<(), Limit>     // what is drawn
 emit(Item)           -> Result<(), Limit>     // what a decoder above it in a stack reads
 ```
+
+The shapes `Dot`, `Arrow`, `Bar`, `Flag` and `Cross` are drawn as marks or bars and packed into the free
+rows of the lane. Two shapes are for ranges only (1.2): `Part` is a solid block of the **upper** band of the
+lane and `Whole` a solid block of the **lower** band; they are not packed, a `Part` is always in the first
+row and a `Whole` in the second (or the last when the lane has one row), and one whose place in its row is
+taken is counted in a dense cell. The interface fills a block with the colour of its style, whatever the
+error flag says (the flag makes the outline heavier and is counted), and draws its text only when all of it
+fits.
 
 An **annotation** has a kind (`Range { start, end }` with `start <= end`, `Point { at }` or
 `Edge { at, rising }`), a target (`Lane` or an overlay on `Channel(c)`), a style (an optional colour 0 to 7
@@ -204,14 +213,14 @@ The results of an instance are an annotation store with a time index (`store::St
 immutable snapshots): window, rank (how many start before a position, and how many of those are errors)
 and neighbour queries. The interface draws from a **plan** (`lanes::plan`) built per frame: spans (ranges
 at least one column wide), marks (exact position) and dense cells (a count and an error count for what
-shares a column or found no room), in at most 3 rows for a lane and 1 for the overlay of a channel plus
+shares a column or found no room), in at most `lane_rows` (up to 3) rows for a lane and 1 for the overlay of a channel plus
 one row of dense cells. Every annotation intersecting the window is represented exactly once, in the
 column it starts in; an error is never hidden in a dense cell without the error count; the cost does not
 depend on how many annotations the store holds.
 
 ## Versioning
 
-`DECODER_API_VERSION` is `1.1` (1.1 added the optional `final_through`). Adding an optional capability that existing decoders can ignore is a
+`DECODER_API_VERSION` is `1.2` (1.1 added the optional `final_through`; 1.2 added the shapes `Part` and `Whole` and the descriptor field `lane_rows`). Adding an optional capability that existing decoders can ignore is a
 minor version; changing the meaning of a call, a chunk guarantee or a limit is a major version and
 requires every built-in decoder to be updated in the same merge. Each decoder has its own `version`
 (the descriptor field) for its saved options.

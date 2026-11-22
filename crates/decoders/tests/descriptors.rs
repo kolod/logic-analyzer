@@ -71,6 +71,7 @@ static LOW: Descriptor = Descriptor {
     input: Input::Signals,
     outputs: &["byte"],
     generator: false,
+    lane_rows: 3,
 };
 
 /// Reads `byte` items and produces `word` items.
@@ -84,6 +85,7 @@ static MIDDLE: Descriptor = Descriptor {
     input: Input::Items("byte"),
     outputs: &["word"],
     generator: false,
+    lane_rows: 3,
 };
 
 /// Reads `word` items and produces nothing.
@@ -97,6 +99,7 @@ static TOP: Descriptor = Descriptor {
     input: Input::Items("word"),
     outputs: &["byte", "word"],
     generator: false,
+    lane_rows: 3,
 };
 
 fn registry() -> Registry {
@@ -489,4 +492,23 @@ fn the_instance_limit_is_enforced_and_replacing_an_instance_does_not_count_twice
     assert_eq!(code, error::TOO_MANY_INSTANCES);
     // Changing the setup of an existing instance is not adding one.
     assert!(low(3).validate(&registry(), &others, 8).is_ok());
+}
+
+#[test]
+fn the_rows_of_a_lane_are_one_to_three() {
+    let mut registry = Registry::new();
+    for (id, rows, ok) in [
+        ("test.rows0", 0_u8, false),
+        ("test.rows1", 1, true),
+        ("test.rows2", 2, true),
+        ("test.rows3", 3, true),
+        ("test.rows4", 4, false),
+    ] {
+        let d: &'static Descriptor = Box::leak(Box::new(Descriptor {
+            id,
+            lane_rows: rows,
+            ..LOW
+        }));
+        assert_eq!(registry.register(d).is_ok(), ok, "{rows} rows");
+    }
 }

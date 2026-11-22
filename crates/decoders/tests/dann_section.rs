@@ -453,3 +453,47 @@ fn an_annotation_without_a_colour_round_trips_and_is_written_with_bit_seven() {
     // Bit 7 of the style byte means "the colour of the signal"; the colour bits are then zero.
     assert!(bytes.contains(&0x80), "{bytes:?}");
 }
+
+#[test]
+fn the_block_shapes_and_the_error_flag_round_trip_and_shape_seven_is_refused() {
+    let part = annotation(
+        Kind::Range { start: 2, end: 9 },
+        Target::Lane,
+        4,
+        Shape::Part,
+        Text::Literal("a".into()),
+        false,
+    );
+    let whole = annotation(
+        Kind::Range { start: 1, end: 12 },
+        Target::Lane,
+        0,
+        Shape::Whole,
+        Text::Literal("b".into()),
+        true,
+    );
+    let block = Block {
+        instance: 1,
+        setup_version: 1,
+        covered: 20,
+        incomplete: false,
+        annotations: vec![whole, part],
+        items: vec![],
+    };
+    let bytes = encode(std::slice::from_ref(&block));
+    assert_eq!(decode(&bytes, &CONTEXT).unwrap(), vec![block.clone()]);
+    // The two new shapes have the codes 5 and 6 in bits 3 to 5 of the style byte; code 7 is unknown.
+    // The style byte is the one byte in which an encoding with a bar differs from one with a part.
+    let mut with_bar = block.clone();
+    with_bar.annotations[1].style.shape = Shape::Bar;
+    let bar_bytes = encode(std::slice::from_ref(&with_bar));
+    let part_bytes = encode(std::slice::from_ref(&block));
+    let differing: Vec<usize> = (0..bar_bytes.len())
+        .filter(|i| bar_bytes[*i] != part_bytes[*i])
+        .collect();
+    assert_eq!(differing.len(), 1, "{differing:?}");
+    assert_eq!((part_bytes[differing[0]] >> 3) & 7, 5);
+    let mut unknown = bar_bytes.clone();
+    unknown[differing[0]] = (unknown[differing[0]] & !0x38) | (7 << 3);
+    assert!(decode(&unknown, &CONTEXT).is_err());
+}

@@ -66,7 +66,7 @@ red 0, grey 7.
 | nak | red (0) |
 | packet: no error | green (2) |
 | packet: an error | red (0) |
-| packet: unfinished | grey (7) (**owner**: not specified) |
+| packet: unfinished | grey (7) (**owner**: not specified), red if a part of it was already an error |
 
 The `error` flag keeps its other duties (counted in dense cells and by the selection, a heavier outline).
 For `Part` and `Whole` shapes the fill is **not** replaced by the danger colour: a cut data block keeps its

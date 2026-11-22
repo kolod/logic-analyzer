@@ -92,6 +92,10 @@ fn draw_shape(frame: &mut Frame, shape: Shape, edge: Option<bool>, x: f32, y: f3
             );
             frame.fill_rectangle(Point::new(x, y - r), Size::new(r, r), colour);
         }
+        // A block narrower than a column is a thin filled bar of its colour.
+        Shape::Part | Shape::Whole => {
+            frame.fill_rectangle(Point::new(x - 1.0, y - r), Size::new(2.0, 2.0 * r), colour);
+        }
         Shape::Cross => {
             frame.stroke(
                 &Path::line(Point::new(x - r, y - r), Point::new(x + r, y + r)),
@@ -147,6 +151,47 @@ pub fn span_label(text: &str, width: f32) -> Option<String> {
 }
 
 /// The left edge of a cell in pixels.
+/// The room a block keeps free at each end of its text, in logical pixels.
+const BLOCK_PADDING: f32 = 4.0;
+
+/// The text of a block `width` pixels wide: the whole text if all of it fits inside with a margin,
+/// else nothing (a block never shows a cut or an overflowing text).
+#[must_use]
+pub fn block_label(text: &str, width: f32) -> Option<String> {
+    let needed = text.chars().count() as f32 * CHAR_WIDTH + 2.0 * BLOCK_PADDING;
+    (!text.is_empty() && needed <= width).then(|| text.to_owned())
+}
+
+/// The relative luminance of a colour (WCAG 2).
+fn luminance(colour: Color) -> f32 {
+    let channel = |c: f32| {
+        if c <= 0.039_28 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(colour.r) + 0.7152 * channel(colour.g) + 0.0722 * channel(colour.b)
+}
+
+/// The contrast ratio of two colours (WCAG 2), from 1 to 21.
+#[must_use]
+pub fn contrast(a: Color, b: Color) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// The colour of a text on a `fill`: black or white, whichever reads better.
+#[must_use]
+pub fn contrast_text(fill: Color) -> Color {
+    let (black, white) = (Color::BLACK, Color::WHITE);
+    if contrast(fill, black) >= contrast(fill, white) {
+        black
+    } else {
+        white
+    }
+}
+
 fn left_of(cell: &Cell, scale: f32) -> f32 {
     match cell {
         Cell::Span(span) => GUTTER + span.x0 as f32 * scale,
@@ -231,6 +276,61 @@ fn draw_span(
     }
 }
 
+/// A block of a band (`Part`, `Whole`): a solid rectangle in the colour of its style, whatever the error
+/// flag says (an error has a heavier outline), with its text if all of it fits.
+fn draw_block(
+    frame: &mut Frame,
+    cell: &SpanCell,
+    top: f32,
+    height: f32,
+    scale: f32,
+    placement: Placement,
+    look: &Look<'_>,
+) {
+    let Placement {
+        selected,
+        right_limit,
+        ..
+    } = placement;
+    let x0 = GUTTER + cell.x0 as f32 * scale;
+    let x1 = GUTTER + cell.x1 as f32 * scale;
+    let x1 = right_limit.map_or(x1, |limit| x1.min(limit.max(x0)));
+    let width = (x1 - x0).max(1.0);
+    let text_colour = look.theme.palette().text;
+    let fill = cell
+        .style
+        .colour
+        .map_or(text_colour, |index| look.variant.annotation(index));
+    frame.fill_rectangle(Point::new(x0, top), Size::new(width, height), fill);
+    let outline = Path::rectangle(Point::new(x0, top), Size::new(width, height));
+    frame.stroke(
+        &outline,
+        Stroke::default()
+            .with_color(Color {
+                a: if cell.error { 1.0 } else { 0.35 },
+                ..text_colour
+            })
+            .with_width(if cell.error { 2.0 } else { 1.0 }),
+    );
+    if selected {
+        frame.stroke(
+            &outline,
+            Stroke::default().with_color(text_colour).with_width(2.0),
+        );
+    }
+    if let Some(content) = block_label(&annotation_text(look.localizer, &cell.text), width) {
+        frame.fill_text(Text {
+            content,
+            position: Point::new(x0 + width / 2.0, top + height / 2.0),
+            color: contrast_text(fill),
+            size: Pixels(TEXT_SIZE),
+            align_x: iced::alignment::Horizontal::Center.into(),
+            align_y: Vertical::Center,
+            ..Text::default()
+        });
+    }
+}
+
 fn draw_mark(
     frame: &mut Frame,
     cell: &MarkCell,
@@ -305,6 +405,25 @@ pub fn draw_lanes(
                     .get(at.saturating_add(1))
                     .map(|next| left_of(next, scale));
                 match cell {
+                    Cell::Span(span) if span.style.shape.band().is_some() => draw_block(
+                        frame,
+                        span,
+                        row_top + 1.0,
+                        row_height - 2.0,
+                        scale,
+                        Placement {
+                            signal: None,
+                            selected: is_selected(
+                                look,
+                                decoder.instance,
+                                Target::Lane,
+                                span.id,
+                                span.start,
+                            ),
+                            right_limit,
+                        },
+                        look,
+                    ),
                     Cell::Span(span) => draw_span(
                         frame,
                         span,
@@ -651,5 +770,56 @@ mod tests {
         };
         assert!(!marks_legible(&plan, 1_000.0));
         assert!(marks_legible(&Plan::default(), 1_000.0));
+    }
+
+    #[test]
+    fn a_block_shows_its_whole_text_or_none_never_a_cut_text() {
+        // 4 pixels of margin at each end and 6.5 per character: "Stop" needs 34 pixels.
+        assert_eq!(block_label("Stop", 34.0).as_deref(), Some("Stop"));
+        assert_eq!(block_label("Stop", 33.9), None);
+        assert_eq!(block_label("Repeated start", 60.0), None);
+        assert_eq!(
+            block_label("Repeated start", 100.0).as_deref(),
+            Some("Repeated start")
+        );
+        assert_eq!(block_label("", 500.0), None);
+        for width in 0..300 {
+            if let Some(text) = block_label("Address 0x50 (write)", width as f32) {
+                assert_eq!(text, "Address 0x50 (write)");
+            }
+        }
+    }
+
+    /// The colours the I2C blocks use (research R3): red 0, yellow 1, green 2, blue 4, grey 7.
+    const ROLES: [u8; 5] = [0, 1, 2, 4, 7];
+
+    #[test]
+    fn the_text_on_a_block_has_contrast_on_every_variant() {
+        for variant in [Variant::Dark, Variant::Light, Variant::HighContrast] {
+            for index in ROLES {
+                let fill = variant.annotation(index);
+                let text = contrast_text(fill);
+                let ratio = contrast(fill, text);
+                assert!(ratio >= 4.5, "{variant:?} colour {index}: {ratio}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_colours_of_the_blocks_tell_apart_on_every_variant() {
+        for variant in [Variant::Dark, Variant::Light, Variant::HighContrast] {
+            for (n, a) in ROLES.iter().enumerate() {
+                for b in ROLES.iter().skip(n + 1) {
+                    let (ca, cb) = (variant.annotation(*a), variant.annotation(*b));
+                    let distance =
+                        ((ca.r - cb.r).powi(2) + (ca.g - cb.g).powi(2) + (ca.b - cb.b).powi(2))
+                            .sqrt();
+                    assert!(
+                        distance > 0.25,
+                        "{variant:?}: colours {a} and {b}: {distance}"
+                    );
+                }
+            }
+        }
     }
 }

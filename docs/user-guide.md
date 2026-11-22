@@ -192,9 +192,14 @@ marks where they were planted.
 
 Choose **I2C** in the list, then choose the channels of **Clock (SCL)** and **Data (SDA)**.
 
-- **The lane** shows every transaction as a range (`Write to 0x50`, `Read from 0x50`) with its
-  address (`Address 0x50 (write)`), its data bytes (`Data 0x12`) and an **ACK** or **NAK** point for
-  each byte; start, repeated start and stop are flags.
+- **The lane** has two bands of blocks. The upper one shows the parts of a transaction side by side:
+  **Start** (blue), the address (`Address 0x50 (write)`), each data byte (`Data 0x12`), an **ACK** (green)
+  or **NAK** (red) after each byte, a **Repeated start** where there is one, and **Stop** (blue).
+  Address and data blocks are yellow for a write and green for a read. The lower band is one block for the
+  whole transaction (`Write to 0x50`, `Read from 0x50`), green if all went well and red if there was an
+  error (the controller's NAK on the last byte it reads is normal). A block shows its text only if all of
+  it fits; zoom in and it appears. Select the arrow on the clock line of a NAK to read what was not
+  acknowledged.
 - **On the signals** a dot on the data line marks every start and stop, and an arrow on the clock line
   marks every clock edge at which a bit was read (nine for a byte: eight bits and the acknowledge).
   Zoom in on a byte to see them; at wide zoom they are not drawn, as for any decoder.

@@ -34,4 +34,4 @@ pub mod text;
 
 /// Version of the decoder API contract (`docs/decoder-api.md`). A change to the interface a
 /// decoder is written against changes this version and the document in the same merge.
-pub const DECODER_API_VERSION: &str = "1.1";
+pub const DECODER_API_VERSION: &str = "1.2";

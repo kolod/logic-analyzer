@@ -83,6 +83,7 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
     input: Input::Signals,
     outputs: &[ITEM],
     generator: true,
+    lane_rows: 2,
 };
 
 /// Finding the period: the part of the capture read so far, and the estimator.
@@ -144,7 +145,7 @@ fn gap_between(gaps: &[la_storage::Gap], a: u64, b: u64) -> bool {
 
 enum State {
     Calibrating(Box<Calibration>),
-    Running(Bus),
+    Running(Box<Bus>),
 }
 
 /// The state of one pass.
@@ -198,12 +199,12 @@ impl I2c {
     fn calibrate(&mut self, reader: &SignalReader, budget: usize) {
         if let State::Calibrating(calibration) = &mut self.state {
             if let Some(period) = calibration.scan(reader, budget) {
-                self.state = State::Running(Bus::new(
+                self.state = State::Running(Box::new(Bus::new(
                     self.scl_channel,
                     self.sda_channel,
                     period,
                     self.display,
-                ));
+                )));
             }
         }
     }

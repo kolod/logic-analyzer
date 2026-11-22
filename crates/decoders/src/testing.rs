@@ -56,6 +56,7 @@ const fn descriptor(id: &'static str) -> Descriptor {
         input: Input::Signals,
         outputs: &[],
         generator: false,
+        lane_rows: 3,
     }
 }
 

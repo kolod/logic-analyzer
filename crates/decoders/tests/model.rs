@@ -307,3 +307,26 @@ fn refusals_have_a_short_name_for_the_log() {
     unique.dedup();
     assert_eq!(unique.len(), names.len(), "{names:?}");
 }
+
+/// The block shapes of the lane bands (decoder API 1.2) are for ranges only.
+#[test]
+fn the_block_shapes_are_valid_on_a_range_and_refused_on_a_point_or_an_edge() {
+    for shape in [Shape::Part, Shape::Whole] {
+        let mut range = plain(Kind::Range { start: 2, end: 8 });
+        range.style.shape = shape;
+        assert_eq!(range.validate(&BOUNDS), Ok(()), "{shape:?}");
+        let mut point = plain(Kind::Point { at: 1 });
+        point.style.shape = shape;
+        assert_eq!(point.validate(&BOUNDS), Err(Refusal::Style), "{shape:?}");
+        let mut edge = plain(Kind::Edge {
+            at: 1,
+            rising: true,
+        });
+        edge.style.shape = shape;
+        assert_eq!(edge.validate(&BOUNDS), Err(Refusal::Style), "{shape:?}");
+        // A zero-length range is drawn as a point: it is accepted (the planner draws it as a mark).
+        let mut empty = plain(Kind::Range { start: 3, end: 3 });
+        empty.style.shape = shape;
+        assert_eq!(empty.validate(&BOUNDS), Ok(()));
+    }
+}

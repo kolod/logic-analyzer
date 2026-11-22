@@ -128,9 +128,9 @@ every block and compare them with the drawn blocks.
 ### Edge Cases
 
 - A packet that is not finished when the capture ends, or was cut by lost samples: the upper blocks
-  that are complete are drawn, the packet block runs to the end of the last block, and it is not red
-  (as in feature 008, an incomplete packet is not an error in itself) but has its own, neutral colour
-  (see Assumptions).
+  that are complete are drawn and the packet block runs to the end of the last block. As in feature 008 an
+  incomplete packet is not an error in itself, so it has a neutral colour (see Assumptions); but if a part
+  of it was already an error (a byte cut short, lost samples) it is red, as FR-010 says.
 - A start followed at once by a stop (no clock pulse between): a start block, a stop block, and a red
   packet block for the empty transaction.
 - A 10-bit address: the two address bytes are two address blocks, each with its ack block, and the text
@@ -231,9 +231,8 @@ every block and compare them with the drawn blocks.
   added. The owner's four marker pairs agree with this rule on the reference capture (start: the period
   around the SDA fall, ending where the first bit's period begins; ack: one period centred on the clock
   pulse; stop: one period, ending at the rise of SDA).
-- An unfinished packet is drawn with a neutral colour (the colour of an ordinary decoder annotation),
-  not red or green, since it is neither good nor failed yet; the owner did not specify this and may
-  change it.
+- An unfinished packet with no error in it is drawn in grey, not red or green, since it is neither good nor
+  failed yet; the owner did not specify this and may change it.
 - The lane framework of feature 007 may need to let a decoder name the colour of a block in a way that
   follows the theme (blue, yellow, green, red as roles, not as fixed values); this is decided in the plan.
 - The details of a block (what the user sees on selecting it) are those of feature 008, now attached to

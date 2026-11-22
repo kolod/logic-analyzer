@@ -10,8 +10,8 @@
 mod common;
 
 use common::i2c::{
-    Bus, Decoded, Expected, SDA, byte_arrows, byte_lane, decode_with, dot, lane_point, lane_range,
-    read_tx, sorted, write_tx,
+    Bus, Decoded, Expected, GREEN, HALF, SDA, YELLOW, ack_end, byte_arrows, byte_lane, decode_with,
+    dot, part, read_tx, sorted, start_block, stop_block, whole, write_tx,
 };
 use la_decoders::decoders::i2c::items;
 use la_decoders::model::{Item, Payload};
@@ -119,41 +119,48 @@ fn the_number_base_formats_addresses_and_bytes() {
 fn ten_bit_write(bus: &mut Bus, address: u16, data: &[u8]) -> Vec<Expected> {
     let mut expected = Vec::new();
     let start = bus.start();
-    expected.push(lane_point(start, "ann-i2c-start"));
+    expected.push(start_block(start, "ann-i2c-start"));
     expected.push(dot(SDA, start, "ann-i2c-start"));
     let header_value = 0xF0 | ((address >> 8) as u8) << 1;
     let header = bus.byte(header_value, true);
     let low_value = (address & 0xFF) as u8;
     let low = bus.byte(low_value, true);
     let text = format!("0x{address:02X}");
-    // One range over both bytes, one acknowledge point for each.
-    expected.push(lane_range(
-        header.first,
-        low.ack + 1,
-        "ann-i2c-address-write",
-        &[&text],
-    ));
-    expected.push(lane_point(header.ack, "ann-i2c-ack"));
-    expected.push(lane_point(low.ack, "ann-i2c-ack"));
+    // One address block for each of the two bytes, both naming the whole address, and one acknowledge
+    // block for each.
+    for at in [header, low] {
+        expected.extend(byte_lane(
+            at,
+            "ann-i2c-address-write",
+            &text,
+            YELLOW,
+            "ann-i2c-ack",
+            false,
+        ));
+    }
     expected.extend(byte_arrows(header, header_value, "ann-i2c-ack"));
     expected.extend(byte_arrows(low, low_value, "ann-i2c-ack"));
+    let mut last_ack_end = ack_end(low);
     for value in data {
         let at = bus.byte(*value, true);
+        last_ack_end = ack_end(at);
         expected.extend(byte_lane(
             at,
             "ann-i2c-data",
             &format!("0x{value:02X}"),
+            YELLOW,
             "ann-i2c-ack",
             false,
         ));
         expected.extend(byte_arrows(at, *value, "ann-i2c-ack"));
     }
     let stop = bus.stop();
-    expected.push(lane_point(stop, "ann-i2c-stop"));
+    expected.push(stop_block(last_ack_end, stop));
     expected.push(dot(SDA, stop, "ann-i2c-stop"));
-    expected.push(lane_range(
-        start,
-        stop + 1,
+    expected.push(whole(
+        start - HALF,
+        stop,
+        GREEN,
         "ann-i2c-transaction-write",
         &[&text],
     ));
@@ -215,33 +222,42 @@ fn the_read_part_of_a_ten_bit_transaction_shows_the_address_already_known() {
     bus.idle(64);
     let decoded = decode_with_options(&bus.words(), &[]);
     let lane = decoded.lane();
-    assert!(lane.contains(&lane_range(
-        header.first,
-        low.ack + 1,
-        "ann-i2c-address-write",
-        &["0x123"]
-    )));
-    assert!(lane.contains(&lane_range(
-        read_header.first,
-        read_header.ack + 1,
+    // The write part: the header and the low byte are two address blocks that both name the address.
+    for at in [header, low] {
+        assert!(lane.contains(&part(
+            at.first - HALF,
+            at.ack - HALF,
+            YELLOW,
+            "ann-i2c-address-write",
+            &["0x123"]
+        )));
+    }
+    // The read part (green) after a repeated start block, and the data block that ends it.
+    assert!(lane.contains(&part(
+        read_header.first - HALF,
+        read_header.ack - HALF,
+        GREEN,
         "ann-i2c-address-read",
         &["0x123"]
     )));
-    assert!(lane.contains(&lane_point(restart, "ann-i2c-repeated-start")));
-    assert!(lane.contains(&lane_range(
-        start,
-        stop + 1,
+    assert!(lane.contains(&start_block(restart, "ann-i2c-repeated-start")));
+    assert!(lane.contains(&whole(
+        start - HALF,
+        stop,
+        GREEN,
         "ann-i2c-transaction-write",
         &["0x123"]
     )));
-    assert!(lane.contains(&lane_range(
-        data.first,
-        data.ack + 1,
+    assert!(lane.contains(&part(
+        data.first - HALF,
+        data.ack - HALF,
+        GREEN,
         "ann-i2c-data",
         &["0x99"]
     )));
-    // One acknowledge point for each of the three address bytes and the NAK that ends the read.
+    // One ACK block for each of the three address bytes; the NAK that ends the read is a NAK block.
     assert_eq!(lane.iter().filter(|e| e.key == "ann-i2c-ack").count(), 3);
+    assert_eq!(lane.iter().filter(|e| e.key == "ann-i2c-nak").count(), 1);
     assert!(decoded.all.iter().all(|e| !e.error));
     let addresses = address_items(&decoded.items);
     assert_eq!(

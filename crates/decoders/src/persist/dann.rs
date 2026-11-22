@@ -58,6 +58,8 @@ fn shape_code(shape: Shape) -> u8 {
         Shape::Bar => 2,
         Shape::Flag => 3,
         Shape::Cross => 4,
+        Shape::Part => 5,
+        Shape::Whole => 6,
     }
 }
 
@@ -68,6 +70,8 @@ fn shape_of(code: u8) -> Result<Shape, Invalid> {
         2 => Shape::Bar,
         3 => Shape::Flag,
         4 => Shape::Cross,
+        5 => Shape::Part,
+        6 => Shape::Whole,
         _ => return Err(Invalid("a shape is unknown")),
     })
 }

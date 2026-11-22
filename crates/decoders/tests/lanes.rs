@@ -498,3 +498,131 @@ fn a_planted_one_sample_annotation_is_represented_at_every_zoom_among_a_million(
     assert!(seen_alone, "it gets a cell of its own when zoomed in");
     assert!(seen_dense, "and is counted as an error when zoomed out");
 }
+
+fn block(start: u64, end: u64, shape: Shape, error: bool) -> Annotation {
+    let mut a = annotation(Kind::Range { start, end }, error);
+    a.style.shape = shape;
+    a
+}
+
+/// The shape of the first cell of a row (or `None` for an empty row).
+fn row_shapes(p: &Plan, row: usize) -> Vec<Shape> {
+    p.rows[row]
+        .iter()
+        .map(|cell| match cell {
+            Cell::Span(s) => s.style.shape,
+            Cell::Mark(m) => m.style.shape,
+        })
+        .collect()
+}
+
+#[test]
+fn a_part_is_in_the_first_row_and_a_whole_in_the_second_whatever_the_order() {
+    let window = Window {
+        start: 0,
+        end: 1_000,
+        columns: 100,
+    };
+    // The whole starts first and covers the parts: a packer by overlap would put it in row 0.
+    let orders: [Vec<Annotation>; 2] = [
+        vec![
+            block(0, 300, Shape::Whole, false),
+            block(0, 100, Shape::Part, false),
+            block(100, 200, Shape::Part, false),
+            block(200, 300, Shape::Part, false),
+        ],
+        vec![
+            block(200, 300, Shape::Part, false),
+            block(100, 200, Shape::Part, false),
+            block(0, 100, Shape::Part, false),
+            block(0, 300, Shape::Whole, false),
+        ],
+    ];
+    for all in &orders {
+        let mut store = store_of(all);
+        let p = plan(&store.snapshot(), &window, 2);
+        assert_eq!(p.rows.len(), 2);
+        assert_eq!(row_shapes(&p, 0), vec![Shape::Part; 3]);
+        assert_eq!(row_shapes(&p, 1), vec![Shape::Whole]);
+        assert!(p.dense.is_empty());
+    }
+}
+
+#[test]
+fn a_lane_with_blocks_has_all_its_rows_even_when_one_band_is_empty() {
+    let window = Window {
+        start: 0,
+        end: 1_000,
+        columns: 100,
+    };
+    let mut store = store_of(&[block(0, 100, Shape::Part, false)]);
+    let p = plan(&store.snapshot(), &window, 2);
+    assert_eq!(p.rows.len(), 2);
+    assert_eq!((p.rows[0].len(), p.rows[1].len()), (1, 0));
+}
+
+#[test]
+fn a_part_that_overlaps_another_part_becomes_a_dense_cell_not_a_second_row() {
+    let window = Window {
+        start: 0,
+        end: 1_000,
+        columns: 100,
+    };
+    let mut store = store_of(&[
+        block(0, 300, Shape::Part, false),
+        block(100, 200, Shape::Part, true),
+    ]);
+    let p = plan(&store.snapshot(), &window, 2);
+    assert_eq!(row_shapes(&p, 0), vec![Shape::Part]);
+    assert!(p.rows.get(1).is_none_or(Vec::is_empty));
+    assert_eq!(p.dense.iter().map(|d| d.count).sum::<u64>(), 1);
+    assert_eq!(p.dense.iter().map(|d| d.errors).sum::<u64>(), 1);
+    assert_eq!(p.represented(), 2);
+}
+
+#[test]
+fn with_three_rows_and_no_blocks_the_plan_is_packed_as_before() {
+    let window = Window {
+        start: 0,
+        end: 1_000,
+        columns: 100,
+    };
+    let all: Vec<Annotation> = (0..3)
+        .map(|i| {
+            annotation(
+                Kind::Range {
+                    start: 100 + i,
+                    end: 600,
+                },
+                false,
+            )
+        })
+        .collect();
+    let mut store = store_of(&all);
+    let p = plan(&store.snapshot(), &window, LANE_ROWS);
+    assert_eq!(p.rows.len(), 3);
+    assert!(p.rows.iter().all(|row| row.len() == 1));
+}
+
+#[test]
+fn dense_traffic_of_blocks_keeps_the_bound_of_the_plan() {
+    let window = Window {
+        start: 0,
+        end: 1_000_000,
+        columns: 200,
+    };
+    let all: Vec<Annotation> = (0..100_000_u64)
+        .map(|i| {
+            let shape = if i % 3 == 0 {
+                Shape::Whole
+            } else {
+                Shape::Part
+            };
+            block(i * 10, i * 10 + 8, shape, i % 97 == 0)
+        })
+        .collect();
+    let mut store = store_of(&all);
+    let p = plan(&store.snapshot(), &window, 2);
+    assert!(p.cell_count() <= 4 * 200, "{}", p.cell_count());
+    assert_eq!(p.represented(), 100_000);
+}

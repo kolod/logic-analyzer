@@ -233,7 +233,7 @@ fn while_the_period_is_unknown_nothing_is_shown_and_nothing_is_covered() {
         grown
             .lane()
             .iter()
-            .any(|e| e.positions.first() == Some(&start))
+            .any(|e| e.positions.first() == Some(&(start - common::i2c::HALF)))
     );
     assert_eq!(pass.sink().results().coverage.covered, words.len() as u64);
 }
@@ -279,7 +279,13 @@ fn a_long_start_up_of_noise_is_scanned_in_bounded_steps_and_the_transaction_afte
     assert!(coverage.windows(2).all(|w| w[0] <= w[1]));
     let decoded = common::i2c::collect(&mut pass);
     assert_eq!(decoded.all, sorted(expected));
-    assert!(decoded.all.iter().all(|e| e.positions[0] >= lead));
+    // Nothing before the start block, which begins half a period before the first start.
+    assert!(
+        decoded
+            .all
+            .iter()
+            .all(|e| e.positions[0] + common::i2c::HALF >= lead)
+    );
     // Silence the unused import when this module is compiled on its own.
     let _ = SCL;
 }

@@ -1,8 +1,9 @@
 //! Decoding I2C transactions (spec 008, user story 1, task T007).
 //!
 //! Every expectation is written by hand from the positions the bus builder reports: a byte is a
-//! range from the first sampling edge of SCL to the acknowledge edge (inclusive: `end` is the edge
-//! plus one), every sampled bit is an arrow on SCL, a start and a stop are dots on SDA.
+//! block of eight bit cells (half a period either side of the rising edges of SCL) and an acknowledge
+//! block of one cell, a start and a stop are blocks around their SDA edge, the whole transaction is a
+//! block below them, every sampled bit is an arrow on SCL, a start and a stop are dots on SDA.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,8 +15,8 @@
 mod common;
 
 use common::i2c::{
-    Bus, Decoded, Expected, SCL, SDA, byte_arrows, byte_lane, decode, dot, lane_point, lane_range,
-    read_tx, sorted, write_tx,
+    Bus, Decoded, Expected, GREEN, HALF, SCL, SDA, YELLOW, ack_end, byte_arrows, byte_lane, decode,
+    dot, read_tx, sorted, start_block, stop_block, whole, write_tx,
 };
 use la_decoders::model::Shape;
 
@@ -64,13 +65,14 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
     bus.idle(64);
     let mut expected = Vec::new();
     let start = bus.start();
-    expected.push(lane_point(start, "ann-i2c-start"));
+    expected.push(start_block(start, "ann-i2c-start"));
     expected.push(dot(SDA, start, "ann-i2c-start"));
     let a = bus.byte(0xA0, true);
     expected.extend(byte_lane(
         a,
         "ann-i2c-address-write",
         "0x50",
+        YELLOW,
         "ann-i2c-ack",
         false,
     ));
@@ -80,18 +82,20 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
         register,
         "ann-i2c-data",
         "0x10",
+        YELLOW,
         "ann-i2c-ack",
         false,
     ));
     expected.extend(byte_arrows(register, 0x10, "ann-i2c-ack"));
     let restart = bus.repeated_start();
-    expected.push(lane_point(restart, "ann-i2c-repeated-start"));
+    expected.push(start_block(restart, "ann-i2c-repeated-start"));
     expected.push(dot(SDA, restart, "ann-i2c-repeated-start"));
     let b = bus.byte(0xA1, true);
     expected.extend(byte_lane(
         b,
         "ann-i2c-address-read",
         "0x50",
+        GREEN,
         "ann-i2c-ack",
         false,
     ));
@@ -101,17 +105,20 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
         data,
         "ann-i2c-data",
         "0x55",
+        GREEN,
         "ann-i2c-nak",
         false,
     ));
     expected.extend(byte_arrows(data, 0x55, "ann-i2c-nak"));
     let stop = bus.stop();
-    expected.push(lane_point(stop, "ann-i2c-stop"));
+    expected.push(stop_block(ack_end(data), stop));
     expected.push(dot(SDA, stop, "ann-i2c-stop"));
-    // One transaction, named after its first part.
-    expected.push(lane_range(
-        start,
-        stop + 1,
+    // One transaction, named after its first part: green, the controller's NAK at the end of a read
+    // is not an error.
+    expected.push(whole(
+        start - HALF,
+        stop,
+        GREEN,
         "ann-i2c-transaction-write",
         &["0x50"],
     ));
@@ -122,8 +129,9 @@ fn a_repeated_start_is_an_event_and_both_parts_are_one_transaction() {
 
 #[test]
 fn a_nak_on_the_address_and_a_nak_on_a_written_byte_are_errors() {
-    // The address is not acknowledged: the NAK point is an error. (A good transaction comes first:
-    // a single byte has too few clock pulses for the bus period to be found.)
+    // The address is not acknowledged: the NAK block is red and an error, and so is the packet. (A
+    // good transaction comes first: a single byte has too few clock pulses for the bus period to be
+    // found.)
     let mut bus = Bus::new();
     bus.idle(64);
     write_tx(&mut bus, 0x51, &[0x01, 0x02]);
@@ -136,17 +144,21 @@ fn a_nak_on_the_address_and_a_nak_on_a_written_byte_are_errors() {
     let nak = decoded
         .lane()
         .into_iter()
-        .find(|e| e.positions == vec![a.ack])
+        .find(|e| e.positions == vec![a.ack - HALF, a.ack + HALF])
         .unwrap();
     assert!(nak.error, "{nak:?}");
-    assert_eq!(decoded.lane().iter().filter(|e| e.error).count(), 1);
-    // The transaction is still one unit from its start to its stop.
-    assert!(decoded.lane().contains(&lane_range(
-        start,
-        stop + 1,
+    // The NAK block and the packet are the errors of the lane.
+    assert_eq!(decoded.lane().iter().filter(|e| e.error).count(), 2);
+    // The transaction is still one unit from its start to its stop, in red.
+    let mut packet = whole(
+        start - HALF,
+        stop,
+        common::i2c::RED,
         "ann-i2c-transaction-write",
-        &["0x50"]
-    )));
+        &["0x50"],
+    );
+    packet.error = true;
+    assert!(decoded.lane().contains(&packet));
 
     // A written data byte is not acknowledged.
     let mut bus = Bus::new();
@@ -160,8 +172,13 @@ fn a_nak_on_the_address_and_a_nak_on_a_written_byte_are_errors() {
     bus.idle(64);
     let decoded = decode(&bus.words());
     let errors: Vec<Expected> = decoded.lane().into_iter().filter(|e| e.error).collect();
-    assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].positions, vec![d.ack]);
+    // The NAK block and the red packet.
+    assert_eq!(errors.len(), 2);
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.positions == vec![d.ack - HALF, d.ack + HALF])
+    );
 }
 
 #[test]
@@ -195,8 +212,18 @@ fn an_sda_change_on_the_sample_scl_falls_is_neither_a_start_nor_a_stop() {
         .collect();
     assert_eq!(arrows, rises);
     let lane = decoded.lane();
-    assert!(lane.contains(&lane_point(start, "ann-i2c-start")));
-    assert!(lane.contains(&lane_point(stop, "ann-i2c-stop")));
+    // The bus period here is 12 samples, so a cell reaches 6 samples either side of the edge.
+    assert!(lane.contains(&common::i2c::part(
+        start - 6,
+        start + 6,
+        common::i2c::BLUE,
+        "ann-i2c-start",
+        &[]
+    )));
+    assert!(
+        lane.iter()
+            .any(|e| e.key == "ann-i2c-stop" && e.positions[1] == stop)
+    );
     assert!(lane.iter().all(|e| !e.error), "{lane:?}");
     // Three bytes: an address and two data bytes.
     assert_eq!(lane.iter().filter(|e| e.key == "ann-i2c-data").count(), 2);

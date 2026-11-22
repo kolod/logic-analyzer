@@ -34,7 +34,7 @@ Upper band: shape `Part`; lower band: shape `Whole`. Colour indices of the palet
 | nak | red | NAK |
 | packet without error | green | Write to 0x43 / Read from 0x43 |
 | packet with an error | red | the same |
-| packet not finished | grey | Incomplete transaction |
+| packet not finished | grey, or red if a part of it was already an error (a cut byte, lost samples) | Incomplete transaction |
 
 A NAK that is an error is an address not acknowledged, a written byte not acknowledged; the controller's
 NAK of the last byte it reads is red but is not an error. A packet is red when any of its parts is an error

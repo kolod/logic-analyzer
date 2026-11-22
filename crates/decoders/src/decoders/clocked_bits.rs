@@ -111,6 +111,7 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
     input: Input::Signals,
     outputs: &[BYTE_ITEM],
     generator: true,
+    lane_rows: 3,
 };
 
 /// The state of one pass.
