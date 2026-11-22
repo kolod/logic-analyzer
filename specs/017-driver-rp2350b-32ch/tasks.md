@@ -19,7 +19,7 @@ round-trip tests are the only ones where the encoder and the decoder check each 
 
 **Organization**: the plan delivers in four stages that are separate pull requests (research R12). The two
 foundational phases (wide channels, a richer abstraction) block every story and are stages 1 and 2; the stories
-then follow the order of the spec: **US1** (32 channels, P1), **US2** (at least what the original does, P1),
+then follow the order of the spec (the documents of US5, T066 to T069, ship with stage 3): **US1** (32 channels, P1), **US2** (at least what the original does, P1),
 **US3** (the firmware in the repository and on the board, P2), **US4** (failures, P2), **US6** (chaining,
 P2, stage 4), **US5** (documents, P3), Polish. US1 to US4 together are stage 3.
 
@@ -46,7 +46,7 @@ strings in `resources/i18n/<lang>/ui.ftl`. "The protocol" is `contracts/protocol
 - [ ] T002 Read the schematic of the board (`RP2350B_SCH.pdf`: the owner supplies the pin list if the file
   cannot be read here) and decide the pin map: the 32 consecutive input pins and their window (base 0 or 16),
   the two trigger pins, the pins of the external memory, USB and the boot button, the indicator; write it in
-  `firmware/rp2350b/PINS.md` and in `docs/drivers/rp2350b.md` (research R5, contract `firmware.md`). Confirm in
+  `firmware/rp2350b/PINS.md` and create `docs/drivers/rp2350b.md` with it (T067 completes that document) (research R5, contract `firmware.md`). Confirm in
   the same note the chip variant (the RP2350B) and the memory chip's select pin.
 - [ ] T003 [P] Create the crate skeletons `crates/la-proto` (`no_std`, `std` feature for the host) and
   `crates/driver-rp2350b`, add them to the workspace, and check `cargo build --workspace` and `cargo deny check`
@@ -58,7 +58,7 @@ strings in `resources/i18n/<lang>/ui.ftl`. "The protocol" is `contracts/protocol
   each with its reason; the host `cargo test --workspace` must not need the target.
 - [ ] T005 [P] Add a `firmware` job to `.github/workflows/ci.yml` that builds `la-fw` and `la-fw-rig` for the
   target and runs the tests of `la-fw-logic` and `la-proto` on the host, with `cargo deny` for the firmware
-  workspace; keep the names of the required checks and the "descriptions only" rule of the `changes` job
+  workspace; run the recorded-transport tests on Windows and Debian (SC-007), keep the names of the required checks and the "descriptions only" rule of the `changes` job
   (a change under `firmware/` is code).
 
 ---
@@ -177,10 +177,14 @@ channel shows its own pattern (spec US1).
   `crates/driver-rp2350b/tests/fixtures/`: the driver lists the device from the information reply (32 channels,
   rates, depth), a capture of 32 channels and one of channels 24 to 31 only return exactly the recorded words as
   `words_per_sample` 1, the device identity is stable and a capture is not marked simulated; a test of the
-  32-channel packing fails if the eight extra channels are lost or mixed.
+  32-channel packing fails if the eight extra channels are lost or mixed; a recording with a lost-sample mark
+  gives stored samples plus lost positions equal to the positions the capture covers (FR-013); `start` returns at
+  once and `read` returns in pieces without blocking (FR-012); listing does not block on a port that stays silent
+  (FR-002).
 - [ ] T032 [P] [US1] `firmware/rp2350b/la-fw-logic/tests/`: request checks against the limits (each field, the
   first failure named), the mode for every channel set, the packing and the compact coding of the same cases as
-  T030 (the firmware's code, run on the computer).
+  T030 (the firmware's code, run on the computer), and the count of lost samples on an overrun (the stream's
+  mark plus the samples sent equal the samples sampled).
 - [ ] T033 [P] [US1] `crates/driver-rp2350b/tests/hardware.rs` (opt-in: `#[ignore]` and an environment variable):
   the capture of all 32 channels against the rig (steps of research R10).
 
@@ -203,8 +207,11 @@ channel shows its own pattern (spec US1).
   the bootloader, the indicator), the capture engine for the internal memory (PIO sampling of the 32 pins, two
   chained DMA channels into a ring buffer) at the rates of one capture mode, a panic handler that records a code
   and resets.
+- [ ] T052 [US1] `firmware/rp2350b/la-fw-rig` **(board)**: the pattern generator of the rig (channel `n` a square
+  wave of a period that depends on `n`, a counter on all pins, the trigger patterns, started by a text line) and its
+  wiring note in `docs/drivers/rp2350b-verification.md`.
 - [ ] T039 [US1] **(board)** Flash the board, run T033 against the rig (`la-fw-rig`, T052) and the steps 1 to 3 of
-  `quickstart.md` section 3; write the results in `verification.md`.
+  `quickstart.md` section 3; write the results in `verification.md`, with the time from plugging in to the first capture (SC-006).
 
 **Checkpoint**: US1 works with the board; the recorded tests run without it. MVP.
 
@@ -233,7 +240,7 @@ accuracy.
   request and back, and the capabilities from the reply give the limits of T022 (the values of the original at 24
   channels are the least the capabilities declare).
 - [ ] T043 [P] [US2] `crates/la-proto/tests/memory.rs` and `firmware/rp2350b/la-fw-logic/tests/memory.rs`: the
-  choice of memory (auto, internal, external) by rate, mode and length against `PSRAMRATE`, the depth declared by
+  choice of memory (auto, internal, external) by rate, mode and length against a `PSRAMRATE` threshold given as a parameter (the measured value comes from T048), the depth declared by
   rate band, a request the memory cannot take refused with `ERR_NO_MEMORY`.
 
 ### Implementation
@@ -253,7 +260,8 @@ accuracy.
 - [ ] T048 [US2] **(board)** Measure and write in `docs/drivers/rp2350b.md` and `verification.md`: the highest rate
   at 8, 16, 24 and 32 channels without a lost sample, the jitter at each offered rate, the DMA and bus load at 100
   MHz and 32 channels, the sustained write speed of the external memory and the `PSRAMRATE` it gives; declare the
-  rates in the information reply from the result.
+  rates in the information reply from the result, and count the samples lost at each rate (none up to 24 channels
+  at 100 MHz: SC-003).
 - [ ] T049 [US2] **(board)** Steps 4 and 5 of `quickstart.md` section 3 against the list of T040: each function checked,
   the results recorded.
 
@@ -277,9 +285,7 @@ accuracy.
 
 ### Implementation
 
-- [ ] T052 [US3] `firmware/rp2350b/la-fw-rig` **(board)**: the pattern generator of the rig (channel `n` a square
-  wave of a period that depends on `n`, a counter on all pins, the trigger patterns, started by a text line) and its
-  wiring note in `docs/drivers/rp2350b-verification.md`.
+- [ ] T052 Moved to Phase 4 (the rig is needed by T033 and T039).
 - [ ] T053 [US3] The commands and the tools in `firmware/rp2350b/README.md` and `contracts/firmware.md`
   (the UF2 step, flashing through the boot button, the restart into the bootloader); the version of the firmware
   from the workspace version; `THIRD-PARTY.md` complete.
@@ -311,7 +317,7 @@ accuracy.
 
 ### Implementation
 
-- [ ] T058 [US4] `crates/driver-rp2350b`: the error mapping and containment, the incomplete mark, the texts of
+- [ ] T058 [US4] `crates/driver-rp2350b`: the error mapping and containment, the incomplete mark, the logging of error codes and counts (never signal data: Principle VI), the texts of
   the errors in six languages and the stable codes of `data-model.md`; the device list updates on unplugging.
 - [ ] T059 [US4] `firmware/rp2350b/la-fw` **(board)**: the watchdog that restarts a board that stops serving the
   link, the panic handler's code area, the answers to every malformed input, `ERR_BUSY`.
@@ -360,7 +366,7 @@ accuracy.
 
 ### Implementation
 
-- [ ] T067 [US5] `docs/drivers/rp2350b.md`: the pin map, the warning that the pins take 3.3 V only, what the device
+- [ ] T067 [US5] `docs/drivers/rp2350b.md` (created by T002): complete it with the pin map, the warning that the pins take 3.3 V only, what the device
   can and cannot do (the measured rates, the memory, the chain), access on Windows 10 and 11 and on Debian 13 (the
   serial port, the group `dialout`), the errors with their remedies.
 - [ ] T068 [US5] `docs/drivers/rp2350b-verification.md`: the manual procedure with the rig for every function of the
