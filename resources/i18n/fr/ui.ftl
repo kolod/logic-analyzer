@@ -158,6 +158,17 @@ trigger-pattern-levels = Niveaux du motif, première voie d'abord (0 ou 1)
 capture-pre-trigger = Échantillons avant le déclenchement
 capture-after-trigger = Échantillons après le déclenchement : { $count }
 capture-bursts = Rafales (0 pour une acquisition)
+# Chaînes de cartes qui acquièrent ensemble (affiché quand une carte chaînable est branchée).
+chain-title = Chaînes de cartes
+chain-help = Des cartes reliées entre elles acquièrent comme un seul appareil. Choisissez les cartes dans l'ordre ; la première est la maître.
+chain-name = Nom de la chaîne
+chain-create = Créer la chaîne
+chain-remove = Retirer
+chain-shift = Décalage
+chain-master = Maître
+chain-slave = Esclave
+chain-no-boards = Aucune carte chaînable n'est libre.
+chain-board-missing = (non branchée)
 capture-channels = Canaux à enregistrer
 capture-channels-all = Tous
 capture-channels-none = Aucun

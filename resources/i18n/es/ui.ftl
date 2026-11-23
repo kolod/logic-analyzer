@@ -158,6 +158,17 @@ trigger-pattern-levels = Niveles del patrón, primer canal primero (0 o 1)
 capture-pre-trigger = Muestras antes del disparador
 capture-after-trigger = Muestras después del disparador: { $count }
 capture-bursts = Ráfagas (0 para una captura)
+# Cadenas de placas que capturan juntas (se muestran cuando hay una placa encadenable conectada).
+chain-title = Cadenas de placas
+chain-help = Las placas conectadas entre sí capturan como un solo dispositivo. Elija las placas en orden; la primera es la maestra.
+chain-name = Nombre de la cadena
+chain-create = Crear la cadena
+chain-remove = Quitar
+chain-shift = Desfase
+chain-master = Maestra
+chain-slave = Esclava
+chain-no-boards = No hay ninguna placa encadenable libre.
+chain-board-missing = (no conectada)
 capture-channels = Canales a grabar
 capture-channels-all = Todos
 capture-channels-none = Ninguno

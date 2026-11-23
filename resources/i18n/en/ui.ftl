@@ -262,6 +262,17 @@ trigger-pattern-levels = Pattern levels, first channel first (0 or 1)
 capture-pre-trigger = Samples before the trigger
 capture-after-trigger = Samples after the trigger: { $count }
 capture-bursts = Bursts (0 for one capture)
+# Chains of boards that capture together (shown when a board that can be chained is connected).
+chain-title = Chains of boards
+chain-help = Boards wired together capture as one device. Choose the boards in order; the first is the master.
+chain-name = Name of the chain
+chain-create = Create the chain
+chain-remove = Remove
+chain-shift = Shift
+chain-master = Master
+chain-slave = Slave
+chain-no-boards = No board that can be chained is free.
+chain-board-missing = (not connected)
 capture-channels = Channels to record
 capture-channels-all = All
 capture-channels-none = None

@@ -347,7 +347,7 @@ accuracy.
 
 - [x] T063 [US6] `crates/driver-rp2350b/src/chain.rs`: the chain device, the merge, the roles in capture request 2,
   the shifts, the combined capabilities (`contracts/device-abstraction.md`).
-- [ ] T064 [US6] `crates/host/src/{settings,devices}.rs` and `crates/app/src/app.rs`: define and edit a chain and
+- [x] T064 [US6] `crates/host/src/{settings,devices}.rs` and `crates/app/src/app.rs`: define and edit a chain and
   the shift of each board in the application, with the texts in six languages.
 - [ ] T065 [US6] **(board)** Two boards wired as the document says to one rig pin: the signal on both within one
   sample, or after the correction (SC-010); record in `verification.md` and in

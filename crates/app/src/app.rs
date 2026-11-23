@@ -83,6 +83,16 @@ pub enum Message {
     PreTriggerText(String),
     /// The number of bursts changed.
     BurstsText(String),
+    /// The name of the chain being made changed.
+    ChainNameText(String),
+    /// A board was added to or taken out of the chain being made.
+    ChainBoardToggled(DeviceId),
+    /// The chain being made was confirmed.
+    ChainCreate,
+    /// A chain was removed.
+    ChainRemove(String),
+    /// The shift of a board of a chain changed: the chain, the board's place and the text.
+    ChainShiftText(String, usize, String),
     /// The system theme changed.
     SystemTheme(theme::Mode),
     /// The window asked to close.
@@ -488,6 +498,11 @@ pub struct App {
     pattern_text: String,
     pre_trigger_text: String,
     bursts_text: String,
+    /// The chain being made: its name and the boards chosen so far, in order.
+    chain_name: String,
+    chain_boards: Vec<DeviceId>,
+    /// What was typed for the shifts of the chains, by chain and place of the board.
+    chain_shift_texts: std::collections::BTreeMap<(String, usize), String>,
     /// What the pointer means to the marker being placed (the host's answer to the pointer).
     placement_preview: Option<la_host::markers::Resolved>,
     /// The marker whose actions are open in the Markers view.
@@ -603,6 +618,9 @@ impl App {
             pattern_text: String::new(),
             pre_trigger_text: String::new(),
             bursts_text: String::new(),
+            chain_name: String::new(),
+            chain_boards: Vec::new(),
+            chain_shift_texts: std::collections::BTreeMap::new(),
             placement_preview: None,
             marker_menu: None,
             marker_comments: std::collections::BTreeMap::new(),
@@ -1762,6 +1780,81 @@ impl App {
                     ),
                 }
             }
+            Message::ChainNameText(text) => {
+                self.chain_name = text;
+                Task::none()
+            }
+            Message::ChainBoardToggled(id) => {
+                if let Some(at) = self.chain_boards.iter().position(|b| *b == id) {
+                    self.chain_boards.remove(at);
+                } else if self.chain_boards.len() < la_devices::DeviceChain::MAX_BOARDS {
+                    self.chain_boards.push(id);
+                }
+                Task::none()
+            }
+            Message::ChainCreate => {
+                let name = self.chain_name.trim().to_owned();
+                let boards = self.chain_boards.clone();
+                let shifts = vec![0; boards.len()];
+                let task = self.run(Command::DefineChain {
+                    name: name.clone(),
+                    boards,
+                    shifts,
+                });
+                // What was chosen is kept if the host did not take it, so that it can be corrected.
+                if self
+                    .shell
+                    .state()
+                    .settings
+                    .chains
+                    .iter()
+                    .any(|c| c.name == name)
+                {
+                    self.chain_name.clear();
+                    self.chain_boards.clear();
+                }
+                task
+            }
+            Message::ChainRemove(name) => {
+                self.chain_shift_texts
+                    .retain(|(chain, _), _| *chain != name);
+                self.run(Command::RemoveChain(name))
+            }
+            Message::ChainShiftText(name, place, text) => {
+                self.chain_shift_texts
+                    .insert((name.clone(), place), text.clone());
+                let shift = match text.trim() {
+                    "" => Some(0),
+                    number => number.parse::<u32>().ok(),
+                };
+                let (Some(shift), Some(chain)) = (
+                    shift,
+                    self.shell
+                        .state()
+                        .settings
+                        .chains
+                        .iter()
+                        .find(|c| c.name == name)
+                        .cloned(),
+                ) else {
+                    return Task::none();
+                };
+                let mut shifts = chain.shifts.clone();
+                let Some(slot) = shifts.get_mut(place) else {
+                    return Task::none();
+                };
+                *slot = shift;
+                let boards: Vec<DeviceId> = chain
+                    .boards
+                    .iter()
+                    .filter_map(|b| DeviceId::parse(b))
+                    .collect();
+                self.run(Command::DefineChain {
+                    name,
+                    boards,
+                    shifts,
+                })
+            }
             Message::BurstsText(text) => {
                 self.bursts_text.clone_from(&text);
                 match text.trim() {
@@ -2181,8 +2274,124 @@ impl App {
             ]
             .spacing(8),
         );
+        if let Some(block) = self.chains_block() {
+            view = view.push(block);
+        }
         view = view.push(self.channel_buttons());
         scrollable(view).height(Fill).into()
+    }
+
+    /// The chains of boards: those defined (with the shift of each board and a way to remove them) and the way
+    /// to make one from the boards that can be chained and are not in a chain. Shown only when there is
+    /// something to chain or a chain exists.
+    fn chains_block(&self) -> Option<Element<'_, Message>> {
+        let state = self.shell.state();
+        let idle = state.activity == Activity::Idle;
+        let in_chain = |id: &DeviceId| {
+            state
+                .settings
+                .chains
+                .iter()
+                .any(|c| c.boards.iter().any(|b| b == id.as_str()))
+        };
+        let free: Vec<&la_devices::DeviceDescriptor> = state
+            .devices
+            .iter()
+            .filter(|d| d.capabilities.chainable && !in_chain(&d.id))
+            .collect();
+        let any_chainable = state.devices.iter().any(|d| d.capabilities.chainable);
+        if !any_chainable && state.settings.chains.is_empty() {
+            return None;
+        }
+        let name_of = |text: &str| {
+            state
+                .devices
+                .iter()
+                .find(|d| d.id.as_str() == text)
+                .map_or_else(
+                    || format!("{text} {}", self.t("chain-board-missing")),
+                    |d| d.name.clone(),
+                )
+        };
+        let mut block = column![
+            text(self.t("chain-title")).size(14),
+            text(self.t("chain-help")).size(12)
+        ]
+        .spacing(6);
+        for chain in &state.settings.chains {
+            let mut one = column![
+                row![
+                    text(chain.name.clone()).size(13).width(Fill),
+                    button(text(self.t("chain-remove")).size(12))
+                        .padding([2, 8])
+                        .on_press_maybe(idle.then(|| Message::ChainRemove(chain.name.clone())))
+                ]
+                .spacing(6)
+            ]
+            .spacing(4);
+            for (place, board) in chain.boards.iter().enumerate() {
+                let typed = self
+                    .chain_shift_texts
+                    .get(&(chain.name.clone(), place))
+                    .cloned()
+                    .unwrap_or_else(|| chain.shifts.get(place).copied().unwrap_or(0).to_string());
+                let name = chain.name.clone();
+                let mut shift = text_input("0", &typed).width(70);
+                if idle {
+                    shift =
+                        shift.on_input(move |t| Message::ChainShiftText(name.clone(), place, t));
+                }
+                let role = if place == 0 {
+                    self.t("chain-master")
+                } else {
+                    self.t("chain-slave")
+                };
+                one = one.push(
+                    row![
+                        text(format!("{role}: {}", name_of(board)))
+                            .size(12)
+                            .width(Fill),
+                        text(self.t("chain-shift")).size(12),
+                        shift
+                    ]
+                    .spacing(6),
+                );
+            }
+            block = block.push(container(one).padding(6).style(container::bordered_box));
+        }
+        if free.is_empty() {
+            block = block.push(text(self.t("chain-no-boards")).size(12));
+        } else {
+            let mut name = text_input(&self.t("chain-name"), &self.chain_name).width(Fill);
+            if idle {
+                name = name.on_input(Message::ChainNameText);
+            }
+            block = block.push(name);
+            for device in free {
+                let place = self.chain_boards.iter().position(|b| *b == device.id);
+                let label = match place {
+                    Some(at) => format!("{}. {}", at.saturating_add(1), device.name),
+                    None => device.name.clone(),
+                };
+                let id = device.id.clone();
+                let mut choice = checkbox(place.is_some()).label(label);
+                if idle {
+                    choice = choice.on_toggle(move |_| Message::ChainBoardToggled(id.clone()));
+                }
+                block = block.push(choice);
+            }
+            let name = self.chain_name.trim();
+            let usable = idle
+                && (2..=la_devices::DeviceChain::MAX_BOARDS).contains(&self.chain_boards.len())
+                && !name.is_empty()
+                && state.settings.chains.iter().all(|c| c.name != name);
+            block = block.push(
+                button(text(self.t("chain-create")).size(13))
+                    .padding([3, 8])
+                    .on_press_maybe(usable.then_some(Message::ChainCreate)),
+            );
+        }
+        Some(block.into())
     }
 
     /// The trigger, the samples before it and the bursts: only the parts the selected device offers.
@@ -3857,6 +4066,141 @@ mod tests {
         assert_eq!(app.shell.state().config.trigger, None);
         // The virtual device offers neither samples before the trigger nor bursts: no field for them.
         assert!(app.shell.state().config_problems.is_empty());
+    }
+
+    /// A provider of three boards that can be chained.
+    struct ChainBoards;
+
+    impl la_devices::DeviceProvider for ChainBoards {
+        fn name(&self) -> &str {
+            "fake"
+        }
+
+        fn scan(&self) -> la_core::Result<Vec<la_devices::DeviceDescriptor>> {
+            Ok((1..=3)
+                .map(|k| {
+                    let mut board =
+                        la_devices::harness::test_descriptor("fake", &format!("B{k}"), 32);
+                    board.capabilities.chainable = true;
+                    board
+                })
+                .collect())
+        }
+
+        fn open(&self, id: &DeviceId) -> la_core::Result<Box<dyn la_devices::Device>> {
+            Err(la_devices::error::not_found(id.as_str()))
+        }
+    }
+
+    fn app_with_boards(name: &str) -> App {
+        let dir = std::env::temp_dir().join(format!("la-app-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        app.shell.add_provider(std::sync::Arc::new(ChainBoards));
+        let deadline = Instant::now().checked_add(Duration::from_secs(10)).unwrap();
+        while app.shell.state().devices.len() < 4 {
+            let _ = app.update(Message::Tick(Instant::now()));
+            assert!(Instant::now() < deadline, "the boards were not listed");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        app
+    }
+
+    #[test]
+    fn a_chain_is_made_from_the_boards_chosen_in_order_and_removed() {
+        let mut app = app_with_boards("chain-ui");
+        let id = |k: u8| DeviceId::new("fake", &format!("B{k}"));
+        // One board is not a chain, and neither is a chain without a name.
+        let _ = app.update(Message::ChainBoardToggled(id(2)));
+        let _ = app.update(Message::ChainCreate);
+        assert!(app.shell.state().settings.chains.is_empty());
+        let _ = app.update(Message::ChainBoardToggled(id(1)));
+        let _ = app.update(Message::ChainNameText("lab".to_owned()));
+        let _ = app.update(Message::ChainCreate);
+        let chains = &app.shell.state().settings.chains;
+        assert_eq!(chains.len(), 1);
+        assert_eq!(
+            chains[0].boards,
+            ["fake:B2", "fake:B1"],
+            "the order they were chosen in"
+        );
+        assert_eq!(chains[0].shifts, [0, 0]);
+        assert!(
+            app.chain_boards.is_empty() && app.chain_name.is_empty(),
+            "the form is cleared"
+        );
+        // The shift of the second board.
+        let _ = app.update(Message::ChainShiftText("lab".to_owned(), 1, "5".to_owned()));
+        assert_eq!(app.shell.state().settings.chains[0].shifts, [0, 5]);
+        // Something that is not a number changes nothing.
+        let _ = app.update(Message::ChainShiftText("lab".to_owned(), 1, "x".to_owned()));
+        assert_eq!(app.shell.state().settings.chains[0].shifts, [0, 5]);
+        let _ = app.update(Message::ChainShiftText("lab".to_owned(), 1, String::new()));
+        assert_eq!(
+            app.shell.state().settings.chains[0].shifts,
+            [0, 0],
+            "empty is no shift"
+        );
+        // The boards of the chain are no longer free to choose; a second chain takes the third board at most.
+        let _ = app.update(Message::ChainBoardToggled(id(3)));
+        let _ = app.update(Message::ChainNameText("other".to_owned()));
+        let _ = app.update(Message::ChainCreate);
+        assert_eq!(
+            app.shell.state().settings.chains.len(),
+            1,
+            "one board is not a chain"
+        );
+        let _ = app.update(Message::ChainRemove("lab".to_owned()));
+        assert!(app.shell.state().settings.chains.is_empty());
+    }
+
+    #[test]
+    fn at_most_five_boards_are_chosen() {
+        let mut app = app_with_boards("chain-five");
+        for k in 1..=3 {
+            let _ = app.update(Message::ChainBoardToggled(DeviceId::new(
+                "fake",
+                &format!("B{k}"),
+            )));
+        }
+        for k in 10..16 {
+            let _ = app.update(Message::ChainBoardToggled(DeviceId::new(
+                "fake",
+                &format!("X{k}"),
+            )));
+        }
+        assert_eq!(app.chain_boards.len(), 5);
+    }
+
+    #[test]
+    fn the_chain_controls_render_at_the_narrowest_width_in_every_language() {
+        use la_host::settings::PANEL_WIDTH_RANGE;
+        let _turn = render_turn();
+        let mut app = app_with_boards("chain-render");
+        let _ = app.update(Message::SidePanel(la_host::SidePanel::Capture));
+        let _ = app.update(Message::Run(Command::SetPanelWidth(PANEL_WIDTH_RANGE.0)));
+        let _ = app.update(Message::ChainBoardToggled(DeviceId::new("fake", "B1")));
+        let _ = app.update(Message::ChainBoardToggled(DeviceId::new("fake", "B2")));
+        let _ = app.update(Message::ChainNameText("lab".to_owned()));
+        let _ = app.update(Message::ChainCreate);
+        for language in la_i18n::Language::ALL {
+            let _ = app.update(Message::Run(Command::SetLanguage(language)));
+            let mut ui = iced_test::Simulator::with_size(
+                crate::fonts::settings(),
+                iced::Size::new(800.0, 700.0),
+                app.view(),
+            );
+            for key in ["chain-title", "chain-remove", "chain-shift"] {
+                let label = app.t(key);
+                let found = ui.find(label.as_str()).unwrap();
+                let bounds = found.bounds();
+                assert!(
+                    bounds.x >= 0.0 && bounds.x + bounds.width <= 800.0,
+                    "{language:?} {key}: {bounds:?}"
+                );
+            }
+        }
     }
 
     #[test]
