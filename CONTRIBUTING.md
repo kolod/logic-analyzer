@@ -107,8 +107,15 @@ name the component:
 - One commit is one logical change. A change to the host API contract and its
   implementation on all platforms land in `main` together.
 
-Check your commits locally (CI reports non-conforming messages as a non-blocking
-warning):
+Checking the subjects before a push is mandatory. The repository ships a `pre-push` hook that runs
+`scripts/check-commits.sh` on the commits being pushed and refuses the push if one does not conform. Enable it
+once in each clone:
+
+```text
+git config core.hooksPath .githooks
+```
+
+You can run the same check by hand:
 
 ```text
 bash scripts/check-commits.sh origin/main..HEAD
