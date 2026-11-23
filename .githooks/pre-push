@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Refuses a push whose new commits have non-conforming subjects (see CONTRIBUTING.md and
+# scripts/check-commits.sh). Enable it once per clone: git config core.hooksPath .githooks
+set -u
+zero=0000000000000000000000000000000000000000
+root="$(git rev-parse --show-toplevel)"
+status=0
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  # A deleted branch has nothing to check.
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" = "$zero" ]; then
+    range="origin/main..$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  if ! bash "$root/scripts/check-commits.sh" "$range"; then
+    status=1
+  fi
+done
+if [ "$status" -ne 0 ]; then
+  echo "push refused: fix the commit subjects above (bash scripts/check-commits.sh origin/main..HEAD)." >&2
+fi
+exit "$status"
