@@ -40,7 +40,7 @@ strings in `resources/i18n/<lang>/ui.ftl`. "The protocol" is `contracts/protocol
 
 ## Phase 1: Setup
 
-- [ ] T001 Record the baseline in `specs/017-driver-rp2350b-32ch/verification.md`: `cargo test --workspace
+- [x] T001 Record the baseline in `specs/017-driver-rp2350b-32ch/verification.md`: `cargo test --workspace
   --no-fail-fast` before any change (the known failures of this machine, `decoder_growth` and the load-dependent
   ones, are named) and the benchmark baselines of storage and rendering.
 - [ ] T002 Read the schematic of the board (`RP2350B_SCH.pdf`: the owner supplies the pin list if the file
@@ -48,7 +48,7 @@ strings in `resources/i18n/<lang>/ui.ftl`. "The protocol" is `contracts/protocol
   the two trigger pins, the pins of the external memory, USB and the boot button, the indicator; write it in
   `firmware/rp2350b/PINS.md` and create `docs/drivers/rp2350b.md` with it (T067 completes that document) (research R5, contract `firmware.md`). Confirm in
   the same note the chip variant (the RP2350B) and the memory chip's select pin.
-- [ ] T003 [P] Create the crate skeletons `crates/la-proto` (`no_std`, `std` feature for the host) and
+- [x] T003 [P] Create the crate skeletons `crates/la-proto` (`no_std`, `std` feature for the host) and
   `crates/driver-rp2350b`, add them to the workspace, and check `cargo build --workspace` and `cargo deny check`
   (no new host dependency).
 - [ ] T004 [P] Create the firmware workspace `firmware/rp2350b/` (`Cargo.toml`, `rust-toolchain.toml`,
@@ -69,53 +69,53 @@ strings in `resources/i18n/<lang>/ui.ftl`. "The protocol" is `contracts/protocol
 
 ### Tests first
 
-- [ ] T006 [P] `crates/storage/tests/wide_ingest.rs`: for 33 to 160 channels, a capture ingested from words in
+- [x] T006 [P] `crates/storage/tests/wide_ingest.rs`: for 33 to 160 channels, a capture ingested from words in
   any chunking (including chunks of one sample and chunks that cut a gap) equals the capture built one channel
   at a time; for 1 to 32 channels, with `words_per_sample` 1, every result equals the present ingest's; bits above
   the channel count are ignored.
-- [ ] T007 [P] `crates/storage/tests/wide_channels.rs`: `MAX_CHANNELS` is 160 and 161 is refused with the typed
+- [x] T007 [P] `crates/storage/tests/wide_channels.rs`: `MAX_CHANNELS` is 160 and 161 is refused with the typed
   error; queries, summaries, `restore` and `crop` work on channels above 31; the memory of a capture grows with
   the channels that have transitions, not with the ones that have none.
-- [ ] T008 [P] `crates/devices/tests/channel_set.rs`: `ChannelSet` operations against a plain `BTreeSet<u8>`
+- [x] T008 [P] `crates/devices/tests/channel_set.rs`: `ChannelSet` operations against a plain `BTreeSet<u8>`
   model over random sequences (insert, remove, contains, count, iter order, and, highest, `all(n)`,
   `from_u32`/`to_u32`), the bound at `MAX_CHANNELS`, `Copy` and equality.
-- [ ] T009 [P] `crates/devices/tests/wide_virtual.rs`: the virtual device with 33 to 160 channels delivers
+- [x] T009 [P] `crates/devices/tests/wide_virtual.rs`: the virtual device with 33 to 160 channels delivers
   `n × words_per_sample` words per `n` samples, the supervisor passes them to storage unchanged, validation
   refuses a channel at or above the device's count and a count above 160, and the capture it makes equals the
   generator's signal channel by channel.
-- [ ] T010 [P] `crates/session/tests/wide_description.rs` and `crates/host/tests/sessions_compat.rs`: a session
+- [x] T010 [P] `crates/session/tests/wide_description.rs` and `crates/host/tests/sessions_compat.rs`: a session
   of 160 channels is saved and reopened identically; a session of 32 channels or fewer is **byte for byte** what
   the previous version wrote (the committed fixtures); a file of the previous version opens unchanged; a reader
   of the previous format refuses more than 32 channels with its typed error (a fixture written by hand).
-- [ ] T011 [P] `crates/host/tests/wide_channels.rs`: configuration, presentation (names, colours, heights, order,
+- [x] T011 [P] `crates/host/tests/wide_channels.rs`: configuration, presentation (names, colours, heights, order,
   visibility), the `VIEW` and `LAYT` sections and the markers with 160 channels; a decoder assigned to channel 150
   decodes it.
-- [ ] T012 [P] `crates/app/src/app.rs` and `signal_view.rs` tests: 160 channel buttons in twenty rows of eight
+- [x] T012 [P] `crates/app/src/app.rs` and `signal_view.rs` tests: 160 channel buttons in twenty rows of eight
   that fit the panel and scroll; the legend and the lanes of 160 channels scroll; at 32 channels the layout is
   the present one.
 
 ### Implementation
 
-- [ ] T013 `crates/storage/src/config.rs`, `ingest.rs`, `capture.rs`: `MAX_CHANNELS` 160, `words_per_sample` from
+- [x] T013 `crates/storage/src/config.rs`, `ingest.rs`, `capture.rs`: `MAX_CHANNELS` 160, `words_per_sample` from
   the channel count, `ingest_chunk` with the stride (the narrow path is the same code with a stride of 1).
-- [ ] T014 `crates/storage/src/{restore,crop,published,query,block,channel}.rs` and the benches: every place that
+- [x] T014 `crates/storage/src/{restore,crop,published,query,block,channel}.rs` and the benches: every place that
   assumed a `u32` mask or 32 channels (`channel_mask`, `u32::MAX`) uses the channel count and the stride.
-- [ ] T015 `crates/devices/src/channel_set.rs` (new) and `config.rs`, `description.rs`, `capabilities.rs`:
+- [x] T015 `crates/devices/src/channel_set.rs` (new) and `config.rs`, `description.rs`, `capabilities.rs`:
   `ChannelSet` (a type used only through its methods, a fixed bitset sized from `MAX_CHANNELS`), replacing the
   `u32` masks; the capability check allows 1 to 160 channels.
-- [ ] T016 `crates/devices/src/{driver,supervisor,acquisition}.rs` and `virtual_device/`: `Driver::read` and the
+- [x] T016 `crates/devices/src/{driver,supervisor,acquisition}.rs` and `virtual_device/`: `Driver::read` and the
   supervisor with the stride, the virtual device up to 160 channels.
-- [ ] T017 `crates/session/src/meta.rs` and `crates/devices/src/description.rs`: the wide description (a minor
+- [x] T017 `crates/session/src/meta.rs` and `crates/devices/src/description.rs`: the wide description (a minor
   version of the format: the words after the first only when the channels exceed 32), the reader's checks.
-- [ ] T018 `crates/host/src/{shell,state,presentation,layout_section,view_section,sessions,decoders}.rs`: the
+- [x] T018 `crates/host/src/{shell,state,presentation,layout_section,view_section,sessions,decoders}.rs`: the
   configuration and the presentation with `ChannelSet`, `MAX_CHANNELS` 160 in the sections, every
   `enabled_channels` and `visible_mask` caller (about eighty places in source and tests).
-- [ ] T019 `crates/app/src/app.rs`, `signal_view.rs`, `lane_layout.rs`: the channel buttons and the capture
+- [x] T019 `crates/app/src/app.rs`, `signal_view.rs`, `lane_layout.rs`: the channel buttons and the capture
   settings for any number of channels, scrolling panels.
-- [ ] T020 A benchmark with 160 channels (ingest, summary, plan and drawing of 8 shown channels out of 160) added
+- [x] T020 A benchmark with 160 channels (ingest, summary, plan and drawing of 8 shown channels out of 160) added
   to the existing benches and a baseline recorded (Principle VIII); the drawing cost must not depend on the
   channels not shown.
-- [ ] T021 Documents: `docs/host-api.md` (the minor version, the types), the storage and session notes, and
+- [x] T021 Documents: `docs/host-api.md` (the minor version, the types), the storage and session notes, and
   `verification.md` for stage 1; run the whole of stage 1's tests, `fmt`, `clippy`.
 
 **Checkpoint (stage 1)**: 160 channels work with the virtual device; 32 or fewer are unchanged. A pull request.
