@@ -104,8 +104,8 @@ previous reader's own check of the channel count.
   listed with a message (T050: today a board with an unsupported firmware is not listed and the reason is in the
   log), and the end of the information reply is taken as 100 ms of silence (the contract does not name a
   terminator; to be fixed in the contract with the firmware).
-- The USB product id `0x4C41` is provisional (vendor id `0x2E8A`, Raspberry Pi); the owner decides it before the
-  first release, and the firmware must present the same pair.
+- The USB ids are the default of the Pico SDK for development (`0x2E8A:0x000A`); a pair of our own is to be
+  registered before the first release (`research.md`, R13), and the firmware must present the same pair.
 - Without a trigger the driver sends trigger type 3 (blast), and declares as highest rate the lower of `FREQ` and
   `BLASTFREQ`; the limits before and after the trigger are the tightest of the four modes, because the board's
   mode follows the highest channel and the core's follows the number enabled.

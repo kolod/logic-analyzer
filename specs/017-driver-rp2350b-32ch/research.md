@@ -223,3 +223,36 @@ embedded dependencies are recorded with their licences in `firmware/rp2350b/THIR
 
 Each stage is its own pull request or more; the spec's story 1 and 2 are met at the end of stage 3, story 6 at
 the end of stage 4.
+
+## R13. USB identity and the transport: to analyse later
+
+Kept for a later decision (nothing here is decided except the development pair).
+
+**Decision for now.** During development the firmware presents the Pico SDK's default pair for a USB serial
+device, `0x2E8A:0x000A`, and the transport is CDC (a serial port). The driver therefore asks every port with that
+pair for the device information and lists only the ones that answer as this analyzer. Consequences: another
+board running SDK firmware with the default pair gets one information request (a frame of 5 bytes) written to
+it, and a silent one costs up to 500 ms in a listing. This is acceptable on a development machine and is not for
+a release.
+
+**What the original does** (read from `gusmanb/logicanalyzer`, V2 firmware): its own pair `0x1209:0x3020` with
+manufacturer and product strings, set in `CMakeLists.txt` (`USBD_VID`, `USBD_PID`); registered in pid.codes
+(`1209/3020`, owner `gusmanb`, licence GPL-3.0); the PC program finds the port by that pair (Windows registry,
+Linux `/sys/bus/usb/devices`) and takes the serial number from the USB descriptor. Its V1 firmware kept the SDK
+defaults. That pair is theirs and must not be reused by this project.
+
+**To decide before a release.**
+- A pair of our own: pid.codes (VID `0x1209`, free, open hardware, the owner opens a pull request in
+  `pidcodes/pidcodes.github.com`) or Raspberry Pi's free PIDs for products on their chips (`raspberrypi/usb-pid`).
+  The owner has to apply; to be checked against the current rules of each.
+- CDC or a vendor-specific bulk interface. The VID/PID identify the product, not the class, so a change of class
+  does not by itself need a new pair; but Windows keeps the driver it bound to a VID/PID (and interface), so a PC
+  that has seen the CDC firmware may keep `usbser` for a bulk firmware with the same pair. Ways out: raise
+  `bcdDevice`, or give the bulk firmware its own PID. Bulk needs WinUSB (automatic with Microsoft OS 2.0
+  descriptors in the firmware, else Zadig) and, on Linux, a udev rule; CDC needs neither (Linux: the `dialout`
+  group). The driver's transport is one trait (`SerialLink`); `la-proto` does not change.
+- **A benchmark** to choose: sustained throughput and the latency of the abort byte for CDC and for bulk on the
+  RP2350 with the firmware's real transfer (a capture returned at its end, up to 96,000 samples of 4 bytes and
+  more with the external memory), on Windows and Linux; and the time from the end of a capture to the last byte
+  on the host. The rough expectation (to be checked, not relied on) is that CDC on the RP2350 is enough for
+  this design, because the data comes back once after the capture and not as a stream.
