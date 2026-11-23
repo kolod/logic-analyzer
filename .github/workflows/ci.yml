@@ -166,9 +166,6 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container: debian:trixie
-    defaults:
-      run:
-        working-directory: firmware/rp2350b
     steps:
       - name: Debian prerequisites
         if: needs.changes.outputs.code == 'true'
@@ -182,10 +179,13 @@ jobs:
         with:
           workspaces: firmware/rp2350b
       - run: cargo fmt --all --check
+        working-directory: firmware/rp2350b
         if: needs.changes.outputs.code == 'true'
       - run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: firmware/rp2350b
         if: needs.changes.outputs.code == 'true'
       - run: cargo test --workspace
+        working-directory: firmware/rp2350b
         if: needs.changes.outputs.code == 'true'
 
   msrv:
