@@ -195,11 +195,11 @@ channel shows its own pattern (spec US1).
   and the target).
 - [ ] T035 [US1] `firmware/rp2350b/la-fw-logic`: the same checks, tables, packing and coding for the firmware, over
   `la-proto` (T032 passes).
-- [ ] T036 [US1] `crates/driver-rp2350b`: the serial transport trait with the `serialport` backend and a recorded
+- [x] T036 [US1] `crates/driver-rp2350b`: the serial transport trait with the `serialport` backend and a recorded
   transport for the tests, listing (VID/PID and the chip's serial number → `DeviceId`, never blocking on a
   port that does not answer), the information request and the capabilities, start, read (words, with the stride),
   stop, and the typed errors of `data-model.md` (T031 passes).
-- [ ] T037 [US1] Register the driver with the host's device registry, the device name and the error texts in
+- [x] T037 [US1] Register the driver with the host's device registry, the device name and the error texts in
   `resources/i18n/*/ui.ftl` in six languages, the capture description marking it as not simulated
   (`crates/host/src/devices.rs`, `crates/devices/src/registry.rs`).
 - [ ] T038 [US1] `firmware/rp2350b/la-fw` **(board)**: the start-up (clocks, the pins of T002), USB serial through the

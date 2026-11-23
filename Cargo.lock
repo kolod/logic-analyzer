@@ -1691,6 +1691,7 @@ dependencies = [
  "la-decoders",
  "la-devices",
  "la-diagnostics",
+ "la-driver-rp2350b",
  "la-driver-weact",
  "la-host",
  "la-i18n",
@@ -1740,6 +1741,20 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "la-driver-rp2350b"
+version = "0.1.0"
+dependencies = [
+ "la-core",
+ "la-devices",
+ "la-diagnostics",
+ "la-driver-rp2350b",
+ "la-proto",
+ "la-storage",
+ "serialport",
+ "tracing",
 ]
 
 [[package]]

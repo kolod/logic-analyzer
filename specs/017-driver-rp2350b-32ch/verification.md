@@ -81,3 +81,31 @@ previous reader's own check of the channel count.
   logic crate (T035), the driver (T036, T037) and the firmware itself (T038) are the next parts of stage 3.
 - The frame limit is read as 256 bytes for the whole frame (four marker bytes and a body of at most 252), since
   the device information request is 5 bytes long; the contract says "at most 256 bytes after unescaping".
+
+## Stage 3, part 2: the driver (T036, T037; T031 in part)
+
+- `crates/driver-rp2350b` (`la-driver-rp2350b`): the serial seam (`link`: `PortBackend`, `SerialLink`), the
+  `serialport` backend, the provider (lists the ports with the USB ids of the firmware, asks each new board for
+  its information once, keeps the answer, never waits more than 500 ms on a silent port, keeps a known board
+  listed without asking it again so a running capture is not disturbed), the capabilities from the
+  information reply, the capture request from a validated configuration, the device (start returns after the
+  answer to the request, `read` returns in pieces and `Idle` while the board waits for its trigger, stop sends
+  the abort byte and drains the port), and the typed errors of `data-model.md` with texts in six languages.
+  The application registers it next to the WeAct driver.
+- Tests (`tests/recorded.rs` 9, `tests/failures.rs` 7, unit 2) run against recordings in `tests/fixtures/`.
+  **The recordings are synthetic**: written by hand from `contracts/protocol.md`, since no board runs the
+  firmware yet; the real ones replace them in T039. They cover the listing (and a silent port, a port with other
+  ids, no serial number, a board that goes away), a capture of 32 channels and one of channels 24 to 31 (exact
+  words), the request the driver sends, a refused request, no answer, an unplug in the middle, a stopped stream,
+  and replies that break the contract.
+- Not done: the lost-sample mark of FR-013 (the protocol of `contracts/protocol.md` has no such mark yet: it
+  must be added there, in `la-proto` and in the firmware first), reading with the compact coding and the options
+  (T046, T047), the restart commands in the driver (T054), the unsupported-firmware text for a board that is
+  listed with a message (T050: today a board with an unsupported firmware is not listed and the reason is in the
+  log), and the end of the information reply is taken as 100 ms of silence (the contract does not name a
+  terminator; to be fixed in the contract with the firmware).
+- The USB product id `0x4C41` is provisional (vendor id `0x2E8A`, Raspberry Pi); the owner decides it before the
+  first release, and the firmware must present the same pair.
+- Without a trigger the driver sends trigger type 3 (blast), and declares as highest rate the lower of `FREQ` and
+  `BLASTFREQ`; the limits before and after the trigger are the tightest of the four modes, because the board's
+  mode follows the highest channel and the core's follows the number enabled.
