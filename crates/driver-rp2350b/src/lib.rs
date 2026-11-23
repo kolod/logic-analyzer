@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use la_core::Result;
-use la_devices::{Device, DeviceDescriptor, DeviceId, DeviceProvider};
+use la_devices::{Device, DeviceAction, DeviceDescriptor, DeviceId, DeviceProvider};
 use la_diagnostics::lock_recover;
 use la_proto::{DeviceInfo, command, encode_frame};
 
@@ -195,6 +195,34 @@ impl DeviceProvider for Rp2350bProvider {
         let descriptors = found.iter().map(|b| b.descriptor.clone()).collect();
         *lock_recover(&self.boards) = found;
         Ok(descriptors)
+    }
+
+    fn perform(&self, id: &DeviceId, action: DeviceAction) -> Result<()> {
+        let port = lock_recover(&self.boards)
+            .iter()
+            .find(|b| b.id == *id)
+            .map(|b| b.port.clone())
+            .ok_or_else(|| la_devices::error::not_found(id.as_str()))?;
+        let mut link = self.backend.open(&port)?;
+        let (cmd, expected) = match action {
+            DeviceAction::Restart => (command::RESTART, "RESTARTING"),
+            DeviceAction::RestartIntoBootloader => (command::BOOTLOADER, "RESTARTING_BOOTLOADER"),
+        };
+        let mut frame = [0_u8; 8];
+        let n = encode_frame(&[cmd], &mut frame)
+            .map_err(|e| error::protocol(&format!("the command could not be framed: {e}")))?;
+        link.write_all(frame.get(..n).unwrap_or(&[]))?;
+        let answer = device::read_line(&mut *link, "waiting for the answer to a restart")?;
+        if answer != expected {
+            return Err(if answer.starts_with("ERR_") {
+                error::request_refused(&answer)
+            } else {
+                error::protocol("the answer to a restart is not the one the contract names")
+            });
+        }
+        // The board is going away: forget it, so that it is asked again when it comes back.
+        lock_recover(&self.boards).retain(|b| b.id != *id);
+        Ok(())
     }
 
     fn open(&self, id: &DeviceId) -> Result<Box<dyn Device>> {

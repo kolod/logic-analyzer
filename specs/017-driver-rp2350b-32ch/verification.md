@@ -142,3 +142,21 @@ previous reader's own check of the channel count.
   (command 1) is answered `ERR_UNSUPPORTED` for now (the original's structure is not in `la-proto` yet), a gap
   against FR-015 to close in stage 3 (T044). The values of `Tables` that depend on the hardware are measured on the
   board (T048).
+
+## Stage 3, part 5: restarting the board (T054)
+
+- `la-devices`: `DeviceAction` (`Restart`, `RestartIntoBootloader`), `Capabilities::actions`, `DeviceProvider::perform`
+  (the default refuses), and `DeviceRegistry::perform`, which returns at once with an `ActionHandle` and runs the provider
+  on a contained worker (an answer later than 2 s is `device.unresponsive`, a panic is `device.driver_panic`;
+  a device that is capturing is `device.busy`, one that does not declare the action `device.invalid_state`).
+- `la-proto`: the `restart` feature (`FEATURES:` line); `la-fw-logic` announces it.
+- Driver: the board declares `RestartIntoBootloader` always and `Restart` when it announces `restart`; `perform` sends
+  command 8 or 4, reads `RESTARTING` or `RESTARTING_BOOTLOADER`, forgets the board so it is asked again when it
+  comes back (`tests/actions.rs`, 6: the frames, the answers, the board listed again, a refusal, a silent board,
+  an unknown board).
+- Host (API 2.4): `Command::DeviceAction`, `State::device_action`; only for an idle host, an action the selected device
+  declares and none in progress; the answer arrives with `poll`, a failure is a notice (`tests/device_actions.rs`, 4).
+- Application: two entries of the Capture menu, enabled by the same rule (`EnabledWhen::DeviceOffers`), in six languages
+  (within the menu width budget).
+- Not done: a real restart of a board (no firmware yet: T055/T060), and a message that offers the bootloader
+  when the board has a firmware the driver does not support (T050).

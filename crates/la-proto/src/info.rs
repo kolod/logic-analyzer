@@ -11,6 +11,8 @@ pub struct Features {
     pub psram: bool,
     /// Capture mode 3 (up to 32 channels) is available.
     pub mode32: bool,
+    /// Command 8, the normal restart, is understood.
+    pub restart: bool,
 }
 
 /// The triggers a board supports, from the `TRIGGERS:` line.
@@ -110,6 +112,7 @@ impl DeviceInfo {
             (f.compact, "compact"),
             (f.psram, "psram"),
             (f.mode32, "mode32"),
+            (f.restart, "restart"),
         ] {
             if on {
                 if !first {
@@ -250,6 +253,7 @@ fn features(value: &str) -> Features {
             "compact" => features.compact = true,
             "psram" => features.psram = true,
             "mode32" => features.mode32 = true,
+            "restart" => features.restart = true,
             _ => {}
         }
     }

@@ -4,6 +4,8 @@
 //! every action has exactly one place where it is defined and a test can check that every command
 //! is reachable and that no accelerator is used twice (contract `shell-layout.md`).
 
+use la_devices::DeviceAction;
+
 use crate::command::{AnnotationTarget, Command, PanStep, ZoomDirection};
 use crate::markers::Kind;
 use crate::state::{Activity, State};
@@ -128,6 +130,8 @@ pub enum EnabledWhen {
     CanDecode,
     /// An annotation is selected.
     AnnotationSelected,
+    /// Idle, nothing is being done to the device, and the selected device offers this action.
+    DeviceOffers(DeviceAction),
 }
 
 impl EnabledWhen {
@@ -149,6 +153,15 @@ impl EnabledWhen {
             EnabledWhen::Placing => state.placement.is_some(),
             EnabledWhen::CanDecode => state.capture.is_some() && state.operation.is_none(),
             EnabledWhen::AnnotationSelected => state.decoders.selection.is_some(),
+            EnabledWhen::DeviceOffers(action) => {
+                state.activity == Activity::Idle
+                    && state.device_action.is_none()
+                    && state
+                        .selected_device
+                        .as_ref()
+                        .and_then(|id| state.devices.iter().find(|d| d.id == *id))
+                        .is_some_and(|d| d.capabilities.actions.contains(&action))
+            }
             EnabledWhen::CanStart => {
                 state.activity == Activity::Idle
                     && state.selected_device.is_some()
@@ -238,6 +251,18 @@ pub fn table() -> Vec<ShortcutEntry> {
             ["menu-capture", "menu-capture-stop"],
             Some(Accelerator::shift("F5")),
             EnabledWhen::Capturing,
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::DeviceAction(DeviceAction::Restart)),
+            ["menu-capture", "menu-capture-restart-device"],
+            None,
+            EnabledWhen::DeviceOffers(DeviceAction::Restart),
+        ),
+        ShortcutEntry::new(
+            Action::Command(Command::DeviceAction(DeviceAction::RestartIntoBootloader)),
+            ["menu-capture", "menu-capture-bootloader"],
+            None,
+            EnabledWhen::DeviceOffers(DeviceAction::RestartIntoBootloader),
         ),
         ShortcutEntry::new(
             Action::Command(Command::BeginPlacement(Kind::Single)),

@@ -49,4 +49,4 @@ pub use state::{
 
 /// Version of the host API contract (`docs/host-api.md`). A change to commands, state fields,
 /// events or their meaning changes this value together with the document.
-pub const HOST_API_VERSION: &str = "2.3";
+pub const HOST_API_VERSION: &str = "2.4";

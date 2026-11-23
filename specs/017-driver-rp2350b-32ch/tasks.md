@@ -290,7 +290,7 @@ accuracy.
 - [ ] T053 [US3] The commands and the tools in `firmware/rp2350b/README.md` and `contracts/firmware.md`
   (the UF2 step, flashing through the boot button, the restart into the bootloader); the version of the firmware
   from the workspace version; `THIRD-PARTY.md` complete.
-- [ ] T054 [US3] The driver's `restart into the bootloader` and `restart` and a command and menu entry for each in
+- [x] T054 [US3] The driver's `restart into the bootloader` and `restart` and a command and menu entry for each in
   the host and the application (`crates/host/src/command.rs`, `crates/app/src/app.rs`), enabled only for a device that offers it,
   with the text in six languages.
 - [ ] T055 [US3] **(board)** Build from a clean checkout following only the README, flash by the drive (`D:\`),

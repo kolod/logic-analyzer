@@ -6,7 +6,7 @@
 use std::ops::BitOr;
 use std::path::PathBuf;
 
-use la_devices::{ChannelSet, DeviceId, Pattern, Trigger};
+use la_devices::{ChannelSet, DeviceAction, DeviceId, Pattern, Trigger};
 use la_i18n::Language;
 
 use la_decoders::setup::{Setup, Source, Value};
@@ -200,6 +200,10 @@ pub enum Command {
     RefreshDevices,
     /// Selects a device.
     SelectDevice(DeviceId),
+    /// Asks the selected device to do something besides capturing (restart, restart into the bootloader).
+    /// Only for an idle host and an action the device declares; the answer arrives later, and a failure is a
+    /// notice.
+    DeviceAction(DeviceAction),
     /// Edits the configuration of the selected device.
     EditConfig(ConfigEdit),
     /// Starts a capture with the validated configuration.
@@ -556,6 +560,7 @@ impl Command {
         match self {
             Command::RefreshDevices => "refresh_devices",
             Command::SelectDevice(_) => "select_device",
+            Command::DeviceAction(_) => "device_action",
             Command::EditConfig(_) => "edit_config",
             Command::StartCapture => "start_capture",
             Command::StopCapture => "stop_capture",

@@ -101,6 +101,8 @@ pub struct Shell {
     pub(crate) config: ShellConfig,
     pub(crate) settings_fs: Arc<dyn SettingsFs>,
     registry: DeviceRegistry,
+    /// The action the selected device is doing, and where its answer comes from.
+    action: Option<la_devices::ActionHandle>,
     pub(crate) running: Option<Running>,
     pub(crate) operation: Option<Operation>,
     pub(crate) decoders: DecoderRuntime,
@@ -184,6 +186,7 @@ impl Shell {
             window: ViewWindow::fit_all(&window_limits(0, view_size.pixels)),
             auto_fit: true,
             selected_device: selected.cloned(),
+            device_action: None,
             devices,
             config: draft,
             config_problems: Vec::new(),
@@ -220,6 +223,7 @@ impl Shell {
             config,
             settings_fs,
             registry,
+            action: None,
             running: None,
             operation: None,
             decoders,
@@ -483,9 +487,29 @@ impl Shell {
 
     fn poll_inner(&mut self, state: &mut State, now: Instant) -> Changes {
         let mut changes = self.poll_devices(state);
+        changes.insert(self.poll_device_action(state));
         changes.insert(self.poll_operation(state));
         changes.insert(self.poll_capture(state, now));
         changes.insert(self.poll_decoders(state));
+        changes
+    }
+
+    /// Reads the answer of a restart; a failure is a notice (a success changes nothing here: the device goes
+    /// away and comes back through the device list).
+    fn poll_device_action(&mut self, state: &mut State) -> Changes {
+        let Some(handle) = &self.action else {
+            return Changes::NONE;
+        };
+        let Some(result) = handle.poll() else {
+            return Changes::NONE;
+        };
+        self.action = None;
+        state.device_action = None;
+        let mut changes = Changes::DEVICES;
+        if let Err(error) = result {
+            report_into(state, Severity::Error, &error);
+            changes.insert(Changes::NOTICES);
+        }
         changes
     }
 
@@ -705,6 +729,27 @@ impl Shell {
                 }
                 select_device(state, &id);
                 changed(Changes::DEVICES | Changes::CONFIG)
+            }
+            Command::DeviceAction(action) => {
+                let Some(id) = state.selected_device.clone() else {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                };
+                let offered = state
+                    .devices
+                    .iter()
+                    .find(|d| d.id == id)
+                    .is_some_and(|d| d.capabilities.actions.contains(&action));
+                if state.activity != Activity::Idle || self.action.is_some() || !offered {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                match self.registry.perform(&id, action) {
+                    Ok(handle) => {
+                        self.action = Some(handle);
+                        state.device_action = Some(action);
+                        changed(Changes::DEVICES)
+                    }
+                    Err(error) => Err(Reject::Failed(error)),
+                }
             }
             Command::EditConfig(edit) => {
                 if state.activity != Activity::Idle {

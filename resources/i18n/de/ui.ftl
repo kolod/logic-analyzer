@@ -30,6 +30,8 @@ menu-file-quit = Beenden
 menu-capture = Aufnahme
 menu-capture-start = Starten
 menu-capture-stop = Anhalten
+menu-capture-restart-device = Gerät neu starten
+menu-capture-bootloader = Neustart im Bootloader
 
 ### Werkzeugleiste, Ansicht und Dialoge
 

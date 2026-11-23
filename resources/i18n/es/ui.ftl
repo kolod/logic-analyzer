@@ -30,6 +30,8 @@ menu-file-quit = Salir
 menu-capture = Captura
 menu-capture-start = Iniciar
 menu-capture-stop = Detener
+menu-capture-restart-device = Reiniciar el dispositivo
+menu-capture-bootloader = Reiniciar en el cargador
 
 ### Barra de herramientas, vista y diálogos
 

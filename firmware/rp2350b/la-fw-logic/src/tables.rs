@@ -47,6 +47,7 @@ pub fn device_info(tables: &Tables) -> DeviceInfo {
             compact: tables.compact,
             psram: tables.psram_bytes > 0,
             mode32: true,
+            restart: true,
         },
         psram_bytes: tables.psram_bytes,
         psram_rate: tables.psram_rate,

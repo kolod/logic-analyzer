@@ -1,6 +1,6 @@
 # Host API
 
-Version: 2.3
+Version: 2.4
 
 This is the authoritative description of the API between a user interface and the core. The crate
 is `la-host`; its constant `la_host::HOST_API_VERSION` and the version line above must agree (a test
@@ -73,6 +73,7 @@ redraws only the parts whose flag is set. `QUIT` means the shell may close the w
 | Group | Command | Effect |
 |-------|---------|--------|
 | Devices | `RefreshDevices` | re-lists devices through the registry |
+| | `DeviceAction(DeviceAction)` | asks the selected device to restart (`Restart`) or to restart into its bootloader (`RestartIntoBootloader`), so that its firmware can be updated without a programmer; only while idle, for an action the device declares in `Capabilities::actions` and with none in progress (`State::device_action`); the answer comes with a later `poll`, a failure is a notice, and the device leaves the list and comes back |
 | | `SelectDevice(DeviceId)` | selects it; resets the configuration draft to the device defaults and validates |
 | | `EditConfig(ConfigEdit)` | `Channels` (a `ChannelSet`, up to 160 channels), `SampleRate`, `Length`, `Trigger`, `Pattern` (the levels of a pattern trigger), `PreTrigger` (samples kept before the trigger, part of the length), `Bursts`, `Seed`, `Profile`, `Realtime`, `AcceptBudgetRisk`; validates after each edit; problems appear in `config_problems` (`Setting::Bursts` for the bursts, `Setting::Trigger` for the pattern, `Setting::Length` for the samples before and after the trigger); selecting another device keeps the trigger with its pattern, the samples before the trigger and the bursts only where the new device accepts them; `Channels` moves the flags of the channels the same way |
 | Capture | `StartCapture` | guarded when an unsaved capture is on screen; ignored while one runs or the configuration has problems |
@@ -342,7 +343,8 @@ enabled channels (`ConfigEdit::Channels`, `ConfigDraft::enabled_channels`) are a
 instead of a 32-bit mask, `Presentation::visible_mask` returns one, and the `VIEW` and `LAYT` sections
 accept up to 160 channels (a file of 32 channels or fewer is written exactly as before). 2.3 adds the settings of a richer capture device: the trigger kinds `Pattern` and `FastPattern`, the edits
 `ConfigEdit::Pattern`, `PreTrigger` and `Bursts`, the fields `pattern`, `pre_trigger_samples` and `bursts` of
-`ConfigDraft` and `Setting::Bursts`. The only shell in
+`ConfigDraft` and `Setting::Bursts`. 2.4 adds the command `DeviceAction`, the state field `device_action`, `Capabilities::actions` of the devices and
+the entries of the Capture menu for them. The only shell in
 the repository was changed in the same merge. Additions of commands or `State` fields that existing shells can ignore
 are minor versions. Removing or changing the meaning of a command, a state field or an invariant is
 a major version and requires every shell in the repository to be updated in the same merge.

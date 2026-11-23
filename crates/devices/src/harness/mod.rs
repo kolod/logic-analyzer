@@ -38,6 +38,7 @@ pub fn test_descriptor(provider: &str, unique: &str, channels: u8) -> DeviceDesc
             buffer_depths: Vec::new(),
             bursts: None,
             max_rates: Vec::new(),
+            actions: Vec::new(),
         },
     }
 }
