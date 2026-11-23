@@ -1203,6 +1203,40 @@ impl Shell {
         changes
     }
 
+    /// What the scheduler holds, as text for the message of a test that did not settle: the running
+    /// passes, the queue, the thread cap, the stuck workers, and for each instance the instance it reads
+    /// and whether that one has an output stream.
+    #[cfg(feature = "test-support")]
+    #[must_use]
+    pub fn decoder_scheduler_report(&self) -> String {
+        let state = self.state();
+        let instances: Vec<String> = state
+            .decoders
+            .instances
+            .iter()
+            .map(|i| {
+                format!(
+                    "#{} {:?} ready={} source={:?} job={} queued={} stream={}",
+                    i.id,
+                    i.state,
+                    i.ready,
+                    i.setup.source,
+                    self.decoders.jobs.contains_key(&i.id),
+                    self.decoders.queue.contains(&i.id),
+                    self.decoders.streams.contains_key(&i.id),
+                )
+            })
+            .collect();
+        format!(
+            "jobs {:?}, queue {:?}, thread cap {}, stuck workers {}, loading {}, instances {instances:#?}",
+            self.decoders.jobs.keys().collect::<Vec<_>>(),
+            self.decoders.queue,
+            self.decoders.thread_cap,
+            la_decoders::run::stuck_workers(),
+            self.decoders.loading.is_some(),
+        )
+    }
+
     /// Sets how many passes may run at once (tests).
     #[cfg(feature = "test-support")]
     pub fn set_decoder_thread_cap(&mut self, cap: usize) {
