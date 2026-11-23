@@ -11,6 +11,7 @@
 
 use la_fw_logic::{Dispatcher, Response, Tables, device_info, mode_for_mask};
 use la_proto::info::TriggerSupport;
+use la_proto::memory::Chosen;
 use la_proto::{
     CaptureRequest2, DeviceInfo, Encoding, Event, FrameParser, Memory, REQUEST2_LEN, Role,
     TriggerType, command, encode_frame,
@@ -137,7 +138,10 @@ fn a_valid_request_starts_a_capture_and_the_board_is_busy_until_it_is_done() {
     assert!(!d.busy());
     assert_eq!(
         send(&mut d, &capture_body(&request())),
-        Response::StartCapture(request())
+        Response::StartCapture {
+            request: request(),
+            memory: Chosen::Internal
+        }
     );
     assert!(d.busy());
     assert_eq!(
@@ -290,7 +294,10 @@ fn malformed_input_is_answered_and_leaves_the_board_ready() {
     // And the board still takes a good request afterwards.
     assert_eq!(
         d.handle(Event::Frame(&body), &info),
-        Response::StartCapture(request())
+        Response::StartCapture {
+            request: request(),
+            memory: Chosen::Internal
+        }
     );
 }
 

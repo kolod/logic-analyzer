@@ -2,11 +2,12 @@
 //! configuration turned into the board's capture request.
 
 use la_core::Result;
-use la_devices::ModeLimit;
 use la_devices::{
     Capabilities, DeviceAction, ResolvedConfig, SampleRates, TriggerKind, TriggerLimits,
     error as device_error,
 };
+use la_devices::{DepthBand, ModeLimit};
+use la_proto::memory::MemoryLimits;
 use la_proto::{CaptureRequest2, DeviceInfo, Encoding, Memory, Role, TriggerType};
 
 use crate::error;
@@ -136,7 +137,7 @@ pub fn capabilities(info: &DeviceInfo) -> Capabilities {
                 max_after: u64::from(after),
             }]
         },
-        buffer_depths: Vec::new(),
+        buffer_depths: depth_bands(info, u64::from(highest)),
         bursts: (info.triggers.burst > 0).then(|| u32::from(info.triggers.burst)),
         max_rates: Vec::new(),
         // The bootloader command is the original's; the normal restart is announced by the firmware.
@@ -148,6 +149,30 @@ pub fn capabilities(info: &DeviceInfo) -> Capabilities {
         // A board can be a member of a chain.
         chainable: true,
     }
+}
+
+/// The buffer depth by rate band, for a board with external memory: up to the rate the external memory can be
+/// written (for the widest sample, 32 channels) a capture can be as deep as that memory, above it only as deep as the
+/// internal one. Empty for a board without external memory (the one depth then applies).
+fn depth_bands(info: &DeviceInfo, highest: u64) -> Vec<DepthBand> {
+    let limits = MemoryLimits::from_info(info);
+    if limits.psram_bytes == 0 || limits.psram_rate_hz == 0 {
+        return Vec::new();
+    }
+    let slow_to = u64::from(limits.psram_rate_hz).min(highest);
+    let mut bands = vec![DepthBand {
+        from_rate_hz: MIN_RATE_HZ,
+        to_rate_hz: slow_to,
+        depth: limits.depth_samples(4, limits.psram_rate_hz),
+    }];
+    if slow_to < highest {
+        bands.push(DepthBand {
+            from_rate_hz: slow_to.saturating_add(1),
+            to_rate_hz: highest,
+            depth: limits.depth_samples(4, u32::MAX),
+        });
+    }
+    bands
 }
 
 /// The capture request for a configuration the core has validated against [`capabilities`].

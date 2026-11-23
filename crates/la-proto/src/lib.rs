@@ -14,6 +14,7 @@
 pub mod data;
 pub mod frame;
 pub mod info;
+pub mod memory;
 pub mod request;
 pub mod samples;
 

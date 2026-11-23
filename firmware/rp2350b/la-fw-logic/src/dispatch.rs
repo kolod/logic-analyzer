@@ -1,5 +1,6 @@
 //! What the board does with a frame from the host.
 
+use la_proto::memory::{Chosen, MemoryLimits, choose};
 use la_proto::{CaptureRequest2, DeviceInfo, Event, command};
 
 /// What the board has to do after a frame. Lines are sent as text followed by a line feed.
@@ -13,8 +14,13 @@ pub enum Response {
     Line(&'static str),
     /// Send `CAPTURE_ERROR`, then the name of the field.
     CaptureError(&'static str),
-    /// Send `CAPTURE_STARTED` and start this capture.
-    StartCapture(CaptureRequest2),
+    /// Send `CAPTURE_STARTED` and start this capture, into this memory.
+    StartCapture {
+        /// The request, already checked against the limits of the board.
+        request: CaptureRequest2,
+        /// The memory the capture goes to.
+        memory: Chosen,
+    },
     /// Send `RESTARTING_BOOTLOADER`, flush, then restart into the bootloader.
     Bootloader,
     /// Send `RESTARTING`, flush, then restart.
@@ -89,10 +95,13 @@ impl Dispatcher {
                 Err(_) => Response::Line("ERR_BAD_REQUEST"),
                 Ok(request) => match info.check_request(&request) {
                     Err(field) => Response::CaptureError(field.name()),
-                    Ok(()) => {
-                        self.busy = true;
-                        Response::StartCapture(request)
-                    }
+                    Ok(()) => match choose(&request, &MemoryLimits::from_info(info)) {
+                        Err(_) => Response::Line("ERR_NO_MEMORY"),
+                        Ok(memory) => {
+                            self.busy = true;
+                            Response::StartCapture { request, memory }
+                        }
+                    },
                 },
             },
             _ => Response::Line("ERR_UNKNOWN_MSG"),
