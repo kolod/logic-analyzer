@@ -172,6 +172,7 @@ pub fn virtual_descriptor_with_channels(channels: u8) -> DeviceDescriptor {
             bursts: None,
             max_rates: Vec::new(),
             actions: Vec::new(),
+            chainable: false,
         },
     }
 }

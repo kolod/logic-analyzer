@@ -81,9 +81,11 @@ const SETTINGS_DIALOG: [&str; 5] = [
 ];
 
 /// Controls of the side panels and the toolbar: reachable with Tab and the keyboard in them.
-const FOCUSABLE_CONTROLS: [&str; 33] = [
+const FOCUSABLE_CONTROLS: [&str; 35] = [
     "RefreshDevices",
     "SelectDevice",
+    "DefineChain",
+    "RemoveChain",
     "EditConfig",
     "RenameChannel",
     "SetChannelColour",

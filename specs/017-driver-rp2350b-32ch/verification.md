@@ -194,3 +194,20 @@ previous reader's own check of the channel count.
   all boards ended) are each caught.
 - Not done: the settings (defining and saving a chain, the shift of each board) in the host and the application
   (T062, T064); two real boards on a rig (T065).
+
+## Stage 4, part 2: the chains in the settings (T062)
+
+- `la-devices`: `DeviceChain` (name, boards, shifts; `is_valid`: 2 to 5 boards, none twice, a shift each, a name),
+  `Capabilities::chainable`, `DeviceProvider::set_chains` (the default ignores them), `DeviceRegistry::set_chains`
+  (every provider is told, also one added later, and the list is looked at again at once), `DeviceId::parse`.
+  The host knows nothing of the RP2350B: the provider makes the device of a chain of its boards.
+- `la-host` (API 2.5): `Settings::chains` (saved; read back at the next start and given to the registry before the
+  first listing; a file with chains that cannot be used keeps the first good ones), `Command::DefineChain` and
+  `RemoveChain`. A definition is refused (ignored) unless all its boards are listed now and chainable, there are 2 to 5
+  of them, none in another chain, with a shift each; the same name replaces the chain.
+- A chain leaves the device list while a board of it is missing and comes back with it; the definition is kept (an
+  unplugged board does not lose what the user set up). This is how "a board removed from the list removes the chain"
+  of the task is read; if the saved definition should go too, that is a change to make.
+- Tests: `tests/chain_settings.rs` (6) and one in the driver (the chains the application gives are the driver's);
+  the host API document test, the shortcut coverage and the settings tests pass.
+- Not done: the controls to define and edit a chain in the application (T064).

@@ -340,7 +340,7 @@ accuracy.
   master's pattern kinds and the edge trigger is refused, a missing or silent board gives
   `rp2350b.chain_incomplete` naming it, boards of different firmware versions give `rp2350b.chain_mismatch`,
   and nothing is captured as if the chain were whole.
-- [ ] T062 [P] [US6] `crates/host/tests/chain_settings.rs`: a chain is defined, saved in the settings and read back, a
+- [x] T062 [P] [US6] `crates/host/tests/chain_settings.rs`: a chain is defined, saved in the settings and read back, a
   board removed from the list removes the chain, two chains cannot use one board.
 
 ### Implementation

@@ -39,6 +39,7 @@ pub(crate) fn capabilities() -> Capabilities {
         bursts: None,
         max_rates: Vec::new(),
         actions: Vec::new(),
+        chainable: false,
     }
 }
 

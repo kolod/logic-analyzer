@@ -102,7 +102,7 @@ impl Rp2350bProvider {
     /// Sets the chains the user defined. A chain is listed while all its boards are present and supported; one that
     /// cannot be used (fewer than 2 or more than 5 boards, a board twice, no name, a name used before, a board that
     /// is already in an earlier chain) is left out.
-    pub fn set_chains(&self, chains: Vec<ChainDefinition>) {
+    pub fn set_definitions(&self, chains: Vec<ChainDefinition>) {
         let mut kept: Vec<ChainDefinition> = Vec::new();
         for chain in chains {
             let clash = kept
@@ -320,6 +320,20 @@ impl DeviceProvider for Rp2350bProvider {
         *lock_recover(&self.boards) = found;
         *lock_recover(&self.chains) = chains;
         Ok(descriptors)
+    }
+
+    fn set_chains(&self, chains: &[la_devices::DeviceChain]) {
+        // Only chains of boards of this driver are ours.
+        let ours = chains
+            .iter()
+            .filter(|c| c.boards.iter().all(|b| b.provider() == PROVIDER_NAME))
+            .map(|c| ChainDefinition {
+                name: c.name.clone(),
+                boards: c.boards.iter().map(|b| b.as_str().to_owned()).collect(),
+                shifts: c.shifts.clone(),
+            })
+            .collect();
+        self.set_definitions(ours);
     }
 
     fn perform(&self, id: &DeviceId, action: DeviceAction) -> Result<()> {
