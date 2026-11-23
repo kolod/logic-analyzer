@@ -34,11 +34,13 @@ pub use serial_backend::SystemPorts;
 /// The name of the provider and the prefix of every device identity of this driver.
 pub const PROVIDER_NAME: &str = "rp2350b";
 
-/// The USB vendor id the firmware presents (Raspberry Pi).
+/// The USB vendor id the firmware presents. For development this is the default of the Pico SDK (Raspberry Pi);
+/// a pair of our own is registered before the first release (`research.md`, R13).
 pub const USB_VID: u16 = 0x2E8A;
-/// The USB product id the firmware presents. Provisional: the firmware of this repository will set it, and
-/// the value is to be confirmed before the first release.
-pub const USB_PID: u16 = 0x4C41;
+/// The USB product id the firmware presents: the Pico SDK's default for a USB serial device. Any other
+/// firmware built on the SDK with the same default looks the same on the bus, so the driver asks each such
+/// port for the device information and lists only the ones that answer as this analyzer (R13).
+pub const USB_PID: u16 = 0x000A;
 
 /// How long a board has to start answering the information request before it is not listed.
 const PROBE_WAIT: Duration = Duration::from_millis(500);

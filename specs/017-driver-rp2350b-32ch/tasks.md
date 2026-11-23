@@ -393,6 +393,10 @@ accuracy.
   two boards, Windows and Debian, the translations).
 - [ ] T075 Run `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo deny check`,
   `cargo test --workspace --no-fail-fast`, the firmware job's commands and `quickstart.md`; fix what fails.
+- [ ] T076 **(board)** The benchmark of R13: CDC against a vendor-specific bulk interface on the real firmware, on Windows
+  and on Linux (throughput, the latency of the abort byte, the time from the end of a capture to the last byte);
+  then decide the transport and register the USB pair of our own (pid.codes or Raspberry Pi), and write both in
+  `research.md`. Until then the development pair is the SDK default.
 
 ---
 

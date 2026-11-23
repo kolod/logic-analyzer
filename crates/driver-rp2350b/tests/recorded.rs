@@ -148,7 +148,7 @@ fn only_ports_with_the_ids_of_the_firmware_are_asked() {
         vec![fixture("info_32ch.rec")],
     );
     ports.add_port(
-        port("COM2", USB_VID, 0x000A, None),
+        port("COM2", USB_VID, 0x4C41, None),
         vec![fixture("info_32ch.rec")],
     );
     let provider = Rp2350bProvider::with_backend(ports.clone());
