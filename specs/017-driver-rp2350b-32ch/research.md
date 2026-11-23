@@ -233,7 +233,8 @@ device, `0x2E8A:0x000A`, and the transport is CDC (a serial port). The driver th
 pair for the device information and lists only the ones that answer as this analyzer. Consequences: another
 board running SDK firmware with the default pair gets one information request (a frame of 5 bytes) written to
 it, and a silent one costs up to 500 ms in a listing. This is acceptable on a development machine and is not for
-a release.
+a release. A network transport (Wi-Fi) is not considered: the board has no radio, and on the Pico W the
+original's link is slower than USB, the capture being returned once at its end.
 
 **What the original does** (read from `gusmanb/logicanalyzer`, V2 firmware): its own pair `0x1209:0x3020` with
 manufacturer and product strings, set in `CMakeLists.txt` (`USBD_VID`, `USBD_PID`); registered in pid.codes
@@ -256,3 +257,79 @@ defaults. That pair is theirs and must not be reused by this project.
   more with the external memory), on Windows and Linux; and the time from the end of a capture to the last byte
   on the host. The rough expectation (to be checked, not relied on) is that CDC on the RP2350 is enough for
   this design, because the data comes back once after the capture and not as a stream.
+
+## R14. Why 32 channels per board, and the length of a chain
+
+**Decision.** A board captures 32 channels with one PIO state machine (one 32-pin window, one DMA channel, one
+32-bit word per sample). The recommended chain is **four boards of 32 (128 channels)**; the limit of five
+(160 channels, FR-022, FR-025) stays as the technical maximum and is a parameter of the chain, not a property of
+the protocol or the driver.
+
+**Compared** (the original is five boards of 24, 120 channels, a fixed limit in its `MultiAnalyzerDriver`):
+
+| Layout | Channels | Boards | Firmware | Main risk |
+|---|---|---|---|---|
+| 5 x 24 (original) | 120 | 5 | low | most skew: one shared offset over four links |
+| 3 x 40 | 120 | 3 | high | see below |
+| **4 x 32** | **128** | **4** | **low (one window)** | skew over three links, to be measured |
+| 5 x 32 (maximum) | 160 | 5 | low | skew over four links |
+
+**Why not 40 per board.** The RP2350B has 48 GPIOs, but a PIO reads a window of 32 pins. 40 channels need two
+windows: two PIO blocks with different `GPIOBASE`, started together, each with its own DMA channel, and their
+two streams merged into one sample of 40 bits. Padding it to 64 bits doubles the memory per sample; packing it
+to 5 bytes costs logic in the firmware. The memory (520 KB of SRAM, about 130,000 samples of 4 bytes before the
+external memory of R6) is not larger per channel than with 32. Two PIOs with DMA at full rate double the load on
+the SRAM bus, which is to be measured before a maximum rate is claimed. Of the 48 pins, those for sync in/out,
+the external trigger and the board's own flash, PSRAM and LED are not free, so 40 may not all be wired on a given
+board. 3 x 40 gives the same 120 channels as 5 x 24 with fewer boards, and that is its only advantage.
+
+**Why not 24 per board.** It leaves pins and the 32-bit word unused and needs more boards for the same channels.
+
+**What stays open.**
+- The skew of the sync line over three and over four links, measured with one test signal wired to every board
+  (the correction of FR-023 uses one shared offset, as the original does).
+- 40 channels per board is not excluded: it would be a later mode of the device (a wider `words_per_sample`),
+  decided after the bus is measured and a board is chosen. Nothing here depends on 32 being the only width.
+- The chain's maximum is read from a constant (`DeviceChain::MAX_BOARDS`), so a change of the recommendation
+  (3, 4 or 5 boards) is a documentation change, not a change of the driver.
+
+## R15. Skew, resolution and cause-and-effect in a recording
+
+**Question.** The original author matched the lengths of the board's traces but not those inside the Raspberry Pi
+Pico. Does the remaining skew matter, and at which rates; and what can a recording say about which edge came
+first?
+
+**Orders of magnitude** (estimates, not measurements of any board).
+- A signal travels about 6 to 7 ps per mm on FR4. The Pico is 21 x 51 mm with the chip in the middle, so the
+  difference between the shortest and the longest path to a pin may be 20 to 40 mm: about 0.15 to 0.25 ns.
+- One sample is 10 ns at 100 Msps and 5 ns at 200 Msps. That skew is 2 to 4% of a sample.
+- Larger than this: the probe leads and jumper wires (about 5 ns per metre, so 50 ps per cm of difference), the
+  paths and synchronisers inside the chip (the original disables the GPIO synchronisers to save about 4 ns), and
+  the sync wire between boards of a chain.
+- The skew would reach 10% of a sample only at a period near 2 ns (about 500 Msps), which a PIO capture does not
+  reach. **Conclusion: equalising the traces inside the board has no effect at the rates of this design.**
+
+**What a recording can say about order.**
+
+| Edges seen at | What can be claimed |
+|---|---|
+| samples N and N+2 or later | A came before B, whatever the skew |
+| neighbouring samples | A before B, almost always; it could invert only if the true gap is below the skew (about 0.2 ns), which a real cause and effect does not have (gate delays are ns) |
+| the same sample | the order is unknown; show them as simultaneous |
+
+**Where a small skew can matter.**
+- A decoder that reads data at a clock edge when the data changes at the same edge (a bus that does not keep a
+  setup or hold time, or a fast parallel bus): the bit read may be the one before or after. Only within the
+  same sample.
+- A chain of boards: FR-023 aligns the boards to within one sample with one shared offset, and the sync wire and
+  cables contribute nanoseconds. This is the skew that can move an order, not the traces.
+
+**Consequences for the design.**
+- The interface and the measurement tools state the resolution of a capture (one sample at the capture rate) and
+  round a measured difference to it with an error of one sample; two edges in one sample are shown as
+  simultaneous, never given an order.
+- A chain exposes the offset between its boards (`DeviceChain`, FR-023) and a way to set it from a test signal
+  wired to all boards (the same measurement as the open point of R14). Nothing else in the driver depends on the
+  skew of the traces.
+- A need for resolution better than one sample is outside this device: it takes an oscilloscope or a
+  time-to-digital converter.
