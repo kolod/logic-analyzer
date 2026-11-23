@@ -162,14 +162,14 @@ channel shows its own pattern (spec US1).
 
 ### Tests first
 
-- [ ] T028 [P] [US1] `crates/la-proto/tests/frames.rs`: frames spelled out byte by byte (the escapes of `AA` and `F0`,
+- [x] T028 [P] [US1] `crates/la-proto/tests/frames.rs`: frames spelled out byte by byte (the escapes of `AA` and `F0`,
   the start and end, the longest frame, one byte too many), the parser fed in chunks of every size gives the
   same frames, a damaged frame is dropped without losing the next, and a fuzz run of random bytes never panics
   (`LA_PROTO_FUZZ_ITERATIONS`, the host and the target build).
-- [ ] T029 [P] [US1] `crates/la-proto/tests/request.rs`: the 58 bytes of capture request 2 by offset (every
+- [x] T029 [P] [US1] `crates/la-proto/tests/request.rs`: the 58 bytes of capture request 2 by offset (every
   field at its offset, the channel list of 32, a request one byte short or long refused), the information reply
   parsed from the original's lines and from the new ones, an unknown line ignored, every limit.
-- [ ] T030 [P] [US1] `crates/la-proto/tests/samples.rs`: the raw packing of 1 to 32 selected channels by hand (a
+- [x] T030 [P] [US1] `crates/la-proto/tests/samples.rs`: the raw packing of 1 to 32 selected channels by hand (a
   gap in the numbers, all 32 bits, bit order), the compact coding round trip for constant, sparse, random and
   worst-case signals and its fall back to raw, a stream that is too long, too short or ends inside a record is
   refused, nothing allocates more than the declared number of samples.
@@ -190,7 +190,7 @@ channel shows its own pattern (spec US1).
 
 ### Implementation
 
-- [ ] T034 [US1] `crates/la-proto`: frames, the parser and builder, capture request 2, the information reply, the
+- [x] T034 [US1] `crates/la-proto`: frames, the parser and builder, capture request 2, the information reply, the
   limits, the raw packing and the compact coding, `no_std` with an `std` feature (T028 to T030 pass on the host
   and the target).
 - [ ] T035 [US1] `firmware/rp2350b/la-fw-logic`: the same checks, tables, packing and coding for the firmware, over

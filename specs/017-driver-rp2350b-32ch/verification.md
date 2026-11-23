@@ -65,3 +65,19 @@ previous reader's own check of the channel count.
 - No driver uses these functions yet; the virtual device declares none of the new limits.
 - `cargo fmt`, `cargo clippy --workspace --all-targets` and `cargo +1.85 check --workspace --exclude la-app
   --all-targets` are clean.
+
+## Stage 3, part 1: `la-proto` (T028 to T030, T034)
+
+- `crates/la-proto`: `no_std` without the `std` feature, no allocation. `frame` (framing, escapes, a parser that
+  gives the same events in any chunking, drops a damaged or oversize frame without losing the next), `request`
+  (the 58 bytes of capture request 2 by offset, the reading with its structural checks, the limits of the device
+  checked by `DeviceInfo::check_request` with the first wrong field named), `info` (the original's lines and the
+  new ones, unknown lines ignored), `samples` (raw packing of 1 to 32 selected channels and its reverse, the
+  compact coding and a decoder that fills only the buffer it is given).
+- Tests: `tests/frames.rs` (11, including a fuzz run, `LA_PROTO_FUZZ_ITERATIONS`), `tests/request.rs` (11),
+  `tests/samples.rs` (16). `cargo test -p la-proto` also passes with `--no-default-features`, clippy is clean, MSRV
+  1.85 builds.
+- Not done here: the build for an embedded target (no such target is installed on this machine); the firmware
+  logic crate (T035), the driver (T036, T037) and the firmware itself (T038) are the next parts of stage 3.
+- The frame limit is read as 256 bytes for the whole frame (four marker bytes and a body of at most 252), since
+  the device information request is 5 bytes long; the contract says "at most 256 bytes after unescaping".
