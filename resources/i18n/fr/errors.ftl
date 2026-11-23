@@ -107,3 +107,5 @@ error-rp2350b-stream_stopped = L'acquisition s'est terminée plus tôt. Tout ce 
 error-rp2350b-protocol = L'analyseur logique a envoyé une réponse que ce programme ne comprend pas. Reconnectez l'appareil et réessayez ; si cela se reproduit, mettez à jour le micrologiciel.
 error-rp2350b-timeout = L'analyseur logique n'a pas répondu à temps. Vérifiez le câble USB, reconnectez l'appareil et réessayez.
 error-rp2350b-disconnected = L'analyseur logique a été débranché. Tout ce qui a été acquis est conservé. Reconnectez l'appareil et recommencez.
+error-rp2350b-chain_incomplete = Une carte de la chaîne d'analyseurs logiques est absente ou n'a pas répondu. Vérifiez que toutes les cartes de la chaîne sont branchées à un port USB, rebranchez-la et réessayez.
+error-rp2350b-chain_mismatch = Les cartes de la chaîne n'ont pas la même version de micrologiciel. Mettez à jour toutes les cartes à la même version (menu Capture, Redémarrer en bootloader) et réessayez.

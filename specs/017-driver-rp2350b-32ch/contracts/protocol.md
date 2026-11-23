@@ -83,6 +83,11 @@ The payload, with explicit offsets (no padding):
 | 56 | 1 | encoding asked for the samples: 0 raw, 1 compact |
 | 57 | 1 | memory: 0 the board chooses, 1 internal, 2 external |
 
+**In a chain** the master's request is the user's (its role is 1); each slave's request (role 2) has the trigger type
+3, blast, and its own channel list: it starts when the master's trigger line says so, the wiring of which is in
+`docs/drivers/rp2350b.md`. The host arms the slaves first and the master last. Every board captures the same
+number of samples after the trigger; only the master keeps samples from before it.
+
 The payload is 58 bytes. A shorter or longer one is `ERR_BAD_REQUEST`. Every field is checked against the limits
 of the information reply before the capture starts; the first failure is `CAPTURE_ERROR` followed by the name of
 the field.

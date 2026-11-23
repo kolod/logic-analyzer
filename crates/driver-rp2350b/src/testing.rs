@@ -94,6 +94,8 @@ pub struct ScriptedLink {
     steps: VecDeque<Step>,
     port: String,
     log: WriteLog,
+    /// The ports written to, in the order of the writes (shared by all the links of a [`ScriptedPorts`]).
+    order: Arc<Mutex<Vec<String>>>,
     /// The most bytes one read returns, to exercise reads in pieces.
     max_read: usize,
 }
@@ -101,11 +103,17 @@ pub struct ScriptedLink {
 impl ScriptedLink {
     /// A link that plays `steps` and logs what the host writes.
     #[must_use]
-    pub fn new(port: &str, steps: Vec<Step>, log: WriteLog) -> Self {
+    pub fn new(
+        port: &str,
+        steps: Vec<Step>,
+        log: WriteLog,
+        order: Arc<Mutex<Vec<String>>>,
+    ) -> Self {
         Self {
             steps: steps.into(),
             port: port.to_owned(),
             log,
+            order,
             max_read: usize::MAX,
         }
     }
@@ -133,6 +141,7 @@ impl SerialLink for ScriptedLink {
 
     fn write_all(&mut self, data: &[u8]) -> Result<()> {
         lock_recover(&self.log).push(data.to_vec());
+        lock_recover(&self.order).push(self.port.clone());
         match self.steps.pop_front() {
             Some(Step::Write(None)) => Ok(()),
             Some(Step::Write(Some(expected))) if expected == data => Ok(()),
@@ -152,6 +161,7 @@ pub struct ScriptedPorts {
     logs: Mutex<BTreeMap<String, WriteLog>>,
     opens: Mutex<BTreeMap<String, usize>>,
     list_error: Mutex<bool>,
+    order: Arc<Mutex<Vec<String>>>,
 }
 
 impl ScriptedPorts {
@@ -189,6 +199,12 @@ impl ScriptedPorts {
             .unwrap_or_default()
     }
 
+    /// The ports the host wrote to, in the order of the writes (to see which board was armed first).
+    #[must_use]
+    pub fn write_order(&self) -> Vec<String> {
+        lock_recover(&self.order).clone()
+    }
+
     /// How many times `port` was opened.
     #[must_use]
     pub fn opens(&self, port: &str) -> usize {
@@ -223,6 +239,11 @@ impl PortBackend for ScriptedPorts {
             .entry(port.to_owned())
             .or_default()
             .clone();
-        Ok(Box::new(ScriptedLink::new(port, steps, log)))
+        Ok(Box::new(ScriptedLink::new(
+            port,
+            steps,
+            log,
+            Arc::clone(&self.order),
+        )))
     }
 }

@@ -175,3 +175,22 @@ previous reader's own check of the channel count.
   the bootloader of such a board and its being asked again when it returns, the normal restart not offered for it,
   something that does not answer as an analyzer not listed, a supported board unaffected.
 - Not run: with a real board and a real UF2 (T055).
+
+## Stage 4, part 1: the chain in the driver (T061, T063)
+
+- `la-driver-rp2350b::chain`: `ChainDefinition` (a name, 2 to 5 boards by identity, a shift for each), the provider's
+  `set_chains`, `chain_capabilities` (channels `32 n`, the rates and limits all can do, only the master's pattern
+  triggers, no edge trigger, no bursts), `build_chain_requests` (each board captures the enabled channels that are its
+  own, the master takes the trigger, the slaves a blast request with their role), `Merger` (a position is a sample of the
+  chain only where every board stored it; where one lost, the chain reports it lost and drops what the others stored
+  there) and `ChainDevice` (arms the slaves before the master, a board that does not answer stops the ones armed and
+  makes `rp2350b.chain_incomplete` naming it, boards of different firmware are `rp2350b.chain_mismatch` naming each).
+- A chain is listed only while all its boards are present and supported; the boards stay listed on their own.
+  A board used by the chain cannot also capture at the same time (its port is open). Reads of a chain give each board a
+  share of the read time, so all of them stay within it (`Rp2350bDevice::read_within`).
+- Tests: `tests/chain.rs` (12, 2 to 5 boards): the channels, the merge, the arming order, the requests, the shift, the
+  channels not enabled read as zero, the triggers, a missing board, a silent board, mismatching firmware, and a loss on
+  one board. Mutation checks (the master armed first, shifts ignored, the mask not applied, the chain over only when
+  all boards ended) are each caught.
+- Not done: the settings (defining and saving a chain, the shift of each board) in the host and the application
+  (T062, T064); two real boards on a rig (T065).
