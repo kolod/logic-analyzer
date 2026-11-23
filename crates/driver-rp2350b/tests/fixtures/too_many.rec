@@ -2,4 +2,4 @@
 # replace these when the firmware runs (task T039).
 > *
 <t CAPTURE_STARTED
-< 00 ff ff ff 7f
+< 00 ff ff ff 7f 00 00

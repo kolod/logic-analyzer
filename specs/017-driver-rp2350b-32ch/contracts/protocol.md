@@ -93,11 +93,24 @@ After the line `CAPTURE_STARTED` and when the capture ends:
 
 ```text
 1 byte   encoding used: 0 raw, 1 compact   (the board may fall back from compact to raw)
-4 bytes  number of samples
+4 bytes  number of samples stored (the samples that follow)
+2 bytes  number of loss marks m, at most 1024
+8·m      the loss marks (below)
 …        the samples (below)
 1 byte   number of burst times n (0 when none)
 4·n      the burst times (as the original: the counter value of the start of each burst)
 ```
+
+**Loss marks.** When the board could not keep up while sampling (an overrun), the samples it missed are not
+stored; each run of them is a mark of 8 bytes: `position` (4 bytes), the index in the stored samples before
+which the run belongs (0 to the number stored; the number stored means "after the last"), and `lost` (4
+bytes, at least 1), how many samples it covers. The marks are in ascending order of position, and two runs
+at the same position are one mark. The positions the capture covers are the stored samples plus the lost
+ones, and that sum is never more than the samples the request asked for (before plus after the trigger). The
+marks come before the samples because the board knows them when it starts to send, so the driver can report
+each loss at its place (`ReadOutcome::Lost`) without reading ahead. A capture that would need more than 1024
+marks ends at the 1024th, with the samples stored up to there. The compact coding is of the stored samples
+only; a loss does not appear in it.
 
 **Raw**: each sample is `ceil(number of channels / 8)` bytes; bit `i` of the sample (byte 0 first, bit 0 first) is
 the `i`-th channel of the request's list. Only the selected channels are sent.

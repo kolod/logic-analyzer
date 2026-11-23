@@ -109,3 +109,18 @@ previous reader's own check of the channel count.
 - Without a trigger the driver sends trigger type 3 (blast), and declares as highest rate the lower of `FREQ` and
   `BLASTFREQ`; the limits before and after the trigger are the tightest of the four modes, because the board's
   mode follows the highest channel and the core's follows the number enabled.
+
+## Stage 3, part 3: the loss marks (FR-013, T031 closed)
+
+- `contracts/protocol.md`: the head of the data of a capture is now 7 bytes (encoding, samples stored, number of
+  loss marks) followed by the marks (position in the stored samples, samples lost; strictly ascending, at most
+  1024), then the samples. The marks come first because the board knows them when it starts to send. Stored plus
+  lost is never more than the request asked for. No firmware exists yet, so nothing had to change there.
+- `la-proto` (`data`): `DataHeader`, `LossMark`, `check_marks` (`tests/loss.rs`, 6: offsets, the rules, and a
+  property run of 500 random mark lists that stored plus lost equals the positions covered).
+- The driver reports each loss where it happened (`ReadOutcome::Lost`) before the stored sample at the mark's
+  position, including a loss after the last sample and a capture that lost everything (`tests/losses.rs`, 5).
+  Marks that break the rules are `rp2350b.protocol` and nothing of that capture is delivered.
+- Mutation checks: a loss reported as 0 and a read that ignores the next mark are both caught by `losses.rs`.
+- Not run: a whole capture with a loss through the acquisition and the store (the supervisor already records a
+  loss as a gap; this driver was checked only up to `Device::read`). The recordings are still synthetic.
