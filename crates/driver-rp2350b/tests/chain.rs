@@ -61,7 +61,7 @@ fn world(
         ports.add_port(port(k), vec![fixture(infos[k]), fixture(captures[k])]);
     }
     let provider = Rp2350bProvider::with_backend(ports.clone());
-    provider.set_chains(vec![definition(infos.len(), shifts)]);
+    provider.set_definitions(vec![definition(infos.len(), shifts)]);
     (provider, ports)
 }
 
@@ -183,7 +183,7 @@ fn a_definition_that_cannot_be_used_makes_no_chain() {
         boards: boards.iter().map(|b| format!("rp2350b:{b}")).collect(),
         shifts: shifts.to_vec(),
     };
-    provider.set_chains(vec![
+    provider.set_definitions(vec![
         named("one", &["S1"], &[0]),
         named("twice", &["S1", "S1"], &[0, 0]),
         named("no-shifts", &["S1", "S2"], &[0]),
@@ -477,4 +477,39 @@ fn a_loss_on_one_board_is_a_loss_of_the_chain_and_the_positions_stay_together() 
     let got: Vec<(u32, u32)> = words.chunks(2).map(|c| (c[0], c[1])).collect();
     assert_eq!(got, expected);
     assert_eq!(seen.iter().filter(|(lost, _)| *lost).count(), 1);
+}
+
+#[test]
+fn chains_given_by_the_application_are_the_chains_of_the_boards_of_this_driver() {
+    use la_devices::{DeviceChain, DeviceId};
+    let ports = Arc::new(ScriptedPorts::new());
+    for k in 0..3 {
+        ports.add_port(port(k), vec![fixture("info_32ch.rec")]);
+    }
+    let provider = Rp2350bProvider::with_backend(ports);
+    let id = |unique: &str| DeviceId::new("rp2350b", unique);
+    provider.set_chains(&[
+        DeviceChain {
+            name: "lab".to_owned(),
+            boards: vec![id("S1"), id("S2")],
+            shifts: vec![0, 1],
+        },
+        // A chain with a board of another provider is not ours.
+        DeviceChain {
+            name: "mixed".to_owned(),
+            boards: vec![id("S3"), DeviceId::new("weact", "x")],
+            shifts: vec![0, 0],
+        },
+    ]);
+    let list = provider.scan().unwrap();
+    let chains: Vec<&str> = list
+        .iter()
+        .map(|d| d.id.as_str())
+        .filter(|i| i.contains("chain-"))
+        .collect();
+    assert_eq!(chains, ["rp2350b:chain-lab"]);
+    // A board of the driver can be chained; the chain itself cannot.
+    let by_id = |name: &str| list.iter().find(|d| d.id.as_str() == name).unwrap();
+    assert!(by_id("rp2350b:S1").capabilities.chainable);
+    assert!(!by_id("rp2350b:chain-lab").capabilities.chainable);
 }

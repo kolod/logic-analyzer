@@ -200,6 +200,19 @@ pub enum Command {
     RefreshDevices,
     /// Selects a device.
     SelectDevice(DeviceId),
+    /// Defines a chain of boards (or replaces the one of this name): 2 to 5 devices that can be chained and are
+    /// listed now, none of them in another chain, with a shift in samples for each. Saved in the settings; the
+    /// chain is a device of its own while all its boards are present.
+    DefineChain {
+        /// The name of the chain.
+        name: String,
+        /// The boards in order; the first is the master.
+        boards: Vec<DeviceId>,
+        /// For each board, how many samples to drop from the start of its data.
+        shifts: Vec<u32>,
+    },
+    /// Removes the chain of this name (its boards stay as they are).
+    RemoveChain(String),
     /// Asks the selected device to do something besides capturing (restart, restart into the bootloader).
     /// Only for an idle host and an action the device declares; the answer arrives later, and a failure is a
     /// notice.
@@ -561,6 +574,8 @@ impl Command {
             Command::RefreshDevices => "refresh_devices",
             Command::SelectDevice(_) => "select_device",
             Command::DeviceAction(_) => "device_action",
+            Command::DefineChain { .. } => "define_chain",
+            Command::RemoveChain(_) => "remove_chain",
             Command::EditConfig(_) => "edit_config",
             Command::StartCapture => "start_capture",
             Command::StopCapture => "stop_capture",

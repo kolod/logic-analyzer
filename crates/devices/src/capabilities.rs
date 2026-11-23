@@ -28,6 +28,12 @@ impl DeviceId {
         (!provider.is_empty()).then(|| Self(text.to_owned()))
     }
 
+    /// An id read from outside (a saved setting): the text must be `provider:unique` with a non-empty provider.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::from_text(text)
+    }
+
     /// The full id text.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -150,6 +156,36 @@ pub enum DeviceAction {
     RestartIntoBootloader,
 }
 
+/// Devices the user combined into one: a chain of boards that capture together. The provider of the boards makes
+/// the device (its identity and capabilities are its own); the application only keeps the definition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceChain {
+    /// The name the user gave it (not empty, and no two chains have one name).
+    pub name: String,
+    /// The boards in order; the first is the master.
+    pub boards: Vec<DeviceId>,
+    /// For each board, how many samples to drop from the start of its data to line the boards up.
+    pub shifts: Vec<u32>,
+}
+
+impl DeviceChain {
+    /// The most boards of a chain.
+    pub const MAX_BOARDS: usize = 5;
+
+    /// Whether the definition can be used: 2 to 5 boards, none twice, a shift for each, a name.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        (2..=Self::MAX_BOARDS).contains(&self.boards.len())
+            && self.shifts.len() == self.boards.len()
+            && !self.name.trim().is_empty()
+            && self
+                .boards
+                .iter()
+                .enumerate()
+                .all(|(i, b)| self.boards.iter().skip(i.saturating_add(1)).all(|o| o != b))
+    }
+}
+
 /// The widest patterns a device can trigger on, and whether a trigger works in a chain of devices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TriggerLimits {
@@ -224,6 +260,8 @@ pub struct Capabilities {
     pub max_rates: Vec<(u8, u64)>,
     /// What the device can be asked to do besides capturing (see [`DeviceAction`]); empty for most devices.
     pub actions: Vec<DeviceAction>,
+    /// Whether the device can be a member of a chain (see [`DeviceChain`]): a single board, not a chain.
+    pub chainable: bool,
 }
 
 impl Capabilities {
@@ -374,6 +412,7 @@ mod tests {
                 bursts: None,
                 max_rates: Vec::new(),
                 actions: Vec::new(),
+                chainable: false,
             },
         }
     }

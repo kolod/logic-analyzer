@@ -164,6 +164,14 @@ impl Shell {
         let system: Vec<&str> = config.system_languages.iter().map(String::as_str).collect();
         let localizer = Localizer::from_settings(loaded.settings.language.as_deref(), &system);
         let registry = DeviceRegistry::new(RegistryConfig::default());
+        registry.set_chains(
+            loaded
+                .settings
+                .chains
+                .iter()
+                .filter_map(crate::settings::ChainSetting::to_chain)
+                .collect(),
+        );
         let view_size = ViewSize::default();
         let devices = registry.list();
         let selected = default_device(&devices);
@@ -494,6 +502,22 @@ impl Shell {
         changes
     }
 
+    /// Tells the registry the chains of the settings and saves the settings.
+    fn apply_chains(&mut self, state: &mut State) -> Result<Executed, Reject> {
+        self.registry.set_chains(
+            state
+                .settings
+                .chains
+                .iter()
+                .filter_map(crate::settings::ChainSetting::to_chain)
+                .collect(),
+        );
+        let saved = self.persist_settings(state);
+        Ok(Executed::Changed(
+            Changes::SETTINGS | Changes::DEVICES | saved,
+        ))
+    }
+
     /// Reads the answer of a restart; a failure is a notice (a success changes nothing here: the device goes
     /// away and comes back through the device list).
     fn poll_device_action(&mut self, state: &mut State) -> Changes {
@@ -729,6 +753,48 @@ impl Shell {
                 }
                 select_device(state, &id);
                 changed(Changes::DEVICES | Changes::CONFIG)
+            }
+            Command::DefineChain {
+                name,
+                boards,
+                shifts,
+            } => {
+                let chain = la_devices::DeviceChain {
+                    name: name.clone(),
+                    boards: boards.clone(),
+                    shifts,
+                };
+                let listed_and_chainable = boards.iter().all(|id| {
+                    state
+                        .devices
+                        .iter()
+                        .any(|d| d.id == *id && d.capabilities.chainable)
+                });
+                let others = state.settings.chains.iter().filter(|c| c.name != name);
+                let in_another = others
+                    .flat_map(|c| c.boards.iter())
+                    .any(|b| boards.iter().any(|id| id.as_str() == b));
+                if !chain.is_valid() || !listed_and_chainable || in_another {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                let setting = crate::settings::ChainSetting {
+                    name: name.clone(),
+                    boards: chain.boards.iter().map(|b| b.as_str().to_owned()).collect(),
+                    shifts: chain.shifts.clone(),
+                };
+                match state.settings.chains.iter_mut().find(|c| c.name == name) {
+                    Some(existing) => *existing = setting,
+                    None => state.settings.chains.push(setting),
+                }
+                self.apply_chains(state)
+            }
+            Command::RemoveChain(name) => {
+                let before = state.settings.chains.len();
+                state.settings.chains.retain(|c| c.name != name);
+                if state.settings.chains.len() == before {
+                    return Err(Reject::Ignored(error::INVALID_COMMAND));
+                }
+                self.apply_chains(state)
             }
             Command::DeviceAction(action) => {
                 let Some(id) = state.selected_device.clone() else {

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use la_core::Result;
 
-use crate::capabilities::{DeviceAction, DeviceDescriptor, DeviceId};
+use crate::capabilities::{DeviceAction, DeviceChain, DeviceDescriptor, DeviceId};
 use crate::config::{AppliedConfig, ResolvedConfig};
 
 /// The longest a [`Device::read`] call may take. Return [`ReadOutcome::Idle`] when nothing is
@@ -169,6 +169,12 @@ pub trait DeviceProvider: Send + Sync {
         Err(crate::error::invalid_state(format!(
             "the device `{id}` has no such action"
         )))
+    }
+
+    /// The chains the user defined, all of them, each time they change. A provider that can chain its boards makes
+    /// a device of each chain whose boards it lists; the default ignores them.
+    fn set_chains(&self, chains: &[DeviceChain]) {
+        let _ = chains;
     }
 
     /// Optional: push hot-plug events through `sink`. The default does nothing; the registry

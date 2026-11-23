@@ -35,6 +35,7 @@ fn buffered() -> Capabilities {
         bursts: None,
         max_rates: Vec::new(),
         actions: Vec::new(),
+        chainable: false,
     }
 }
 
@@ -48,6 +49,7 @@ fn streaming() -> Capabilities {
         bursts: None,
         max_rates: Vec::new(),
         actions: Vec::new(),
+        chainable: false,
         ..buffered()
     }
 }
@@ -595,6 +597,7 @@ fn a_range_capability_accepts_every_rate_inside_the_range_and_rejects_the_edges(
         bursts: None,
         max_rates: Vec::new(),
         actions: Vec::new(),
+        chainable: false,
         ..buffered()
     };
     for rate in [10_u64, 11, 12_345, 500_000_000 - 1, 500_000_000] {
@@ -633,6 +636,7 @@ fn thirty_two_channel_devices_accept_every_channel() {
         bursts: None,
         max_rates: Vec::new(),
         actions: Vec::new(),
+        chainable: false,
         ..buffered()
     };
     for mask in [1_u32, 1 << 31, u32::MAX, 0xFFFF_0000] {

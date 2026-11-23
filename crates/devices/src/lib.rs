@@ -28,8 +28,8 @@ pub use acquisition::{
     EndReason, Progress,
 };
 pub use capabilities::{
-    Capabilities, DepthBand, DeviceAction, DeviceDescriptor, DeviceId, ModeLimit, SampleRates,
-    TriggerKind, TriggerLimits,
+    Capabilities, DepthBand, DeviceAction, DeviceChain, DeviceDescriptor, DeviceId, ModeLimit,
+    SampleRates, TriggerKind, TriggerLimits,
 };
 pub use channel_set::ChannelSet;
 pub use config::{

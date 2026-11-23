@@ -71,6 +71,35 @@ impl WindowGeometry {
     }
 }
 
+/// A chain of boards the user defined (the boards are identities of devices, as the text of a `DeviceId`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChainSetting {
+    /// The name of the chain.
+    pub name: String,
+    /// The boards in order; the first is the master.
+    pub boards: Vec<String>,
+    /// For each board, how many samples to drop from the start of its data.
+    pub shifts: Vec<u32>,
+}
+
+impl ChainSetting {
+    /// The definition as the device abstraction takes it, if the text of every board is an identity.
+    #[must_use]
+    pub fn to_chain(&self) -> Option<la_devices::DeviceChain> {
+        let boards: Option<Vec<la_devices::DeviceId>> = self
+            .boards
+            .iter()
+            .map(|b| la_devices::DeviceId::parse(b))
+            .collect();
+        let chain = la_devices::DeviceChain {
+            name: self.name.clone(),
+            boards: boards?,
+            shifts: self.shifts.clone(),
+        };
+        chain.is_valid().then_some(chain)
+    }
+}
+
 /// The user's persistent choices.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -109,6 +138,8 @@ pub struct Settings {
     /// The width of the panel at the right edge in logical pixels (kept within
     /// [`PANEL_WIDTH_RANGE`]); absent means [`DEFAULT_PANEL_WIDTH`].
     pub panel_width: Option<u32>,
+    /// The chains of boards the user defined; one board is in at most one of them.
+    pub chains: Vec<ChainSetting>,
     /// Fields written by a newer version, kept as they are.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, serde_json::Value>,
@@ -133,6 +164,7 @@ impl Default for Settings {
             side_panel: None,
             unsaved_choice: None,
             panel_width: None,
+            chains: Vec::new(),
             unknown: BTreeMap::new(),
         }
     }
@@ -193,6 +225,18 @@ impl Settings {
         if self.window.is_some_and(|w| !w.is_usable()) {
             self.window = None;
         }
+        // Chains that cannot be used (a bad shape, a name or a board used twice) are dropped, the first one wins.
+        let mut kept: Vec<ChainSetting> = Vec::new();
+        for chain in std::mem::take(&mut self.chains) {
+            let usable = chain.to_chain().is_some()
+                && kept.iter().all(|k| {
+                    k.name != chain.name && k.boards.iter().all(|b| !chain.boards.contains(b))
+                });
+            if usable {
+                kept.push(chain);
+            }
+        }
+        self.chains = kept;
         self
     }
 

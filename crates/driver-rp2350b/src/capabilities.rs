@@ -86,6 +86,8 @@ pub fn capabilities_unsupported(info: &DeviceInfo) -> Capabilities {
         bursts: None,
         max_rates: Vec::new(),
         actions: vec![DeviceAction::RestartIntoBootloader],
+        // It cannot capture, so it cannot be in a chain either.
+        chainable: false,
     }
 }
 
@@ -143,6 +145,8 @@ pub fn capabilities(info: &DeviceInfo) -> Capabilities {
         } else {
             vec![DeviceAction::RestartIntoBootloader]
         },
+        // A board can be a member of a chain.
+        chainable: true,
     }
 }
 

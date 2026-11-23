@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use la_diagnostics::{lock_recover, spawn_worker};
 
 use crate::acquisition::{Acquisition, AcquisitionOptions};
-use crate::capabilities::{DeviceAction, DeviceDescriptor, DeviceId};
+use crate::capabilities::{DeviceAction, DeviceChain, DeviceDescriptor, DeviceId};
 use crate::config::{DeviceConfig, DeviceOptions, validate};
 use crate::driver::{DeviceEvent, DeviceEventSink, DeviceProvider};
 use crate::error;
@@ -97,6 +97,8 @@ struct Shared {
     reported_invalid: Mutex<HashSet<DeviceId>>,
     /// Devices that currently run an acquisition.
     busy: Mutex<HashSet<DeviceId>>,
+    /// The chains the user defined, given to every provider (also one added later).
+    chains: Mutex<Vec<DeviceChain>>,
 }
 
 /// The device registry. Owns the monitor thread; dropping the registry stops it.
@@ -134,6 +136,7 @@ impl DeviceRegistry {
             stop: AtomicBool::new(false),
             reported_invalid: Mutex::new(HashSet::new()),
             busy: Mutex::new(HashSet::new()),
+            chains: Mutex::new(Vec::new()),
         });
         let weak = Arc::downgrade(&shared);
         // Dropping the handle detaches the monitor; it ends when the registry is dropped.
@@ -144,6 +147,7 @@ impl DeviceRegistry {
     /// Adds a provider; its devices appear after its first scan (promptly, without blocking
     /// the caller). The provider is asked to push hot-plug events.
     pub fn add_provider(&self, provider: Arc<dyn DeviceProvider>) {
+        provider.set_chains(&lock_recover(&self.shared.chains));
         let pushes = Arc::new(AtomicU64::new(0));
         lock_recover(&self.shared.slots).push(Slot {
             provider: Arc::clone(&provider),
@@ -163,6 +167,17 @@ impl DeviceRegistry {
             shared.wake_monitor();
             true
         }));
+        self.shared.scan_requested.store(true, Ordering::Release);
+        self.shared.wake_monitor();
+    }
+
+    /// Sets the chains the user defined (all of them). Every provider is told, and the list is looked at again at
+    /// once, so a chain whose boards are all there appears (and one that was removed goes) without waiting.
+    pub fn set_chains(&self, chains: Vec<DeviceChain>) {
+        *lock_recover(&self.shared.chains) = chains.clone();
+        for slot in lock_recover(&self.shared.slots).iter() {
+            slot.provider.set_chains(&chains);
+        }
         self.shared.scan_requested.store(true, Ordering::Release);
         self.shared.wake_monitor();
     }
