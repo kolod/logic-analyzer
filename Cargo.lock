@@ -1796,6 +1796,10 @@ name = "la-lint-fixture"
 version = "0.1.0"
 
 [[package]]
+name = "la-proto"
+version = "0.1.0"
+
+[[package]]
 name = "la-session"
 version = "0.1.0"
 dependencies = [

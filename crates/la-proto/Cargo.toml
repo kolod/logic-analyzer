@@ -1,0 +1,17 @@
+[package]
+name = "la-proto"
+version = "0.1.0"
+description = "The wire protocol of the RP2350B logic analyzer: frames, requests, device information and sample coding"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["std"]
+# `std` only adds `std::error::Error` for the error types; the crate is `no_std` without it, so the
+# firmware and the driver share the same code.
+std = []
+
+[lints]
+workspace = true
