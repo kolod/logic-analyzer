@@ -1,0 +1,30 @@
+[package]
+name = "la-driver-rp2350b"
+version = "0.1.0"
+description = "Driver for the 32-channel RP2350B logic analyzer (USB serial, the protocol of la-proto)"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+la-core = { path = "../core" }
+la-devices = { path = "../devices" }
+la-diagnostics = { path = "../diagnostics" }
+la-proto = { path = "../la-proto" }
+# No libudev on Linux: the ports are listed from sysfs by the crate itself.
+serialport = { version = "4", default-features = false }
+tracing = "0.1.44"
+
+[features]
+# A scripted serial link and the recorded exchanges (`testing`), for this crate's tests and for tests of other
+# crates that need a board without hardware. Not part of the stable API.
+test-support = []
+
+[dev-dependencies]
+la-devices = { path = "../devices", features = ["test-support"] }
+la-driver-rp2350b = { path = ".", features = ["test-support"] }
+la-storage = { path = "../storage" }
+
+[lints]
+workspace = true

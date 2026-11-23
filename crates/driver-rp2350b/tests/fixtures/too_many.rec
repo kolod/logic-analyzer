@@ -1,0 +1,5 @@
+# Synthetic: written by hand from contracts/protocol.md before a board exists. The real recordings
+# replace these when the firmware runs (task T039).
+> *
+<t CAPTURE_STARTED
+< 00 ff ff ff 7f

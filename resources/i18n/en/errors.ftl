@@ -163,3 +163,12 @@ error-weact-no_data = The WeAct LogicAnalyzer did not send any data. Check the U
 error-weact-stream_stopped = The capture ended early because the computer could not keep up with the WeAct LogicAnalyzer. Everything captured so far is kept. Try a lower sample rate and avoid USB hubs and docking stations.
 # The firmware image that ships with the application is unusable.
 error-weact-firmware_invalid = The firmware of the WeAct LogicAnalyzer that came with this program is damaged. Please reinstall the application.
+error-rp2350b-access_denied = This program is not allowed to open the serial port of the logic analyzer. Check that your user may use serial ports (on Linux, the dialout group), then reconnect the device.
+error-rp2350b-port_busy = The serial port of the logic analyzer is in use by another program. Stop the other program and try again.
+error-rp2350b-not_found = The logic analyzer is no longer there. Check the USB cable, reconnect the device and refresh the list.
+error-rp2350b-firmware_unsupported = The firmware of this logic analyzer is not supported by this version of the program. Update the firmware or the program (see the documentation) and try again.
+error-rp2350b-request_refused = The logic analyzer did not accept these capture settings. Check the sample rate, the trigger and the lengths against what the device offers, then start again.
+error-rp2350b-stream_stopped = The capture ended early. Everything captured so far is kept. Check the USB cable, try another USB port and start the capture again.
+error-rp2350b-protocol = The logic analyzer sent an answer this program does not understand. Reconnect the device and try again; if it happens again, update the firmware.
+error-rp2350b-timeout = The logic analyzer did not answer in time. Check the USB cable, reconnect the device and try again.
+error-rp2350b-disconnected = The logic analyzer was unplugged. Everything captured so far is kept. Reconnect the device and start again.
