@@ -53,6 +53,8 @@ menu-capture = Capture
 menu-capture-start = Start
 # Stop the running capture.
 menu-capture-stop = Stop
+menu-capture-restart-device = Restart the device
+menu-capture-bootloader = Restart into bootloader
 
 ### Toolbar, view and dialogs
 

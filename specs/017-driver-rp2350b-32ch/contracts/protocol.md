@@ -48,7 +48,7 @@ the internal memory), `CHANNELS:<n>`. **New** (a reader that does not know a nam
 |------|---------|
 | `FW:<major>.<minor>.<patch>` | the firmware's version |
 | `PROTO:<n>` | the protocol extension level, 2 for this document |
-| `FEATURES:<names>` | a comma list from: `cmd7`, `compact`, `psram`, `mode32` |
+| `FEATURES:<names>` | a comma list from: `cmd7`, `compact`, `psram`, `mode32`, `restart` (command 8 is understood) |
 | `PSRAM:<bytes>` | the size of the external memory, 0 or absent when there is none |
 | `PSRAMRATE:<Hz>` | the highest rate at which a capture of 32 channels can go to the external memory |
 | `MAXPRE:<a>,<b>,<c>,<d>` | the most samples before the trigger in modes 0, 1, 2, 3 |

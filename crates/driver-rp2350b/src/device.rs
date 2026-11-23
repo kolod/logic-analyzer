@@ -92,33 +92,10 @@ impl Rp2350bDevice {
 
     /// Reads one reply line (without its end), waiting at most [`START_STOP_TIMEOUT`].
     fn line(&mut self) -> Result<String> {
-        let mut line = Vec::new();
-        let mut waited = Duration::ZERO;
-        let mut byte = [0_u8; 1];
-        loop {
-            if self.link.read(&mut byte, READ_TIMEOUT)? == 0 {
-                waited = waited.saturating_add(READ_TIMEOUT);
-                if waited >= START_STOP_TIMEOUT {
-                    return Err(error::timeout(
-                        "waiting for the answer to a capture request",
-                        u64::try_from(waited.as_millis()).unwrap_or(u64::MAX),
-                    ));
-                }
-                continue;
-            }
-            match byte.first() {
-                Some(b'\n') => break,
-                Some(b'\r') => {}
-                Some(&b) => {
-                    if line.len() >= MAX_LINE {
-                        return Err(error::protocol("a reply line is too long"));
-                    }
-                    line.push(b);
-                }
-                None => {}
-            }
-        }
-        String::from_utf8(line).map_err(|_| error::protocol("a reply line is not text"))
+        read_line(
+            &mut *self.link,
+            "waiting for the answer to a capture request",
+        )
     }
 
     fn fail_on_idle(running: &mut Running, what: Option<(u64, u64)>) -> Result<()> {
@@ -369,4 +346,36 @@ fn after_marks(promised: u64, has_losses: bool) -> Phase {
     } else {
         Phase::Samples
     }
+}
+
+/// Reads one reply line from `link` (without its end), waiting at most [`START_STOP_TIMEOUT`]; `doing` says
+/// what was waited for if the time runs out.
+pub(crate) fn read_line(link: &mut dyn SerialLink, doing: &str) -> Result<String> {
+    let mut line = Vec::new();
+    let mut waited = Duration::ZERO;
+    let mut byte = [0_u8; 1];
+    loop {
+        if link.read(&mut byte, READ_TIMEOUT)? == 0 {
+            waited = waited.saturating_add(READ_TIMEOUT);
+            if waited >= START_STOP_TIMEOUT {
+                return Err(error::timeout(
+                    doing,
+                    u64::try_from(waited.as_millis()).unwrap_or(u64::MAX),
+                ));
+            }
+            continue;
+        }
+        match byte.first() {
+            Some(b'\n') => break,
+            Some(b'\r') => {}
+            Some(&b) => {
+                if line.len() >= MAX_LINE {
+                    return Err(error::protocol("a reply line is too long"));
+                }
+                line.push(b);
+            }
+            None => {}
+        }
+    }
+    String::from_utf8(line).map_err(|_| error::protocol("a reply line is not text"))
 }

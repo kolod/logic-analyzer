@@ -46,7 +46,7 @@ BUFFER:96000\n\
 CHANNELS:32\n\
 FW:1.2.3\n\
 PROTO:2\n\
-FEATURES:cmd7,compact,psram,mode32,future\n\
+FEATURES:cmd7,compact,psram,mode32,restart,future\n\
 PSRAM:8388608\n\
 PSRAMRATE:20000000\n\
 MAXPRE:1000,500,250,100\n\
@@ -199,6 +199,7 @@ fn the_information_is_read_from_the_original_and_the_new_lines() {
     assert_eq!(i.firmware, Some((1, 2, 3)));
     assert_eq!(i.proto, 2);
     assert!(i.features.cmd7 && i.features.compact && i.features.psram && i.features.mode32);
+    assert!(i.features.restart);
     assert_eq!(i.psram_bytes, 8 * 1024 * 1024);
     assert_eq!(i.psram_rate, 20_000_000);
     assert_eq!(i.max_before, [1_000, 500, 250, 100]);

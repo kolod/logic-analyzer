@@ -30,6 +30,8 @@ menu-file-quit = Вийти
 menu-capture = Захоплення
 menu-capture-start = Почати
 menu-capture-stop = Зупинити
+menu-capture-restart-device = Перезапустити пристрій
+menu-capture-bootloader = Перезапуск у завантажувач
 
 ### Панель інструментів, вигляд і діалоги
 

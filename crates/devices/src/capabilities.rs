@@ -141,6 +141,15 @@ pub enum TriggerKind {
     FastPattern,
 }
 
+/// Something a device can be asked to do besides capturing, while it is idle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DeviceAction {
+    /// Restart the device so that it runs its firmware again.
+    Restart,
+    /// Restart the device into its bootloader, so that its firmware can be updated without a programmer.
+    RestartIntoBootloader,
+}
+
 /// The widest patterns a device can trigger on, and whether a trigger works in a chain of devices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TriggerLimits {
@@ -213,6 +222,8 @@ pub struct Capabilities {
     /// The highest rate by enabled channel count: `(up to this many channels, rate in hertz)`, ascending in
     /// the channel count and not rising; empty when the rates of `sample_rates` apply to every count.
     pub max_rates: Vec<(u8, u64)>,
+    /// What the device can be asked to do besides capturing (see [`DeviceAction`]); empty for most devices.
+    pub actions: Vec<DeviceAction>,
 }
 
 impl Capabilities {
@@ -362,6 +373,7 @@ mod tests {
                 buffer_depths: Vec::new(),
                 bursts: None,
                 max_rates: Vec::new(),
+                actions: Vec::new(),
             },
         }
     }

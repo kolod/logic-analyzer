@@ -30,6 +30,8 @@ menu-file-quit = 終了
 menu-capture = キャプチャ
 menu-capture-start = 開始
 menu-capture-stop = 停止
+menu-capture-restart-device = デバイスを再起動
+menu-capture-bootloader = ブートローダーで再起動
 
 ### ツールバー、ビュー、ダイアログ
 

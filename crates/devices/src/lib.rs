@@ -28,8 +28,8 @@ pub use acquisition::{
     EndReason, Progress,
 };
 pub use capabilities::{
-    Capabilities, DepthBand, DeviceDescriptor, DeviceId, ModeLimit, SampleRates, TriggerKind,
-    TriggerLimits,
+    Capabilities, DepthBand, DeviceAction, DeviceDescriptor, DeviceId, ModeLimit, SampleRates,
+    TriggerKind, TriggerLimits,
 };
 pub use channel_set::ChannelSet;
 pub use config::{
@@ -40,7 +40,7 @@ pub use driver::{
     Device, DeviceEvent, DeviceEventSink, DeviceProvider, Flow, READ_TIMEOUT, ReadOutcome,
     START_STOP_TIMEOUT, Transport,
 };
-pub use registry::{DeviceRegistry, RegistryConfig};
+pub use registry::{ActionHandle, DeviceRegistry, RegistryConfig};
 pub use virtual_device::{
     FailureKind, PROVIDER_NAME as VIRTUAL_PROVIDER_NAME, Pacing, RandomSource, ScriptedFailure,
     SignalSource, SignalSourceFactory, VirtualDevice, VirtualOptions, VirtualProvider,

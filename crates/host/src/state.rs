@@ -3,7 +3,7 @@
 //! A user interface reads it and never changes it; only [`Shell`](crate::Shell) does, by
 //! executing commands on a working copy and committing the copy when the command succeeds.
 
-use la_devices::{DeviceDescriptor, DeviceId};
+use la_devices::{DeviceAction, DeviceDescriptor, DeviceId};
 use la_i18n::Language;
 
 use crate::capture::{CaptureView, ProgressView};
@@ -173,6 +173,8 @@ pub struct State {
     pub devices: Vec<DeviceDescriptor>,
     /// The selected device.
     pub selected_device: Option<DeviceId>,
+    /// The action (a restart) the selected device is doing, until it answers.
+    pub device_action: Option<DeviceAction>,
     /// The configuration being edited.
     pub config: ConfigDraft,
     /// What the device would refuse in `config` (empty: Start is possible).

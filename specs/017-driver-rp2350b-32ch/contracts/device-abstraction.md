@@ -30,6 +30,7 @@ Capabilities += trigger_limits: TriggerLimits // widest Pattern and FastPattern,
              += buffer_depths: Vec<DepthBand> // by rate range: from rate, to rate, depth in samples
              += bursts: Option<u32>           // the most bursts, None when unsupported
              += max_rates: Vec<(u8, u64)>     // highest rate by channel count (up to n channels)
+             += actions: Vec<DeviceAction>    // Restart, RestartIntoBootloader (stage 3); DeviceProvider::perform
 DeviceConfig += pattern: Option<Pattern>      // for the Pattern and FastPattern triggers only
              += pre_trigger_samples: u64      // kept in the capture, part of capture_length; 0 when unused
              += bursts: u32                   // 0 for one capture

@@ -17,12 +17,43 @@ use std::time::{Duration, Instant};
 use la_diagnostics::{lock_recover, spawn_worker};
 
 use crate::acquisition::{Acquisition, AcquisitionOptions};
-use crate::capabilities::{DeviceDescriptor, DeviceId};
+use crate::capabilities::{DeviceAction, DeviceDescriptor, DeviceId};
 use crate::config::{DeviceConfig, DeviceOptions, validate};
 use crate::driver::{DeviceEvent, DeviceEventSink, DeviceProvider};
 use crate::error;
 use crate::supervisor::{Launch, launch};
 use crate::virtual_device::{PROVIDER_NAME, VirtualProvider, virtual_descriptor};
+
+/// An action on a device that was started with [`DeviceRegistry::perform`].
+#[derive(Debug)]
+pub struct ActionHandle {
+    receiver: Receiver<la_core::Result<()>>,
+    started: Instant,
+}
+
+impl ActionHandle {
+    /// The answer, if there is one yet: `None` while the provider works. An answer that does not come within
+    /// [`START_STOP_TIMEOUT`](crate::START_STOP_TIMEOUT) is `device.unresponsive`; a provider that panicked is
+    /// `device.driver_panic`.
+    #[must_use]
+    pub fn poll(&self) -> Option<la_core::Result<()>> {
+        match self.receiver.try_recv() {
+            Ok(result) => Some(result),
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                let waited = self.started.elapsed();
+                (waited >= crate::START_STOP_TIMEOUT).then(|| {
+                    Err(error::unresponsive(format!(
+                        "the device did not answer within {} ms",
+                        waited.as_millis()
+                    )))
+                })
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(Err(error::driver_panic(
+                "the driver stopped while doing the action".to_owned(),
+            ))),
+        }
+    }
+}
 
 /// How the registry scans its providers.
 #[derive(Debug, Clone, Copy)]
@@ -211,6 +242,45 @@ impl DeviceRegistry {
             release,
         })
         .inspect_err(|_| release_on_error())
+    }
+
+    /// Starts `action` on the device `id` in the background and returns at once; the answer is read from the
+    /// handle. The device must declare the action and must not be capturing. The provider runs on its own
+    /// contained worker, so a slow or hung one never blocks the caller.
+    ///
+    /// # Errors
+    ///
+    /// `device.not_found`, `device.busy` while the device captures, `device.invalid_state` for an action the
+    /// device does not declare.
+    pub fn perform(&self, id: &DeviceId, action: DeviceAction) -> la_core::Result<ActionHandle> {
+        let descriptor = self
+            .describe(id)
+            .ok_or_else(|| error::not_found(id.as_str()))?;
+        if !descriptor.capabilities.actions.contains(&action) {
+            return Err(error::invalid_state(format!(
+                "the device `{id}` does not declare the action {action:?}"
+            )));
+        }
+        if lock_recover(&self.shared.busy).contains(id) {
+            return Err(error::busy(id.as_str()));
+        }
+        let provider = lock_recover(&self.shared.slots)
+            .iter()
+            .find(|slot| slot.provider.name() == id.provider())
+            .map(|slot| Arc::clone(&slot.provider))
+            .ok_or_else(|| error::not_found(id.as_str()))?;
+        let (sender, receiver) = channel();
+        let target = id.clone();
+        drop(spawn_worker(&format!("action-{id}"), move || {
+            // The receiver is gone if nobody waits for the answer any more.
+            let _ = sender.send(provider.perform(&target, action));
+        }));
+        // The device goes away (and comes back) after a restart: look at the list again soon.
+        self.shared.wake_monitor();
+        Ok(ActionHandle {
+            receiver,
+            started: Instant::now(),
+        })
     }
 
     /// The descriptor of a listed device.

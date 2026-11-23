@@ -4,7 +4,8 @@
 use la_core::Result;
 use la_devices::ModeLimit;
 use la_devices::{
-    Capabilities, ResolvedConfig, SampleRates, TriggerKind, TriggerLimits, error as device_error,
+    Capabilities, DeviceAction, ResolvedConfig, SampleRates, TriggerKind, TriggerLimits,
+    error as device_error,
 };
 use la_proto::{CaptureRequest2, DeviceInfo, Encoding, Memory, Role, TriggerType};
 
@@ -98,6 +99,12 @@ pub fn capabilities(info: &DeviceInfo) -> Capabilities {
         buffer_depths: Vec::new(),
         bursts: (info.triggers.burst > 0).then(|| u32::from(info.triggers.burst)),
         max_rates: Vec::new(),
+        // The bootloader command is the original's; the normal restart is announced by the firmware.
+        actions: if info.features.restart {
+            vec![DeviceAction::Restart, DeviceAction::RestartIntoBootloader]
+        } else {
+            vec![DeviceAction::RestartIntoBootloader]
+        },
     }
 }
 

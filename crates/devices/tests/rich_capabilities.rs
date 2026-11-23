@@ -67,6 +67,7 @@ fn rich() -> Capabilities {
         ],
         bursts: Some(8),
         max_rates: vec![(16, 200_000_000), (32, 100_000_000)],
+        actions: Vec::new(),
     }
 }
 
@@ -449,6 +450,7 @@ fn a_device_that_declares_none_of_it_behaves_as_before() {
         buffer_depths: Vec::new(),
         bursts: None,
         max_rates: Vec::new(),
+        actions: Vec::new(),
     };
     let mut config = base();
     config.capture_length = Some(1_000);

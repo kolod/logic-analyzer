@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use la_core::Result;
 
-use crate::capabilities::{DeviceDescriptor, DeviceId};
+use crate::capabilities::{DeviceAction, DeviceDescriptor, DeviceId};
 use crate::config::{AppliedConfig, ResolvedConfig};
 
 /// The longest a [`Device::read`] call may take. Return [`ReadOutcome::Idle`] when nothing is
@@ -88,6 +88,10 @@ pub trait Device: Send {
 
 /// A hot-plug event.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "events are rare and short-lived; boxing the descriptor would change every provider for no gain"
+)]
 pub enum DeviceEvent {
     /// A device was connected.
     Appeared(DeviceDescriptor),
@@ -153,6 +157,19 @@ pub trait DeviceProvider: Send + Sync {
     ///
     /// `device.not_found` or another typed `device.*` error.
     fn open(&self, id: &DeviceId) -> Result<Box<dyn Device>>;
+
+    /// Does `action` to the device `id`, which is not capturing. Only called for an action the device declares
+    /// in its capabilities. The default refuses: a provider that declares an action implements this.
+    ///
+    /// # Errors
+    ///
+    /// A typed `device.*` error.
+    fn perform(&self, id: &DeviceId, action: DeviceAction) -> Result<()> {
+        let _ = action;
+        Err(crate::error::invalid_state(format!(
+            "the device `{id}` has no such action"
+        )))
+    }
 
     /// Optional: push hot-plug events through `sink`. The default does nothing; the registry
     /// reconciles periodic scans instead.
