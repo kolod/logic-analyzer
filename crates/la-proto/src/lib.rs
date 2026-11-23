@@ -11,11 +11,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 
+pub mod data;
 pub mod frame;
 pub mod info;
 pub mod request;
 pub mod samples;
 
+pub use data::{
+    DataError, DataHeader, HEADER_LEN, LossMark, MARK_LEN, MAX_LOSS_MARKS, check_marks,
+};
 pub use frame::{Event, FrameError, FrameParser, MAX_BODY_LEN, MAX_FRAME_LEN, encode_frame};
 pub use info::{DeviceInfo, Features, InfoError};
 pub use request::{

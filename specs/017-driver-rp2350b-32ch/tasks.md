@@ -173,7 +173,7 @@ channel shows its own pattern (spec US1).
   gap in the numbers, all 32 bits, bit order), the compact coding round trip for constant, sparse, random and
   worst-case signals and its fall back to raw, a stream that is too long, too short or ends inside a record is
   refused, nothing allocates more than the declared number of samples.
-- [ ] T031 [P] [US1] `crates/driver-rp2350b/tests/recorded.rs` with the recordings in
+- [x] T031 [P] [US1] `crates/driver-rp2350b/tests/recorded.rs` with the recordings in
   `crates/driver-rp2350b/tests/fixtures/`: the driver lists the device from the information reply (32 channels,
   rates, depth), a capture of 32 channels and one of channels 24 to 31 only return exactly the recorded words as
   `words_per_sample` 1, the device identity is stable and a capture is not marked simulated; a test of the

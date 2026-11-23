@@ -7,7 +7,10 @@ use la_devices::{
     AppliedConfig, Device, DeviceDescriptor, READ_TIMEOUT, ReadOutcome, ResolvedConfig,
     START_STOP_TIMEOUT,
 };
-use la_proto::{CaptureRequest2, command, encode_frame, unpack_raw};
+use la_proto::{
+    CaptureRequest2, DataHeader, Encoding, HEADER_LEN, LossMark, MARK_LEN, check_marks, command,
+    encode_frame, unpack_raw,
+};
 
 use crate::capabilities::build_request;
 use crate::error;
@@ -24,8 +27,10 @@ const ABORT: u8 = 0x00;
 
 /// Where the data of a capture is.
 enum Phase {
-    /// Waiting for the encoding byte and the sample count.
-    Header { bytes: [u8; 5], got: usize },
+    /// Waiting for the head: the encoding, the sample count and the number of loss marks.
+    Header { bytes: [u8; HEADER_LEN], got: usize },
+    /// Reading the loss marks.
+    Marks { bytes: Vec<u8>, left: usize },
     /// Reading samples.
     Samples,
     /// Reading the burst times: the count, then four bytes each.
@@ -44,6 +49,8 @@ struct Running {
     /// The most samples the request allows.
     most: u64,
     received: u64,
+    /// The losses still to be reported, each before the stored sample at its position.
+    marks: std::collections::VecDeque<LossMark>,
     /// Bytes of a sample that has not arrived whole.
     pending: Vec<u8>,
     silent: Duration,
@@ -153,7 +160,7 @@ impl Device for Rp2350bDevice {
         }
         self.running = Some(Running {
             phase: Phase::Header {
-                bytes: [0; 5],
+                bytes: [0; HEADER_LEN],
                 got: 0,
             },
             channels: request.used_channels().to_vec(),
@@ -162,6 +169,7 @@ impl Device for Rp2350bDevice {
             most: u64::from(request.samples_before)
                 .saturating_add(u64::from(request.samples_after)),
             received: 0,
+            marks: std::collections::VecDeque::new(),
             pending: Vec::new(),
             silent: Duration::ZERO,
         });
@@ -184,16 +192,18 @@ impl Device for Rp2350bDevice {
                         return Ok(ReadOutcome::Idle);
                     }
                     *got = got.saturating_add(n);
-                    if *got < 5 {
+                    if *got < HEADER_LEN {
                         continue;
                     }
-                    let [encoding, a, b, c, d] = *bytes;
-                    if encoding != 0 {
+                    let head = DataHeader::from_bytes(*bytes).map_err(|e| {
+                        error::protocol(&format!("the data head is not valid: {e}"))
+                    })?;
+                    if head.encoding != Encoding::Raw {
                         return Err(error::protocol(
                             "compact samples arrived but were not requested",
                         ));
                     }
-                    let promised = u64::from(u32::from_le_bytes([a, b, c, d]));
+                    let promised = u64::from(head.samples);
                     if promised > running.most {
                         return Err(error::protocol(
                             "the board announced more samples than were requested",
@@ -201,16 +211,52 @@ impl Device for Rp2350bDevice {
                     }
                     running.promised = promised;
                     running.silent = Duration::ZERO;
-                    running.phase = if promised == 0 {
-                        Phase::Times {
-                            count: None,
-                            left: 1,
+                    let left = usize::from(head.marks).saturating_mul(MARK_LEN);
+                    running.phase = if left > 0 {
+                        Phase::Marks {
+                            bytes: Vec::with_capacity(left),
+                            left,
                         }
                     } else {
-                        Phase::Samples
+                        after_marks(running.promised, false)
                     };
                 }
+                Phase::Marks { bytes, left } => {
+                    let mut buffer = [0_u8; 256];
+                    let wanted = (*left).min(buffer.len());
+                    let n = self
+                        .link
+                        .read(buffer.get_mut(..wanted).unwrap_or(&mut []), READ_TIMEOUT)?;
+                    if n == 0 {
+                        Self::fail_on_idle(running, Some((running.received, running.promised)))?;
+                        return Ok(ReadOutcome::Idle);
+                    }
+                    running.silent = Duration::ZERO;
+                    bytes.extend_from_slice(buffer.get(..n).unwrap_or(&[]));
+                    *left = left.saturating_sub(n);
+                    if *left > 0 {
+                        continue;
+                    }
+                    let marks: Vec<LossMark> = bytes
+                        .chunks_exact(MARK_LEN)
+                        .filter_map(|chunk| <[u8; MARK_LEN]>::try_from(chunk).ok())
+                        .map(LossMark::from_bytes)
+                        .collect();
+                    let stored = u32::try_from(running.promised).unwrap_or(u32::MAX);
+                    check_marks(&marks, stored, running.most).map_err(|e| {
+                        error::protocol(&format!("the loss marks are not valid: {e}"))
+                    })?;
+                    running.marks = marks.into();
+                    running.phase = after_marks(running.promised, !running.marks.is_empty());
+                }
                 Phase::Samples => {
+                    // A loss is reported where it happened: before the stored sample at its position.
+                    if let Some(mark) = running.marks.front().copied() {
+                        if u64::from(mark.position) == running.received {
+                            running.marks.pop_front();
+                            return Ok(ReadOutcome::Lost(u64::from(mark.lost)));
+                        }
+                    }
                     let remaining = running.promised.saturating_sub(running.received);
                     if remaining == 0 && running.pending.is_empty() {
                         running.phase = Phase::Times {
@@ -219,7 +265,11 @@ impl Device for Rp2350bDevice {
                         };
                         continue;
                     }
-                    let samples = usize::try_from(remaining)
+                    // Not past the next loss: the samples before it come first.
+                    let until_loss = running.marks.front().map_or(remaining, |mark| {
+                        u64::from(mark.position).saturating_sub(running.received)
+                    });
+                    let samples = usize::try_from(remaining.min(until_loss))
                         .unwrap_or(usize::MAX)
                         .min(max_samples.max(1));
                     let wanted = samples
@@ -305,5 +355,18 @@ impl Device for Rp2350bDevice {
             "capture stopped"
         );
         Ok(())
+    }
+}
+
+/// Where the data goes after the head and the marks: the samples (and the losses between them), or the burst
+/// times if there is neither.
+fn after_marks(promised: u64, has_losses: bool) -> Phase {
+    if promised == 0 && !has_losses {
+        Phase::Times {
+            count: None,
+            left: 1,
+        }
+    } else {
+        Phase::Samples
     }
 }
