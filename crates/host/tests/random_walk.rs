@@ -916,7 +916,9 @@ fn walk(seed: u64, steps: u64) {
             || shell.operation_running()
             || shell.state().decoders.instances.iter().any(|i| {
                 i.state == la_host::decoders::InstanceState::Running
-                    || (i.state == la_host::decoders::InstanceState::Waiting && i.ready)
+                    || (i.state == la_host::decoders::InstanceState::Waiting
+                        && i.ready
+                        && !waits_for_an_incomplete_instance(&shell, i))
             })
         {
             shell.poll(Instant::now());
@@ -954,6 +956,37 @@ fn setting(name: &str, default: u64) -> u64 {
 
 /// What still keeps the wind-down of the walk waiting, for the message of a timeout (a flake seen
 /// on Debian whose cause is not known: the message must say which condition held).
+/// Whether an instance that is waiting and has a complete setup waits for the instance below it, which has
+/// not started because its own setup is incomplete. Nothing runs such an instance until the one below
+/// does, which is right (`decoder_stack.rs`, "waits and runs when the lower one is complete"), so it is not
+/// one that is about to start. (This was the cause of the walk's "did not settle" failures.)
+fn waits_for_an_incomplete_instance(
+    shell: &Shell,
+    instance: &la_host::decoders::InstanceView,
+) -> bool {
+    use la_decoders::setup::Source;
+    use la_host::decoders::InstanceState;
+    let state = shell.state();
+    let mut source = instance.setup.source;
+    // A stack is as deep as the number of instances; the bound only guards against a cycle.
+    for _ in 0..state.decoders.instances.len() {
+        let Source::Instance(below) = source else {
+            return false;
+        };
+        let Some(below) = state.decoders.instance(below) else {
+            return false;
+        };
+        if below.state != InstanceState::Waiting {
+            return false;
+        }
+        if !below.ready {
+            return true;
+        }
+        source = below.setup.source;
+    }
+    false
+}
+
 fn unsettled(shell: &Shell) -> String {
     let state = shell.state();
     let instances: Vec<String> = state
@@ -968,7 +1001,8 @@ fn unsettled(shell: &Shell) -> String {
         })
         .collect();
     format!(
-        "activity {:?}, operation {:?}, running {}, pending decision {:?}, instances {instances:#?}",
+        "{}; activity {:?}, operation {:?}, running {}, pending decision {:?}, instances {instances:#?}",
+        shell.decoder_scheduler_report(),
         state.activity,
         state
             .operation

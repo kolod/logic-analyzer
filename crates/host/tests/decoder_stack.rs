@@ -266,3 +266,59 @@ fn a_source_that_does_not_exist_is_refused_even_while_the_setup_is_incomplete() 
     assert_eq!(view(&shell, incomplete).setup.source, Source::Capture);
     assert!(shell.state().decoders.refusal.is_some());
 }
+
+#[test]
+fn an_upper_instance_on_an_incomplete_lower_one_waits_and_runs_when_the_lower_one_is_complete() {
+    // Found by the random walk: such an instance is `Waiting` and `ready` (its own setup is complete) and
+    // nothing runs it, and that is right: it has nothing to read until the instance below starts. Whoever
+    // waits for the decoders to settle must not take it for one that is about to start.
+    let dir = TempDir::new("stack-waits-for-lower");
+    let (mut shell, _lower, _upper) = shell(&dir);
+    for decoder in [LOWER_BYTES.id, UPPER_WORDS.id] {
+        done(
+            &mut shell,
+            Command::AddDecoder {
+                decoder: decoder.into(),
+            },
+        );
+    }
+    let ids: Vec<u32> = shell
+        .state()
+        .decoders
+        .instances
+        .iter()
+        .map(|i| i.id)
+        .collect();
+    let (new_lower, new_upper) = (ids[ids.len() - 2], ids[ids.len() - 1]);
+    assert!(
+        !view(&shell, new_lower).ready,
+        "the lower one lacks its clock"
+    );
+    done(
+        &mut shell,
+        Command::StackDecoder {
+            id: new_upper,
+            source: Source::Instance(new_lower),
+        },
+    );
+    for _ in 0..50 {
+        shell.poll(Instant::now());
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let waiting = view(&shell, new_upper);
+    assert_eq!(waiting.state, InstanceState::Waiting);
+    assert!(waiting.ready, "its own setup is complete");
+    assert_eq!(view(&shell, new_lower).state, InstanceState::Waiting);
+    // The lower one gets its clock: both run and finish.
+    done(
+        &mut shell,
+        Command::SetDecoderChannel {
+            id: new_lower,
+            role: "clock".into(),
+            channel: Some(0),
+        },
+    );
+    settle(&mut shell);
+    assert_eq!(view(&shell, new_lower).state, InstanceState::Finished);
+    assert_eq!(view(&shell, new_upper).state, InstanceState::Finished);
+}
