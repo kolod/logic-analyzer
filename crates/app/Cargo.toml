@@ -30,6 +30,8 @@ iced_test = "0.14.0"
 read-fonts = "0.35.0"
 la-host = { path = "../host", features = ["test-support"] }
 la-session = { path = "../session" }
+la-core = { path = "../core" }
+la-devices = { path = "../devices", features = ["test-support"] }
 la-decoders = { path = "../decoders", features = ["test-support"] }
 
 [target.'cfg(windows)'.build-dependencies]

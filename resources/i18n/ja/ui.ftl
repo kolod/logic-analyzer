@@ -158,6 +158,17 @@ trigger-pattern-levels = パターンのレベル（先頭チャンネルから�
 capture-pre-trigger = トリガー前のサンプル数
 capture-after-trigger = トリガー後のサンプル数：{ $count }
 capture-bursts = バースト数（0 なら 1 回のキャプチャ）
+# 一緒にキャプチャする基板のチェーン（チェーンできる基板が接続されているときに表示）。
+chain-title = 基板のチェーン
+chain-help = 配線でつないだ基板は 1 台のデバイスとしてキャプチャします。基板を順に選んでください。最初がマスターです。
+chain-name = チェーンの名前
+chain-create = チェーンを作成
+chain-remove = 削除
+chain-shift = ずらし
+chain-master = マスター
+chain-slave = スレーブ
+chain-no-boards = チェーンできる空き基板がありません。
+chain-board-missing = （未接続）
 capture-channels = 記録するチャンネル
 capture-channels-all = すべて
 capture-channels-none = なし

@@ -211,3 +211,16 @@ previous reader's own check of the channel count.
 - Tests: `tests/chain_settings.rs` (6) and one in the driver (the chains the application gives are the driver's);
   the host API document test, the shortcut coverage and the settings tests pass.
 - Not done: the controls to define and edit a chain in the application (T064).
+
+## Stage 4, part 3: the chains in the application (T064)
+
+- The Capture panel has a "Chains of boards" block, shown when a board that can be chained is connected or a chain
+  exists: the chains made (the name, each board as master or slave with its name or "(not connected)", a field for its
+  shift, a button to remove) and the way to make one: a name, the boards that can be chained and are not in a chain as
+  check boxes (the number is the order chosen; at most five), and a button that is enabled for 2 to 5 boards and a new
+  name. Everything is disabled while a capture runs. What was chosen is kept if the host does not take it.
+- Shifts: an empty field is no shift, something that is not a number changes nothing.
+- Texts in the six languages (`chain-*`); the budget, parity and fonts tests pass.
+- Tests (in the application): the chain made from boards chosen in order and its shifts and removal, the limit of five,
+  and the controls rendered at the narrowest panel in every language.
+- Not run: with two real boards (T065); a chain whose devices are the RP2350B boards needs the firmware.

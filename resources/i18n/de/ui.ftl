@@ -158,6 +158,17 @@ trigger-pattern-levels = Musterpegel, erster Kanal zuerst (0 oder 1)
 capture-pre-trigger = Abtastwerte vor dem Trigger
 capture-after-trigger = Abtastwerte nach dem Trigger: { $count }
 capture-bursts = Bursts (0 für eine Aufnahme)
+# Ketten von Platinen, die gemeinsam aufnehmen (sichtbar, wenn eine verkettbare Platine angeschlossen ist).
+chain-title = Ketten von Platinen
+chain-help = Verdrahtete Platinen nehmen wie ein Gerät auf. Wählen Sie die Platinen der Reihe nach; die erste ist der Master.
+chain-name = Name der Kette
+chain-create = Kette anlegen
+chain-remove = Entfernen
+chain-shift = Versatz
+chain-master = Master
+chain-slave = Slave
+chain-no-boards = Keine verkettbare Platine ist frei.
+chain-board-missing = (nicht angeschlossen)
 capture-channels = Aufzunehmende Kanäle
 capture-channels-all = Alle
 capture-channels-none = Keine

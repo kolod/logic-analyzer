@@ -158,6 +158,17 @@ trigger-pattern-levels = Рівні шаблону, спершу перший к
 capture-pre-trigger = Відліків до тригера
 capture-after-trigger = Відліків після тригера: { $count }
 capture-bursts = Пакети (0 — одне захоплення)
+# Ланцюжки плат, що захоплюють разом (показуються, коли під'єднано плату, яку можна з'єднати).
+chain-title = Ланцюжки плат
+chain-help = З'єднані дротами плати захоплюють як один пристрій. Виберіть плати по порядку; перша — ведуча.
+chain-name = Назва ланцюжка
+chain-create = Створити ланцюжок
+chain-remove = Видалити
+chain-shift = Зсув
+chain-master = Ведуча
+chain-slave = Ведена
+chain-no-boards = Немає вільної плати для ланцюжка.
+chain-board-missing = (не під'єднано)
 capture-channels = Канали для запису
 capture-channels-all = Всі
 capture-channels-none = Жоден
