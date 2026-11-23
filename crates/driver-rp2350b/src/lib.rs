@@ -26,7 +26,10 @@ use la_devices::{Device, DeviceAction, DeviceDescriptor, DeviceId, DeviceProvide
 use la_diagnostics::lock_recover;
 use la_proto::{DeviceInfo, command, encode_frame};
 
-pub use capabilities::{CHANNELS, MIN_RATE_HZ, build_request, capabilities, check_supported};
+pub use capabilities::{
+    CHANNELS, MIN_RATE_HZ, build_request, capabilities, capabilities_unsupported, check_supported,
+    unsupported_reason,
+};
 pub use device::Rp2350bDevice;
 use link::{PortBackend, PortInfo, SerialLink};
 pub use serial_backend::SystemPorts;
@@ -56,6 +59,9 @@ struct Board {
     id: DeviceId,
     port: String,
     descriptor: DeviceDescriptor,
+    /// What the board reported, when its firmware cannot be used: listed so that it can be restarted into its
+    /// bootloader and updated, refused when a capture is started.
+    unsupported: Option<(String, &'static str)>,
 }
 
 /// The provider of the RP2350B boards on the serial ports.
@@ -86,7 +92,6 @@ impl Rp2350bProvider {
         let text = read_reply(&mut *link)?;
         let info = DeviceInfo::parse(&text)
             .map_err(|e| error::protocol(&format!("the information reply is not valid: {e}")))?;
-        check_supported(&info)?;
         Ok(info)
     }
 
@@ -102,7 +107,11 @@ impl Rp2350bProvider {
                 |serial| format!("RP2350B logic analyzer {serial}"),
             ),
             simulated: false,
-            capabilities: capabilities(info),
+            capabilities: if unsupported_reason(info).is_none() {
+                capabilities(info)
+            } else {
+                capabilities_unsupported(info)
+            },
         }
     }
 }
@@ -165,22 +174,40 @@ impl DeviceProvider for Rp2350bProvider {
             let known = lock_recover(&self.boards)
                 .iter()
                 .find(|b| b.port == port.name)
-                .map(|b| (b.id.clone(), b.port.clone(), b.descriptor.clone()));
-            if let Some((id, port, descriptor)) = known {
+                .map(|b| {
+                    (
+                        b.id.clone(),
+                        b.port.clone(),
+                        b.descriptor.clone(),
+                        b.unsupported.clone(),
+                    )
+                });
+            if let Some((id, port, descriptor, unsupported)) = known {
                 found.push(Board {
                     id,
                     port,
                     descriptor,
+                    unsupported,
                 });
                 continue;
             }
             match self.probe(port) {
                 Ok(info) => {
                     let descriptor = Self::describe(port, &info);
+                    let unsupported = unsupported_reason(&info);
+                    if let Some((found, _)) = &unsupported {
+                        tracing::warn!(
+                            target: "la_driver_rp2350b",
+                            port = %port.name,
+                            found = %found,
+                            "a board is listed with a firmware this program does not support"
+                        );
+                    }
                     found.push(Board {
                         id: descriptor.id.clone(),
                         port: port.name.clone(),
                         descriptor,
+                        unsupported,
                     });
                 }
                 Err(error) => tracing::warn!(
@@ -226,11 +253,14 @@ impl DeviceProvider for Rp2350bProvider {
     }
 
     fn open(&self, id: &DeviceId) -> Result<Box<dyn Device>> {
-        let (port, descriptor) = lock_recover(&self.boards)
+        let (port, descriptor, unsupported) = lock_recover(&self.boards)
             .iter()
             .find(|b| b.id == *id)
-            .map(|b| (b.port.clone(), b.descriptor.clone()))
+            .map(|b| (b.port.clone(), b.descriptor.clone(), b.unsupported.clone()))
             .ok_or_else(|| la_devices::error::not_found(id.as_str()))?;
+        if let Some((found, supported)) = unsupported {
+            return Err(error::firmware_unsupported(&found, supported));
+        }
         let link = self.backend.open(&port)?;
         Ok(Box::new(Rp2350bDevice::new(descriptor, port, link)))
     }

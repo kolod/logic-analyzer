@@ -1,0 +1,11 @@
+# Synthetic: written by hand from contracts/protocol.md before a board exists.
+> *
+<t LOGIC_ANALYZER_RP2350B_9_0
+<t FREQ:200000000
+<t BLASTFREQ:200000000
+<t BUFFER:96000
+<t CHANNELS:32
+<t FW:9.0.0
+<t PROTO:3
+<t FEATURES:cmd7,mode32,restart
+<t TRIGGERS:edge

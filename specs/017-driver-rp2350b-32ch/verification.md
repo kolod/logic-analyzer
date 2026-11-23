@@ -160,3 +160,18 @@ previous reader's own check of the channel count.
   (within the menu width budget).
 - Not done: a real restart of a board (no firmware yet: T055/T060), and a message that offers the bootloader
   when the board has a firmware the driver does not support (T050).
+
+## Stage 3, part 6: a board with a firmware the driver cannot use (T050)
+
+- A board that answers as an analyzer but whose firmware is older (no capture request 2) or not known to the driver
+  is now **listed**, with the capabilities of what it reported and only the action `RestartIntoBootloader`, so it can
+  be updated from the Capture menu. A capture on it is refused when started with `rp2350b.firmware_unsupported`; the
+  detail names what it reported ("an older firmware without capture request 2 (...)" or "firmware 9.0.0, protocol
+  level 3") and what the driver supports. Before, such a board was left out of the list and the cause was only in
+  the log (a warning with the same text is still written).
+- The text of the error (six languages) now says how to update: the Capture menu, Restart into bootloader, copy
+  the new firmware file to the drive that appears.
+- Tests (`tests/version.rs`, 6): an unknown version, an older firmware (its own 24 channels kept), the restart into
+  the bootloader of such a board and its being asked again when it returns, the normal restart not offered for it,
+  something that does not answer as an analyzer not listed, a supported board unaffected.
+- Not run: with a real board and a real UF2 (T055).
