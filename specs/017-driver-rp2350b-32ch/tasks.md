@@ -277,7 +277,7 @@ accuracy.
 
 ### Tests first
 
-- [ ] T050 [P] [US3] `crates/driver-rp2350b/tests/version.rs`: a firmware or protocol level the driver does not
+- [x] T050 [P] [US3] `crates/driver-rp2350b/tests/version.rs`: a firmware or protocol level the driver does not
   support is refused with `rp2350b.firmware_unsupported` naming the version found; an older firmware (command 7
   unknown) is told apart from an unsupported one; a recorded reply for the restart into the bootloader and for the normal restart (command 8); the driver finds
   the board again after either.

@@ -23,12 +23,10 @@ pub const SUPPORTED_FIRMWARE_MAJOR: u8 = 1;
 /// What this driver supports, as text for the detail of an error.
 const SUPPORTED: &str = "firmware 1.x with protocol level 2 and capture request 2";
 
-/// Checks that the board's firmware is one this driver can use.
-///
-/// # Errors
-///
-/// `rp2350b.firmware_unsupported`, naming what the board reported.
-pub fn check_supported(info: &DeviceInfo) -> Result<()> {
+/// Why the board's firmware cannot be used, as what it reported and what this driver supports; `None` when it
+/// can. An older firmware (without capture request 2) is told apart from one this driver does not know.
+#[must_use]
+pub fn unsupported_reason(info: &DeviceInfo) -> Option<(String, &'static str)> {
     let found = match info.firmware {
         Some((major, minor, patch)) => format!(
             "firmware {major}.{minor}.{patch}, protocol level {}",
@@ -36,19 +34,59 @@ pub fn check_supported(info: &DeviceInfo) -> Result<()> {
         ),
         None => format!("an unnamed firmware, protocol level {}", info.proto),
     };
+    if info.proto < 2 || !info.features.cmd7 {
+        return Some((
+            format!("an older firmware without capture request 2 ({found})"),
+            SUPPORTED,
+        ));
+    }
     let known = info
         .firmware
         .is_some_and(|(major, _, _)| major == SUPPORTED_FIRMWARE_MAJOR);
-    if !known || info.proto < 2 || !info.features.cmd7 {
-        return Err(error::firmware_unsupported(&found, SUPPORTED));
+    if !known {
+        return Some((found, SUPPORTED));
     }
     if info.channels != CHANNELS || !info.features.mode32 {
-        return Err(error::firmware_unsupported(
-            &format!("{found}, {} channels", info.channels),
+        return Some((
+            format!("{found}, {} channels", info.channels),
             "32 channels in mode 3",
         ));
     }
-    Ok(())
+    None
+}
+
+/// Checks that the board's firmware is one this driver can use.
+///
+/// # Errors
+///
+/// `rp2350b.firmware_unsupported`, naming what the board reported.
+pub fn check_supported(info: &DeviceInfo) -> Result<()> {
+    match unsupported_reason(info) {
+        Some((found, supported)) => Err(error::firmware_unsupported(&found, supported)),
+        None => Ok(()),
+    }
+}
+
+/// The capabilities of a board whose firmware this driver cannot use: enough to list it and to let it be
+/// restarted into its bootloader (command 4 is the original's, so every firmware of the family has it), and
+/// nothing to capture with. Starting a capture on it fails with `rp2350b.firmware_unsupported`.
+#[must_use]
+pub fn capabilities_unsupported(info: &DeviceInfo) -> Capabilities {
+    Capabilities {
+        channels: info.channels.clamp(1, CHANNELS),
+        sample_rates: SampleRates::Range {
+            min: MIN_RATE_HZ,
+            max: u64::from(info.frequency).max(MIN_RATE_HZ),
+        },
+        triggers: Vec::new(),
+        buffer_depth: None,
+        trigger_limits: TriggerLimits::NONE,
+        pre_post: Vec::new(),
+        buffer_depths: Vec::new(),
+        bursts: None,
+        max_rates: Vec::new(),
+        actions: vec![DeviceAction::RestartIntoBootloader],
+    }
 }
 
 /// The capabilities of the board, as declared to the core. The limits of the modes are the tightest of the

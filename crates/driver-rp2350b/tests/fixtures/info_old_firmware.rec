@@ -1,0 +1,7 @@
+# Synthetic: written by hand from contracts/protocol.md before a board exists.
+> *
+<t LOGIC_ANALYZER_PICO_1_0
+<t FREQ:100000000
+<t BLASTFREQ:100000000
+<t BUFFER:32000
+<t CHANNELS:24
