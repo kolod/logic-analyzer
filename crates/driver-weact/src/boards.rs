@@ -33,6 +33,11 @@ pub(crate) fn capabilities() -> Capabilities {
         sample_rates: SampleRates::List(SAMPLE_RATES.to_vec()),
         triggers: Vec::new(),
         buffer_depth: None,
+        trigger_limits: la_devices::TriggerLimits::NONE,
+        pre_post: Vec::new(),
+        buffer_depths: Vec::new(),
+        bursts: None,
+        max_rates: Vec::new(),
     }
 }
 

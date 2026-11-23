@@ -35,6 +35,9 @@ fn config(mask: u32, rate: u64, length: u64, options: VirtualOptions) -> DeviceC
         capture_length: Some(length),
         options: DeviceOptions::Virtual(options),
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 

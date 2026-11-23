@@ -108,6 +108,8 @@ pub(crate) fn launch(launch: Launch) -> Result<Acquisition> {
         channels: config.channels(),
         enabled_mask: config.enabled_channels(),
         trigger: config.trigger(),
+        pattern: config.pattern(),
+        pre_trigger_samples: config.pre_trigger_samples(),
     });
 
     let (event_sender, event_receiver) = sync_channel(256);

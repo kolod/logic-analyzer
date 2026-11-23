@@ -63,6 +63,9 @@ fn run_case(
             ..VirtualOptions::default()
         }),
         accept_budget_risk: true,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     };
     let started = Instant::now();
     let acquisition = registry

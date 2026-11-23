@@ -7,7 +7,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use la_devices::{
-    Capabilities, ChannelSet, DeviceConfig, DeviceDescriptor, DeviceOptions, Pacing,
+    Capabilities, ChannelSet, DeviceConfig, DeviceDescriptor, DeviceOptions, Pacing, Pattern,
     ScriptedFailure, Trigger, VIRTUAL_PROVIDER_NAME, VirtualOptions, error as device_error,
     validate,
 };
@@ -49,6 +49,8 @@ pub enum Setting {
     Length,
     /// The trigger.
     Trigger,
+    /// The number of bursts.
+    Bursts,
     /// Something else about the configuration.
     Other,
 }
@@ -73,6 +75,12 @@ pub struct ConfigDraft {
     pub length: u64,
     /// The trigger, if any.
     pub trigger: Option<Trigger>,
+    /// The levels of a pattern trigger.
+    pub pattern: Option<Pattern>,
+    /// Samples to keep from before the trigger (part of the length).
+    pub pre_trigger_samples: u64,
+    /// The number of bursts; `0` is a single capture.
+    pub bursts: u32,
     /// The seed of the virtual device; `None` takes a fresh one at each start.
     pub seed: Option<u64>,
     /// The signal profile of the virtual device.
@@ -103,14 +111,50 @@ impl ConfigDraft {
                 .nearest(DEFAULT_RATE_HZ)
                 .unwrap_or(DEFAULT_RATE_HZ),
             length: capabilities
-                .buffer_depth
-                .map_or(DEFAULT_LENGTH, |depth| depth.min(DEFAULT_LENGTH)),
+                .depth_at(DEFAULT_RATE_HZ)
+                .into_iter()
+                .chain(
+                    capabilities
+                        .mode_for(usize::from(channels))
+                        .map(|mode| mode.max_after),
+                )
+                .fold(DEFAULT_LENGTH, u64::min),
             trigger: None,
             seed: None,
             profile: SignalProfile::Normal,
             realtime: true,
             accept_budget_risk: false,
+            pattern: None,
+            pre_trigger_samples: 0,
+            bursts: 0,
         }
+    }
+
+    /// The defaults for a device, keeping from `previous` the trigger (with its pattern), the samples before
+    /// the trigger and the bursts, each only if the device accepts it with the rest of the defaults.
+    #[must_use]
+    pub fn for_device_keeping(
+        device: &DeviceDescriptor,
+        previous: &ConfigDraft,
+        limits: &Limits,
+    ) -> Self {
+        let mut draft = Self::for_device(&device.capabilities);
+        let steps: [&dyn Fn(&mut ConfigDraft); 3] = [
+            &|d| {
+                d.trigger = previous.trigger;
+                d.pattern = previous.pattern;
+            },
+            &|d| d.pre_trigger_samples = previous.pre_trigger_samples,
+            &|d| d.bursts = previous.bursts,
+        ];
+        for step in steps {
+            let mut candidate = draft.clone();
+            step(&mut candidate);
+            if candidate != draft && problems(device, &candidate, limits).is_empty() {
+                draft = candidate;
+            }
+        }
+        draft
     }
 
     /// Applies one edit.
@@ -120,6 +164,9 @@ impl ConfigDraft {
             ConfigEdit::SampleRate(hz) => self.sample_rate_hz = hz,
             ConfigEdit::Length(samples) => self.length = samples,
             ConfigEdit::Trigger(trigger) => self.trigger = trigger,
+            ConfigEdit::Pattern(pattern) => self.pattern = pattern,
+            ConfigEdit::PreTrigger(samples) => self.pre_trigger_samples = samples,
+            ConfigEdit::Bursts(bursts) => self.bursts = bursts,
             ConfigEdit::Seed(seed) => self.seed = seed,
             ConfigEdit::Profile(profile) => self.profile = profile,
             ConfigEdit::Realtime(realtime) => self.realtime = realtime,
@@ -160,6 +207,9 @@ impl ConfigDraft {
             capture_length: Some(self.length),
             options,
             accept_budget_risk: self.accept_budget_risk,
+            pattern: self.pattern,
+            pre_trigger_samples: self.pre_trigger_samples,
+            bursts: self.bursts,
         }
     }
 }
@@ -181,6 +231,7 @@ pub fn problems(
                 device_error::INVALID_CHANNEL => Setting::Channels,
                 device_error::UNSUPPORTED_SAMPLE_RATE => Setting::SampleRate,
                 device_error::UNSUPPORTED_TRIGGER => Setting::Trigger,
+                device_error::UNSUPPORTED_BURSTS => Setting::Bursts,
                 device_error::INVALID_CAPTURE_LENGTH | device_error::MEMORY_BUDGET => {
                     Setting::Length
                 }

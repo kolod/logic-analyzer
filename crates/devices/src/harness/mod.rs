@@ -33,6 +33,11 @@ pub fn test_descriptor(provider: &str, unique: &str, channels: u8) -> DeviceDesc
             sample_rates: SampleRates::List(vec![1_000, 1_000_000, 100_000_000]),
             triggers: vec![TriggerKind::RisingEdge, TriggerKind::FallingEdge],
             buffer_depth: None,
+            trigger_limits: crate::TriggerLimits::NONE,
+            pre_post: Vec::new(),
+            buffer_depths: Vec::new(),
+            bursts: None,
+            max_rates: Vec::new(),
         },
     }
 }

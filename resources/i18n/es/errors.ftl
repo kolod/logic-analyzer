@@ -21,6 +21,7 @@ error-device-trigger_timeout = La condición del disparador no se produjo a tiem
 error-device-unresponsive = El dispositivo dejó de responder. Todo lo capturado hasta ahora se conserva. Desconéctelo, vuelva a conectarlo y pruebe de nuevo.
 error-device-unsupported_sample_rate = Este dispositivo no puede capturar con la frecuencia de muestreo elegida. Elija una de las frecuencias que ofrece el dispositivo.
 error-device-unsupported_trigger = Este dispositivo no admite el disparador elegido. Elija un disparador que ofrezca el dispositivo o capture sin disparador.
+error-device-unsupported_bursts = Este dispositivo no admite tantas capturas seguidas (ráfagas). Reduzca el número de ráfagas o capture una sola vez.
 
 ### Archivos de sesión
 

@@ -40,6 +40,7 @@ error-device-unresponsive = The device stopped responding. Everything captured s
 error-device-unsupported_sample_rate = This device cannot capture at the chosen sample rate. Choose one of the rates the device offers.
 # The chosen trigger kind is not supported by the device.
 error-device-unsupported_trigger = This device does not support the chosen trigger. Choose a trigger the device offers or capture without one.
+error-device-unsupported_bursts = This device does not support that many captures in a row (bursts). Choose fewer bursts or capture once.
 
 ### Session files
 

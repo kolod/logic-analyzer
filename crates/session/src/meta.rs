@@ -3,7 +3,7 @@
 use std::time::{Duration, SystemTime};
 
 use la_core::Result;
-use la_devices::{CaptureDescription, ChannelSet, SavedDescription, Trigger, TriggerKind};
+use la_devices::{CaptureDescription, ChannelSet, Pattern, SavedDescription, Trigger, TriggerKind};
 
 use crate::error;
 use crate::limits::MAX_TEXT_BYTES;
@@ -12,7 +12,11 @@ use crate::varint::{Cursor, encode_into};
 const FLAG_SIMULATED: u8 = 1;
 const FLAG_SEED: u8 = 2;
 const FLAG_TRIGGER: u8 = 4;
-const KNOWN_FLAGS: u8 = FLAG_SIMULATED | FLAG_SEED | FLAG_TRIGGER;
+/// The description carries the samples kept before the trigger and, for a pattern trigger, its pattern.
+/// A file that needs neither does not set it, so its description is byte for byte what it always was; a
+/// reader that predates it refuses the file as damaged instead of misreading it.
+const FLAG_RICH: u8 = 8;
+const KNOWN_FLAGS: u8 = FLAG_SIMULATED | FLAG_SEED | FLAG_TRIGGER | FLAG_RICH;
 
 fn trigger_code(kind: TriggerKind) -> u8 {
     match kind {
@@ -21,6 +25,8 @@ fn trigger_code(kind: TriggerKind) -> u8 {
         TriggerKind::RisingEdge => 2,
         TriggerKind::FallingEdge => 3,
         TriggerKind::AnyEdge => 4,
+        TriggerKind::Pattern => 5,
+        TriggerKind::FastPattern => 6,
     }
 }
 
@@ -31,6 +37,8 @@ fn trigger_kind(code: u8) -> Result<TriggerKind> {
         2 => TriggerKind::RisingEdge,
         3 => TriggerKind::FallingEdge,
         4 => TriggerKind::AnyEdge,
+        5 => TriggerKind::Pattern,
+        6 => TriggerKind::FastPattern,
         _ => return Err(error::damaged("an unknown trigger kind")),
     })
 }
@@ -106,6 +114,9 @@ pub fn encode(description: &CaptureDescription) -> Result<Vec<u8>> {
     if saved.trigger.is_some() {
         flags |= FLAG_TRIGGER;
     }
+    if saved.pattern.is_some() || saved.pre_trigger_samples > 0 {
+        flags |= FLAG_RICH;
+    }
     out.push(flags);
     if let Some(seed) = saved.seed {
         out.extend_from_slice(&seed.to_le_bytes());
@@ -125,6 +136,14 @@ pub fn encode(description: &CaptureDescription) -> Result<Vec<u8>> {
     if let Some(trigger) = saved.trigger {
         out.push(trigger.channel);
         out.push(trigger_code(trigger.kind));
+    }
+    if flags & FLAG_RICH != 0 {
+        out.extend_from_slice(&saved.pre_trigger_samples.to_le_bytes());
+        if let Some(pattern) = saved.pattern {
+            out.push(pattern.base_channel);
+            out.push(pattern.length);
+            out.extend_from_slice(&pattern.value.to_le_bytes());
+        }
     }
     let (secs, nanos) = split_time(saved.started_at)?;
     out.extend_from_slice(&secs.to_le_bytes());
@@ -174,6 +193,23 @@ pub fn decode(payload: &[u8]) -> Result<CaptureDescription> {
     } else {
         None
     };
+    let (pre_trigger_samples, pattern) = if flags & FLAG_RICH != 0 {
+        let kept = cursor.u64()?;
+        let is_pattern = trigger
+            .is_some_and(|t| matches!(t.kind, TriggerKind::Pattern | TriggerKind::FastPattern));
+        let pattern = if is_pattern {
+            Some(Pattern {
+                base_channel: cursor.u8()?,
+                length: cursor.u8()?,
+                value: cursor.u32()?,
+            })
+        } else {
+            None
+        };
+        (kept, pattern)
+    } else {
+        (0, None)
+    };
     let secs = cursor.i64()?;
     let nanos = cursor.u32()?;
     cursor.finish()?;
@@ -190,7 +226,9 @@ pub fn decode(payload: &[u8]) -> Result<CaptureDescription> {
         channels,
         enabled_mask,
         trigger,
+        pattern,
         samples_before_trigger,
+        pre_trigger_samples,
         started_at,
     })
     .map_err(|e| {
@@ -220,7 +258,9 @@ mod tests {
                 channel: 2,
                 kind: TriggerKind::FallingEdge,
             }),
+            pattern: None,
             samples_before_trigger: 9,
+            pre_trigger_samples: 0,
             started_at: SystemTime::UNIX_EPOCH + Duration::new(1_000, 500),
         }
     }

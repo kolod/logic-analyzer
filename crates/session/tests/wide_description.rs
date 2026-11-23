@@ -75,6 +75,8 @@ fn saved_of(d: &la_devices::CaptureDescription) -> la_devices::SavedDescription 
         enabled_mask: d.enabled_mask(),
         trigger: d.trigger(),
         samples_before_trigger: d.samples_before_trigger(),
+        pattern: None,
+        pre_trigger_samples: 0,
         started_at: d.started_at(),
     }
 }

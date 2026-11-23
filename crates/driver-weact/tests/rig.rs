@@ -104,6 +104,9 @@ impl Fixture {
             capture_length: Some(length),
             options: DeviceOptions::None,
             accept_budget_risk: false,
+            pattern: None,
+            pre_trigger_samples: 0,
+            bursts: 0,
         };
         // The board may still be preparing for a moment.
         let started = std::time::Instant::now();

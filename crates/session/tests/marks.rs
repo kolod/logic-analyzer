@@ -50,6 +50,9 @@ fn virtual_run(
                     ..VirtualOptions::default()
                 }),
                 accept_budget_risk: true,
+                pattern: None,
+                pre_trigger_samples: 0,
+                bursts: 0,
             },
             AcquisitionOptions {
                 limits,

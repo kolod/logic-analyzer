@@ -24,13 +24,14 @@ declares none of them and behaves as before; the tests of every other driver pas
 
 ```text
 TriggerKind  += Pattern, FastPattern          // existing: Level, RisingEdge, FallingEdge, AnyEdge
-Trigger      += pattern: Option<Pattern>      // Pattern { base_channel, length, value }
-Capabilities += trigger_limits: TriggerLimits // widest Pattern and FastPattern, allowed in a chain
+Pattern      { base_channel, length, value }  // levels of adjacent channels, bit i = channel base + i
+Capabilities += trigger_limits: TriggerLimits // widest Pattern and FastPattern, chained, allowed_in_chain
              += pre_post: Vec<ModeLimit>      // by capture mode: channels up to, max before, max after
              += buffer_depths: Vec<DepthBand> // by rate range: from rate, to rate, depth in samples
              += bursts: Option<u32>           // the most bursts, None when unsupported
              += max_rates: Vec<(u8, u64)>     // highest rate by channel count (up to n channels)
-DeviceConfig += samples_before_trigger: u64   // kept in the capture; 0 when unused
+DeviceConfig += pattern: Option<Pattern>      // for the Pattern and FastPattern triggers only
+             += pre_trigger_samples: u64      // kept in the capture, part of capture_length; 0 when unused
              += bursts: u32                   // 0 for one capture
 ```
 

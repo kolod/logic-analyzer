@@ -43,6 +43,9 @@ fn config(enabled: ChannelSet, length: u64, options: VirtualOptions) -> DeviceCo
         capture_length: Some(length),
         options: DeviceOptions::Virtual(options),
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 

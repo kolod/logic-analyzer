@@ -6,7 +6,7 @@
 use std::ops::BitOr;
 use std::path::PathBuf;
 
-use la_devices::{ChannelSet, DeviceId, Trigger};
+use la_devices::{ChannelSet, DeviceId, Pattern, Trigger};
 use la_i18n::Language;
 
 use la_decoders::setup::{Setup, Source, Value};
@@ -30,6 +30,12 @@ pub enum ConfigEdit {
     Length(u64),
     /// The trigger, or none.
     Trigger(Option<Trigger>),
+    /// The levels of a pattern trigger, or none.
+    Pattern(Option<Pattern>),
+    /// The samples to keep from before the trigger (part of the capture length).
+    PreTrigger(u64),
+    /// The number of bursts of one capture; `0` is a single capture.
+    Bursts(u32),
     /// The seed of the virtual device, or none for a fresh one.
     Seed(Option<u64>),
     /// The signal profile of the virtual device.

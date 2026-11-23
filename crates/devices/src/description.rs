@@ -9,9 +9,9 @@ use std::time::SystemTime;
 
 use la_core::Result;
 
-use crate::capabilities::DeviceId;
+use crate::capabilities::{DeviceId, TriggerKind};
 use crate::channel_set::ChannelSet;
-use crate::config::Trigger;
+use crate::config::{Pattern, Trigger};
 use crate::error;
 
 /// The longest text (device id or device name) a description may hold, in bytes.
@@ -46,7 +46,9 @@ pub struct CaptureDescription {
     channels: u8,
     enabled_mask: ChannelSet,
     trigger: Option<Trigger>,
+    pattern: Option<Pattern>,
     samples_before_trigger: u64,
+    pre_trigger_samples: u64,
     started_at: SystemTime,
 }
 
@@ -60,6 +62,8 @@ pub(crate) struct DescriptionParts {
     pub(crate) channels: u8,
     pub(crate) enabled_mask: ChannelSet,
     pub(crate) trigger: Option<Trigger>,
+    pub(crate) pattern: Option<Pattern>,
+    pub(crate) pre_trigger_samples: u64,
 }
 
 /// Every field of a [`CaptureDescription`] as plain values: the form in which a description is
@@ -87,8 +91,12 @@ pub struct SavedDescription {
     pub enabled_mask: ChannelSet,
     /// The configured trigger, on an enabled channel.
     pub trigger: Option<Trigger>,
+    /// The levels of a pattern trigger; present exactly for the pattern kinds.
+    pub pattern: Option<Pattern>,
     /// Samples skipped while waiting for the trigger.
     pub samples_before_trigger: u64,
+    /// Samples kept from before the trigger.
+    pub pre_trigger_samples: u64,
     /// Wall-clock time at which the acquisition was created.
     pub started_at: SystemTime,
 }
@@ -105,7 +113,9 @@ impl CaptureDescription {
             channels: parts.channels,
             enabled_mask: parts.enabled_mask,
             trigger: parts.trigger,
+            pattern: parts.pattern,
             samples_before_trigger: 0,
+            pre_trigger_samples: parts.pre_trigger_samples,
             started_at: SystemTime::now(),
         }
     }
@@ -123,7 +133,9 @@ impl CaptureDescription {
             channels: self.channels,
             enabled_mask: self.enabled_mask,
             trigger: self.trigger,
+            pattern: self.pattern,
             samples_before_trigger: self.samples_before_trigger,
+            pre_trigger_samples: self.pre_trigger_samples,
             started_at: self.started_at,
         }
     }
@@ -177,6 +189,31 @@ impl CaptureDescription {
                 ));
             }
         }
+        let is_pattern = saved
+            .trigger
+            .is_some_and(|t| matches!(t.kind, TriggerKind::Pattern | TriggerKind::FastPattern));
+        match saved.pattern {
+            Some(pattern) if is_pattern => {
+                let last =
+                    u16::from(pattern.base_channel).saturating_add(u16::from(pattern.length));
+                if pattern.length == 0
+                    || last > u16::from(saved.channels)
+                    || saved.trigger.map(|t| t.channel) != Some(pattern.base_channel)
+                    || (pattern.length < 32 && pattern.value >> pattern.length != 0)
+                {
+                    return Err(error::invalid_channel(
+                        "the pattern of the trigger is empty or outside the channels".to_owned(),
+                    ));
+                }
+            }
+            None if !is_pattern => {}
+            _ => {
+                return Err(error::invalid_channel(
+                    "a pattern is given without a pattern trigger, or the other way round"
+                        .to_owned(),
+                ));
+            }
+        }
         Ok(Self {
             device_id,
             device_name: saved.device_name,
@@ -187,7 +224,9 @@ impl CaptureDescription {
             channels: saved.channels,
             enabled_mask: saved.enabled_mask,
             trigger: saved.trigger,
+            pattern: saved.pattern,
             samples_before_trigger: saved.samples_before_trigger,
+            pre_trigger_samples: saved.pre_trigger_samples,
             started_at: saved.started_at,
         })
     }
@@ -251,6 +290,18 @@ impl CaptureDescription {
     #[must_use]
     pub fn trigger(&self) -> Option<Trigger> {
         self.trigger
+    }
+
+    /// The levels of a pattern trigger; `None` for every other trigger.
+    #[must_use]
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.pattern
+    }
+
+    /// Samples kept from before the trigger (zero without a trigger or on a device that has none).
+    #[must_use]
+    pub fn pre_trigger_samples(&self) -> u64 {
+        self.pre_trigger_samples
     }
 
     /// Samples the device skipped while waiting for the trigger (zero without a trigger).

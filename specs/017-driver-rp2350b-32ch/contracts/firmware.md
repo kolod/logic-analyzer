@@ -29,7 +29,9 @@ cargo build --release -p la-fw                       # the ELF
 The tool that makes the UF2 is named in the README and checked by a script that fails if it is missing. To flash:
 hold the board's BOOT button while plugging it in (the board appears as a drive, as `D:\` on the owner's
 machine, with `INFO_UF2.TXT`), copy the UF2 to it; the board restarts as the analyzer. Without the button: the
-application's command 4 (restart into the bootloader).
+application's command 4 (restart into the bootloader). To update the firmware, or to recover a stuck board,
+without a programmer: command 4 puts the board in the bootloader (copy the UF2 as above) and command 8 restarts it
+normally; the application offers both.
 
 ## Behaviour that is part of the contract
 

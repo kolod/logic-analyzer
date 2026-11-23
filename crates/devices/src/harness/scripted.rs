@@ -263,6 +263,9 @@ mod tests {
                 capture_length: None,
                 options: crate::config::DeviceOptions::None,
                 accept_budget_risk: false,
+                pattern: None,
+                pre_trigger_samples: 0,
+                bursts: 0,
             },
             2,
         )

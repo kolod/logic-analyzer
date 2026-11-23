@@ -126,7 +126,7 @@ strings in `resources/i18n/<lang>/ui.ftl`. "The protocol" is `contracts/protocol
 
 ### Tests first
 
-- [ ] T022 [P] `crates/devices/tests/rich_capabilities.rs`: for each of `Pattern`, `FastPattern`, samples before the
+- [x] T022 [P] `crates/devices/tests/rich_capabilities.rs`: for each of `Pattern`, `FastPattern`, samples before the
   trigger by capture mode, buffer depth by rate band, bursts and the highest rate by channel count, a value at
   the limit is accepted and one past it is refused with the `device.*` error and the limit in its detail; a
   trigger in a chain is refused where the capabilities say; a device that declares none of the new things
@@ -134,19 +134,19 @@ strings in `resources/i18n/<lang>/ui.ftl`. "The protocol" is `contracts/protocol
 
 ### Implementation
 
-- [ ] T023 `crates/devices/src/{capabilities,config,error,description}.rs`: the types and the validation of
+- [x] T023 `crates/devices/src/{capabilities,config,error,description}.rs`: the types and the validation of
   `contracts/device-abstraction.md`, the error `device.unsupported_bursts`, `pre_trigger_samples` in the
   description (and its place in the session as a minor addition).
-- [ ] T024 [P] `crates/host/tests/capture_settings_rich.rs`: the host commands for the new settings (the trigger
+- [x] T024 [P] `crates/host/tests/capture_settings_rich.rs`: the host commands for the new settings (the trigger
   type, channel and pattern, the samples before and after, the number of bursts) validate against the capabilities
   of the selected device and report the typed error; settings are kept when the device changes only where they
   still fit.
-- [ ] T025 `crates/host/src/{command,shell,state,devices}.rs`: the configuration edits and the state for the new
+- [x] T025 `crates/host/src/{command,shell,state,devices}.rs`: the configuration edits and the state for the new
   settings (the host API minor version), documented in `docs/host-api.md`.
-- [ ] T026 `crates/app/src/app.rs` and `resources/i18n/*/ui.ftl`: the controls for the trigger (type, channel,
+- [x] T026 `crates/app/src/app.rs` and `resources/i18n/*/ui.ftl`: the controls for the trigger (type, channel,
   pattern), the samples before and after the trigger and the bursts in the capture settings, shown only for a device
   whose capabilities offer them; texts in the six languages (parity, budget, fonts).
-- [ ] T027 `verification.md` for stage 2; run the tests of the stage, `fmt`, `clippy`.
+- [x] T027 `verification.md` for stage 2; run the tests of the stage, `fmt`, `clippy`.
 
 **Checkpoint (stage 2)**: the abstraction can describe the original's functions; no driver uses them yet except
 the virtual device's declared limits. A pull request.
@@ -204,7 +204,7 @@ channel shows its own pattern (spec US1).
   (`crates/host/src/devices.rs`, `crates/devices/src/registry.rs`).
 - [ ] T038 [US1] `firmware/rp2350b/la-fw` **(board)**: the start-up (clocks, the pins of T002), USB serial through the
   embedded runtime, the command loop (information, capture requests 1 and 7, abort by any byte, restart into
-  the bootloader, the indicator), the capture engine for the internal memory (PIO sampling of the 32 pins, two
+  the bootloader and the normal restart (command 8), the indicator), the capture engine for the internal memory (PIO sampling of the 32 pins, two
   chained DMA channels into a ring buffer) at the rates of one capture mode, a panic handler that records a code
   and resets.
 - [ ] T052 [US1] `firmware/rp2350b/la-fw-rig` **(board)**: the pattern generator of the rig (channel `n` a square
@@ -279,7 +279,8 @@ accuracy.
 
 - [ ] T050 [P] [US3] `crates/driver-rp2350b/tests/version.rs`: a firmware or protocol level the driver does not
   support is refused with `rp2350b.firmware_unsupported` naming the version found; an older firmware (command 7
-  unknown) is told apart from an unsupported one; a recorded reply for the restart into the bootloader.
+  unknown) is told apart from an unsupported one; a recorded reply for the restart into the bootloader and for the normal restart (command 8); the driver finds
+  the board again after either.
 - [ ] T051 [P] [US3] `firmware/rp2350b/tests/build_check.sh` (run by CI): the UF2 is produced from a clean checkout
   with the documented commands and the tool named in the README exists.
 
@@ -289,8 +290,8 @@ accuracy.
 - [ ] T053 [US3] The commands and the tools in `firmware/rp2350b/README.md` and `contracts/firmware.md`
   (the UF2 step, flashing through the boot button, the restart into the bootloader); the version of the firmware
   from the workspace version; `THIRD-PARTY.md` complete.
-- [ ] T054 [US3] The driver's `restart into the bootloader` and a command and menu entry for it in the host and the
-  application (`crates/host/src/command.rs`, `crates/app/src/app.rs`), enabled only for a device that offers it,
+- [ ] T054 [US3] The driver's `restart into the bootloader` and `restart` and a command and menu entry for each in
+  the host and the application (`crates/host/src/command.rs`, `crates/app/src/app.rs`), enabled only for a device that offers it,
   with the text in six languages.
 - [ ] T055 [US3] **(board)** Build from a clean checkout following only the README, flash by the drive (`D:\`),
   see the device with the version; flash a build with another version and see the refusal; record the time taken

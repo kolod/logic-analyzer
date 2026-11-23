@@ -21,6 +21,8 @@ pub const UNSUPPORTED_SAMPLE_RATE: &str = "device.unsupported_sample_rate";
 pub const UNSUPPORTED_TRIGGER: &str = "device.unsupported_trigger";
 /// The capture length is missing, zero or beyond the device's buffer depth.
 pub const INVALID_CAPTURE_LENGTH: &str = "device.invalid_capture_length";
+/// The requested number of bursts is more than the device supports.
+pub const UNSUPPORTED_BURSTS: &str = "device.unsupported_bursts";
 /// The worst-case storage cost of the capture exceeds the memory budget.
 pub const MEMORY_BUDGET: &str = "device.memory_budget";
 /// No such device is known.
@@ -81,6 +83,12 @@ pub fn unsupported_sample_rate(requested: u64, allowed: &str, nearest: Option<u6
 #[must_use]
 pub fn unsupported_trigger(detail: String) -> Error {
     input(UNSUPPORTED_TRIGGER, detail)
+}
+
+/// The number of bursts is not supported; `detail` names what is.
+#[must_use]
+pub fn unsupported_bursts(detail: String) -> Error {
+    input(UNSUPPORTED_BURSTS, detail)
 }
 
 /// The capture length is invalid for this device.

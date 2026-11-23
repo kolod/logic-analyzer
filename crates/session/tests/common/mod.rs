@@ -202,6 +202,8 @@ pub fn description(channels: u8, simulated: bool, seed: Option<u64>) -> CaptureD
             kind: TriggerKind::RisingEdge,
         }),
         samples_before_trigger: 3,
+        pattern: None,
+        pre_trigger_samples: 0,
         started_at: SystemTime::UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_700),
     })
     .unwrap()

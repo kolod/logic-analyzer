@@ -157,6 +157,9 @@ fn run_script(seed: u64) {
                         capture_length: length,
                         options: DeviceOptions::None,
                         accept_budget_risk: true,
+                        pattern: None,
+                        pre_trigger_samples: 0,
+                        bursts: 0,
                     };
                     let Ok(resolved) = validate(&chosen.capabilities, &config, &defaults.limits)
                     else {
