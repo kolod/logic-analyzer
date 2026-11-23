@@ -11,6 +11,7 @@
 #![deny(missing_docs)]
 
 mod capabilities;
+pub mod chain;
 mod device;
 pub mod error;
 pub mod link;
@@ -30,6 +31,7 @@ pub use capabilities::{
     CHANNELS, MIN_RATE_HZ, build_request, capabilities, capabilities_unsupported, check_supported,
     unsupported_reason,
 };
+pub use chain::{ChainDefinition, ChainDevice, MAX_BOARDS};
 pub use device::Rp2350bDevice;
 use link::{PortBackend, PortInfo, SerialLink};
 pub use serial_backend::SystemPorts;
@@ -59,6 +61,8 @@ struct Board {
     id: DeviceId,
     port: String,
     descriptor: DeviceDescriptor,
+    /// What the board reported.
+    info: DeviceInfo,
     /// What the board reported, when its firmware cannot be used: listed so that it can be restarted into its
     /// bootloader and updated, refused when a capture is started.
     unsupported: Option<(String, &'static str)>,
@@ -68,6 +72,19 @@ struct Board {
 pub struct Rp2350bProvider {
     backend: Arc<dyn PortBackend>,
     boards: Mutex<Vec<Board>>,
+    /// The chains the user defined.
+    definitions: Mutex<Vec<ChainDefinition>>,
+    /// The chains whose boards are all present, from the last listing.
+    chains: Mutex<Vec<ChainEntry>>,
+}
+
+/// A chain that is listed.
+struct ChainEntry {
+    definition: ChainDefinition,
+    descriptor: DeviceDescriptor,
+    boards: Vec<DeviceId>,
+    /// The boards run different firmware: listed, refused when a capture is started.
+    mismatch: Option<String>,
 }
 
 impl Rp2350bProvider {
@@ -77,7 +94,81 @@ impl Rp2350bProvider {
         Self {
             backend,
             boards: Mutex::new(Vec::new()),
+            definitions: Mutex::new(Vec::new()),
+            chains: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Sets the chains the user defined. A chain is listed while all its boards are present and supported; one that
+    /// cannot be used (fewer than 2 or more than 5 boards, a board twice, no name, a name used before, a board that
+    /// is already in an earlier chain) is left out.
+    pub fn set_chains(&self, chains: Vec<ChainDefinition>) {
+        let mut kept: Vec<ChainDefinition> = Vec::new();
+        for chain in chains {
+            let clash = kept
+                .iter()
+                .any(|k| k.name == chain.name || k.boards.iter().any(|b| chain.boards.contains(b)));
+            if chain.is_valid() && !clash {
+                kept.push(chain);
+            }
+        }
+        *lock_recover(&self.definitions) = kept;
+    }
+
+    /// The chains of the last listing whose boards are all present, from the definitions.
+    fn list_chains(&self, boards: &[Board]) -> Vec<ChainEntry> {
+        let mut entries = Vec::new();
+        for definition in lock_recover(&self.definitions).iter() {
+            let members: Vec<&Board> = definition
+                .boards
+                .iter()
+                .filter_map(|text| boards.iter().find(|b| b.id.as_str() == text))
+                .collect();
+            if members.len() != definition.boards.len() {
+                tracing::debug!(
+                    target: "la_driver_rp2350b",
+                    chain = %definition.name,
+                    "a chain is not listed: a board is missing"
+                );
+                continue;
+            }
+            if members.iter().any(|b| b.unsupported.is_some()) {
+                tracing::warn!(
+                    target: "la_driver_rp2350b",
+                    chain = %definition.name,
+                    "a chain is not listed: a board runs a firmware this program does not support"
+                );
+                continue;
+            }
+            let versions: Vec<String> = members
+                .iter()
+                .map(|b| {
+                    let (a, c, d) = b.info.firmware.unwrap_or((0, 0, 0));
+                    format!("{}: {a}.{c}.{d}", b.id)
+                })
+                .collect();
+            let same = members.windows(2).all(|pair| {
+                pair.first().map(|b| b.info.firmware) == pair.get(1).map(|b| b.info.firmware)
+            });
+            let infos: Vec<&DeviceInfo> = members.iter().map(|b| &b.info).collect();
+            let descriptor = DeviceDescriptor {
+                id: definition.device_id(),
+                name: format!(
+                    "RP2350B chain {} ({} boards)",
+                    definition.name,
+                    members.len()
+                ),
+                simulated: false,
+                capabilities: chain::chain_capabilities(&infos),
+            };
+            entries.push(ChainEntry {
+                definition: definition.clone(),
+                descriptor,
+                boards: members.iter().map(|b| b.id.clone()).collect(),
+                mismatch: (!same).then(|| versions.join(", ")),
+            });
+        }
+        entries
     }
 
     /// Asks the board at `port` for its information. Never waits longer than [`PROBE_WAIT`] for a port that
@@ -179,14 +270,16 @@ impl DeviceProvider for Rp2350bProvider {
                         b.id.clone(),
                         b.port.clone(),
                         b.descriptor.clone(),
+                        b.info.clone(),
                         b.unsupported.clone(),
                     )
                 });
-            if let Some((id, port, descriptor, unsupported)) = known {
+            if let Some((id, port, descriptor, info, unsupported)) = known {
                 found.push(Board {
                     id,
                     port,
                     descriptor,
+                    info,
                     unsupported,
                 });
                 continue;
@@ -207,6 +300,7 @@ impl DeviceProvider for Rp2350bProvider {
                         id: descriptor.id.clone(),
                         port: port.name.clone(),
                         descriptor,
+                        info,
                         unsupported,
                     });
                 }
@@ -219,8 +313,12 @@ impl DeviceProvider for Rp2350bProvider {
                 ),
             }
         }
-        let descriptors = found.iter().map(|b| b.descriptor.clone()).collect();
+        let chains = self.list_chains(&found);
+        let mut descriptors: Vec<DeviceDescriptor> =
+            found.iter().map(|b| b.descriptor.clone()).collect();
+        descriptors.extend(chains.iter().map(|c| c.descriptor.clone()));
         *lock_recover(&self.boards) = found;
+        *lock_recover(&self.chains) = chains;
         Ok(descriptors)
     }
 
@@ -253,6 +351,20 @@ impl DeviceProvider for Rp2350bProvider {
     }
 
     fn open(&self, id: &DeviceId) -> Result<Box<dyn Device>> {
+        if let Some(chain) = lock_recover(&self.chains)
+            .iter()
+            .find(|c| c.descriptor.id == *id)
+            .map(|c| {
+                (
+                    c.definition.clone(),
+                    c.descriptor.clone(),
+                    c.boards.clone(),
+                    c.mismatch.clone(),
+                )
+            })
+        {
+            return self.open_chain(chain);
+        }
         let (port, descriptor, unsupported) = lock_recover(&self.boards)
             .iter()
             .find(|b| b.id == *id)
@@ -263,5 +375,55 @@ impl DeviceProvider for Rp2350bProvider {
         }
         let link = self.backend.open(&port)?;
         Ok(Box::new(Rp2350bDevice::new(descriptor, port, link)))
+    }
+}
+
+/// What `open_chain` needs of a listed chain.
+type OpenChain = (
+    ChainDefinition,
+    DeviceDescriptor,
+    Vec<DeviceId>,
+    Option<String>,
+);
+
+impl Rp2350bProvider {
+    /// Opens every board of a chain. A board that went away or cannot be opened makes the chain incomplete,
+    /// naming it; boards of different firmware are refused.
+    fn open_chain(&self, chain: OpenChain) -> Result<Box<dyn Device>> {
+        let (definition, descriptor, ids, mismatch) = chain;
+        if let Some(found) = mismatch {
+            return Err(error::chain_mismatch(&definition.name, &found));
+        }
+        let mut boards = Vec::with_capacity(ids.len());
+        for id in &ids {
+            let known = lock_recover(&self.boards)
+                .iter()
+                .find(|b| b.id == *id)
+                .map(|b| (b.port.clone(), b.descriptor.clone()));
+            let Some((port, board_descriptor)) = known else {
+                return Err(error::chain_incomplete(
+                    &definition.name,
+                    id.as_str(),
+                    "is not there any more",
+                ));
+            };
+            let link = self.backend.open(&port).map_err(|e| {
+                error::chain_incomplete(
+                    &definition.name,
+                    id.as_str(),
+                    &format!("could not be opened: {}", e.detail()),
+                )
+            })?;
+            boards.push((
+                id.as_str().to_owned(),
+                Rp2350bDevice::new(board_descriptor, port, link),
+            ));
+        }
+        Ok(Box::new(ChainDevice::new(
+            descriptor,
+            definition.name,
+            boards,
+            definition.shifts,
+        )))
     }
 }

@@ -1,0 +1,15 @@
+# Synthetic: written by hand from contracts/protocol.md before a board exists. The real recordings
+# replace these when the firmware runs (task T039).
+> *
+<t LOGIC_ANALYZER_RP2350B_1_0
+<t FREQ:100000000
+<t BLASTFREQ:100000000
+<t BUFFER:96000
+<t CHANNELS:32
+<t FW:1.1.0
+<t PROTO:2
+<t FEATURES:cmd7,mode32,restart
+<t PSRAM:0
+<t MAXPRE:1000,1000,1000,1000
+<t MAXPOST:96000,96000,96000,96000
+<t TRIGGERS:edge,pattern:16,fast:5,burst:8,blast

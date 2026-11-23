@@ -334,7 +334,7 @@ accuracy.
 
 ### Tests first
 
-- [ ] T061 [P] [US6] `crates/driver-rp2350b/tests/chain.rs` with two to five simulated boards: the channels are those of
+- [x] T061 [P] [US6] `crates/driver-rp2350b/tests/chain.rs` with two to five simulated boards: the channels are those of
   the boards in order, the words of the boards are merged (`words_per_sample` the number of boards), the slaves
   are armed before the master, the shift of a board moves its samples, the allowed triggers are those of the
   master's pattern kinds and the edge trigger is refused, a missing or silent board gives
@@ -345,7 +345,7 @@ accuracy.
 
 ### Implementation
 
-- [ ] T063 [US6] `crates/driver-rp2350b/src/chain.rs`: the chain device, the merge, the roles in capture request 2,
+- [x] T063 [US6] `crates/driver-rp2350b/src/chain.rs`: the chain device, the merge, the roles in capture request 2,
   the shifts, the combined capabilities (`contracts/device-abstraction.md`).
 - [ ] T064 [US6] `crates/host/src/{settings,devices}.rs` and `crates/app/src/app.rs`: define and edit a chain and
   the shift of each board in the application, with the texts in six languages.

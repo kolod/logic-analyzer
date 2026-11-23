@@ -107,3 +107,5 @@ error-rp2350b-stream_stopped = La captura terminó antes de tiempo. Todo lo capt
 error-rp2350b-protocol = El analizador lógico envió una respuesta que este programa no entiende. Vuelva a conectar el dispositivo e inténtelo de nuevo; si se repite, actualice el firmware.
 error-rp2350b-timeout = El analizador lógico no respondió a tiempo. Compruebe el cable USB, vuelva a conectar el dispositivo e inténtelo de nuevo.
 error-rp2350b-disconnected = Se desconectó el analizador lógico. Todo lo capturado hasta ahora se conserva. Vuelva a conectar el dispositivo y empiece de nuevo.
+error-rp2350b-chain_incomplete = Falta una placa de la cadena de analizadores lógicos o no respondió. Compruebe que todas las placas de la cadena están conectadas a un puerto USB, vuelva a conectarla e inténtelo de nuevo.
+error-rp2350b-chain_mismatch = Las placas de la cadena tienen versiones de firmware distintas. Actualice el firmware de todas a la misma versión (menú Captura, Reiniciar en el cargador) e inténtelo de nuevo.

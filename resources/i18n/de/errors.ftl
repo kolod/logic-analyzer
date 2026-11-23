@@ -107,3 +107,5 @@ error-rp2350b-stream_stopped = Die Aufnahme wurde vorzeitig beendet. Alles bishe
 error-rp2350b-protocol = Der Logikanalysator hat eine Antwort gesendet, die dieses Programm nicht versteht. Schließen Sie das Gerät erneut an und versuchen Sie es noch einmal; tritt es wieder auf, aktualisieren Sie die Firmware.
 error-rp2350b-timeout = Der Logikanalysator hat nicht rechtzeitig geantwortet. Prüfen Sie das USB-Kabel, schließen Sie das Gerät erneut an und versuchen Sie es noch einmal.
 error-rp2350b-disconnected = Der Logikanalysator wurde getrennt. Alles bisher Aufgenommene bleibt erhalten. Schließen Sie das Gerät erneut an und starten Sie neu.
+error-rp2350b-chain_incomplete = Eine Platine der Kette von Logikanalysatoren fehlt oder hat nicht geantwortet. Prüfen Sie, ob jede Platine der Kette an einem USB-Anschluss angeschlossen ist, schließen Sie sie erneut an und versuchen Sie es noch einmal.
+error-rp2350b-chain_mismatch = Die Platinen der Kette haben unterschiedliche Firmware-Versionen. Aktualisieren Sie die Firmware aller Platinen auf dieselbe Version (Menü Aufnahme, Neustart im Bootloader) und versuchen Sie es erneut.

@@ -27,6 +27,10 @@ pub const PROTOCOL: &str = "rp2350b.protocol";
 pub const TIMEOUT: &str = "rp2350b.timeout";
 /// The board was unplugged.
 pub const DISCONNECTED: &str = "rp2350b.disconnected";
+/// A board of a chain is missing or does not answer.
+pub const CHAIN_INCOMPLETE: &str = "rp2350b.chain_incomplete";
+/// The boards of a chain run different firmware versions.
+pub const CHAIN_MISMATCH: &str = "rp2350b.chain_mismatch";
 
 fn device(code: &'static str, detail: String) -> Error {
     Error::new(ErrorKind::Device, code, detail)
@@ -101,6 +105,24 @@ pub fn timeout(doing: &str, waited_ms: u64) -> Error {
     )
 }
 
+/// A board of the chain `chain` is missing or does not answer.
+#[must_use]
+pub fn chain_incomplete(chain: &str, board: &str, what: &str) -> Error {
+    device(
+        CHAIN_INCOMPLETE,
+        format!("the chain {chain} is incomplete: the board {board} {what}"),
+    )
+}
+
+/// The boards of the chain `chain` do not run the same firmware.
+#[must_use]
+pub fn chain_mismatch(chain: &str, found: &str) -> Error {
+    device(
+        CHAIN_MISMATCH,
+        format!("the boards of the chain {chain} run different firmware: {found}"),
+    )
+}
+
 /// The board was unplugged.
 #[must_use]
 pub fn disconnected(port: &str) -> Error {
@@ -115,7 +137,7 @@ pub fn disconnected(port: &str) -> Error {
 mod tests {
     use super::*;
 
-    const ALL: [&str; 9] = [
+    const ALL: [&str; 11] = [
         ACCESS_DENIED,
         PORT_BUSY,
         NOT_FOUND,
@@ -125,6 +147,8 @@ mod tests {
         PROTOCOL,
         TIMEOUT,
         DISCONNECTED,
+        CHAIN_INCOMPLETE,
+        CHAIN_MISMATCH,
     ];
 
     #[test]
@@ -153,5 +177,13 @@ mod tests {
             assert!(!error.detail().is_empty());
         }
         assert_eq!(disconnected("COM3").code(), la_devices::error::DISCONNECTED);
+        assert_eq!(
+            chain_incomplete("c", "S2", "is missing").code(),
+            CHAIN_INCOMPLETE
+        );
+        assert_eq!(
+            chain_mismatch("c", "1.0.0 and 1.1.0").code(),
+            CHAIN_MISMATCH
+        );
     }
 }

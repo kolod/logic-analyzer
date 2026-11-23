@@ -98,8 +98,8 @@ impl Rp2350bDevice {
         )
     }
 
-    fn fail_on_idle(running: &mut Running, what: Option<(u64, u64)>) -> Result<()> {
-        running.silent = running.silent.saturating_add(READ_TIMEOUT);
+    fn fail_on_idle(running: &mut Running, step: Duration, what: Option<(u64, u64)>) -> Result<()> {
+        running.silent = running.silent.saturating_add(step);
         if running.silent < STALL {
             return Ok(());
         }
@@ -111,16 +111,13 @@ impl Rp2350bDevice {
             ),
         })
     }
-}
-
-impl Device for Rp2350bDevice {
-    fn descriptor(&self) -> &DeviceDescriptor {
-        &self.descriptor
-    }
-
-    fn start(&mut self, config: &ResolvedConfig) -> Result<AppliedConfig> {
-        let request = build_request(config)?;
-        self.send(&request)?;
+    /// Sends `request` and waits for the board to accept it; the capture then runs on the board.
+    pub(crate) fn start_request(
+        &mut self,
+        request: &CaptureRequest2,
+        rate_hz: u64,
+    ) -> Result<AppliedConfig> {
+        self.send(request)?;
         let answer = self.line()?;
         match answer.as_str() {
             "CAPTURE_STARTED" => {}
@@ -150,10 +147,17 @@ impl Device for Rp2350bDevice {
             pending: Vec::new(),
             silent: Duration::ZERO,
         });
-        Ok(AppliedConfig::new(config.sample_rate_hz()))
+        Ok(AppliedConfig::new(rate_hz))
     }
 
-    fn read(&mut self, max_samples: usize, out: &mut Vec<u32>) -> Result<ReadOutcome> {
+    /// The reads of [`Device::read`] with the time a read waits given: a chain of boards reads each board for a
+    /// share of [`READ_TIMEOUT`], so that all of them together stay within it.
+    pub(crate) fn read_within(
+        &mut self,
+        max_samples: usize,
+        out: &mut Vec<u32>,
+        timeout: Duration,
+    ) -> Result<ReadOutcome> {
         let Some(running) = self.running.as_mut() else {
             return Err(la_devices::error::invalid_state(
                 "the board was read before a capture was started".to_owned(),
@@ -163,7 +167,7 @@ impl Device for Rp2350bDevice {
             match &mut running.phase {
                 Phase::Header { bytes, got } => {
                     let wanted = bytes.get_mut(*got..).unwrap_or(&mut []);
-                    let n = self.link.read(wanted, READ_TIMEOUT)?;
+                    let n = self.link.read(wanted, timeout)?;
                     if n == 0 {
                         // Waiting for the trigger: the board is alive, the capture has not begun.
                         return Ok(ReadOutcome::Idle);
@@ -203,9 +207,13 @@ impl Device for Rp2350bDevice {
                     let wanted = (*left).min(buffer.len());
                     let n = self
                         .link
-                        .read(buffer.get_mut(..wanted).unwrap_or(&mut []), READ_TIMEOUT)?;
+                        .read(buffer.get_mut(..wanted).unwrap_or(&mut []), timeout)?;
                     if n == 0 {
-                        Self::fail_on_idle(running, Some((running.received, running.promised)))?;
+                        Self::fail_on_idle(
+                            running,
+                            timeout,
+                            Some((running.received, running.promised)),
+                        )?;
                         return Ok(ReadOutcome::Idle);
                     }
                     running.silent = Duration::ZERO;
@@ -254,9 +262,13 @@ impl Device for Rp2350bDevice {
                         .saturating_sub(running.pending.len())
                         .min(CHUNK);
                     let mut buffer = vec![0_u8; wanted.max(1)];
-                    let n = self.link.read(&mut buffer, READ_TIMEOUT)?;
+                    let n = self.link.read(&mut buffer, timeout)?;
                     if n == 0 {
-                        Self::fail_on_idle(running, Some((running.received, running.promised)))?;
+                        Self::fail_on_idle(
+                            running,
+                            timeout,
+                            Some((running.received, running.promised)),
+                        )?;
                         return Ok(ReadOutcome::Idle);
                     }
                     running.silent = Duration::ZERO;
@@ -284,9 +296,9 @@ impl Device for Rp2350bDevice {
                     let wanted = (*left).min(buffer.len());
                     let n = self
                         .link
-                        .read(buffer.get_mut(..wanted).unwrap_or(&mut []), READ_TIMEOUT)?;
+                        .read(buffer.get_mut(..wanted).unwrap_or(&mut []), timeout)?;
                     if n == 0 {
-                        Self::fail_on_idle(running, None)?;
+                        Self::fail_on_idle(running, timeout, None)?;
                         return Ok(ReadOutcome::Idle);
                     }
                     running.silent = Duration::ZERO;
@@ -303,6 +315,21 @@ impl Device for Rp2350bDevice {
                 Phase::Done => return Ok(ReadOutcome::Finished),
             }
         }
+    }
+}
+
+impl Device for Rp2350bDevice {
+    fn descriptor(&self) -> &DeviceDescriptor {
+        &self.descriptor
+    }
+
+    fn start(&mut self, config: &ResolvedConfig) -> Result<AppliedConfig> {
+        let request = build_request(config)?;
+        self.start_request(&request, config.sample_rate_hz())
+    }
+
+    fn read(&mut self, max_samples: usize, out: &mut Vec<u32>) -> Result<ReadOutcome> {
+        self.read_within(max_samples, out, READ_TIMEOUT)
     }
 
     fn stop(&mut self) -> Result<()> {

@@ -172,3 +172,5 @@ error-rp2350b-stream_stopped = The capture ended early. Everything captured so f
 error-rp2350b-protocol = The logic analyzer sent an answer this program does not understand. Reconnect the device and try again; if it happens again, update the firmware.
 error-rp2350b-timeout = The logic analyzer did not answer in time. Check the USB cable, reconnect the device and try again.
 error-rp2350b-disconnected = The logic analyzer was unplugged. Everything captured so far is kept. Reconnect the device and start again.
+error-rp2350b-chain_incomplete = A board of the chain of logic analyzers is missing or did not answer. Check that every board of the chain is connected and on a USB port, reconnect it and try again.
+error-rp2350b-chain_mismatch = The boards of the chain run different firmware versions. Update the firmware of all of them to the same version (Capture menu, Restart into bootloader) and try again.
