@@ -38,3 +38,30 @@ Not done in stage 1 (left for the owner or for later stages): the application do
 virtual device in its device list (it is available to tests through `WideVirtualProvider`); a reader of the
 previous file format cannot be run here, so "an older reader refuses more than 32 channels" rests on the
 previous reader's own check of the channel count.
+
+## Stage 2: the abstraction describes the original's functions (T022 to T027)
+
+- `la-devices`: `TriggerKind::{Pattern, FastPattern}`, `Pattern`, `TriggerLimits`, `ModeLimit`, `DepthBand` and the
+  capabilities `trigger_limits`, `pre_post`, `buffer_depths`, `bursts`, `max_rates`; the configuration gains
+  `pattern`, `pre_trigger_samples` and `bursts`. `validate` checks each against the capabilities and names the
+  limit in the detail of `device.unsupported_trigger`, `device.invalid_capture_length`,
+  `device.unsupported_sample_rate` and the new `device.unsupported_bursts` (text in the six languages).
+  Tests: `crates/devices/tests/rich_capabilities.rs` (16: a value at the limit passes, one past it is refused,
+  patterns complete and consistent, a trigger in a chain, the mode by channel count, the depth by rate band, the
+  highest rate by channel count, bursts, the descriptor checks, and a device that declares none of it behaves as
+  before). Every other test of `la-devices`, `la-driver-weact`, `la-session` and `la-host` passes unchanged apart
+  from the new fields in their literals.
+- `la-session`: the description keeps the samples kept before the trigger and the pattern behind a new flag of
+  the `META` section; a file that needs neither does not set it and its description is byte for byte the old one
+  (the `meta` layout test is unchanged). A reader that predates the flag refuses the file as damaged; this was
+  not run against a previous reader (none can be built here).
+- `la-host`: `ConfigEdit::{Pattern, PreTrigger, Bursts}`, `Setting::Bursts`, the defaults of a device respect
+  its mode and depth, and selecting a device keeps the trigger, the samples before it and the bursts only where
+  the new device accepts them (`crates/host/tests/capture_settings_rich.rs`, 6). Host API 2.3.
+- `la-app`: the capture panel shows the trigger type, channel and pattern, the samples before (and after) the
+  trigger and the bursts, each only when the selected device offers it; the virtual device, which has edge
+  triggers, now shows the trigger. Texts in the six languages (parity test passes). Tests: the pattern as typed
+  levels and the choice of a trigger.
+- No driver uses these functions yet; the virtual device declares none of the new limits.
+- `cargo fmt`, `cargo clippy --workspace --all-targets` and `cargo +1.85 check --workspace --exclude la-app
+  --all-targets` are clean.

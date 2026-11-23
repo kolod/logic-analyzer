@@ -21,6 +21,7 @@ error-device-trigger_timeout = La condition de déclenchement ne s'est pas produ
 error-device-unresponsive = L'appareil ne répond plus. Tout ce qui a été acquis jusqu'ici est conservé. Débranchez-le puis rebranchez-le, puis réessayez.
 error-device-unsupported_sample_rate = Cet appareil ne peut pas acquérir à la fréquence d'échantillonnage choisie. Choisissez l'une des fréquences proposées par l'appareil.
 error-device-unsupported_trigger = Cet appareil ne prend pas en charge le déclenchement choisi. Choisissez un déclenchement proposé par l'appareil ou acquérez sans déclenchement.
+error-device-unsupported_bursts = Cet appareil ne prend pas en charge autant d'acquisitions à la suite (rafales). Réduisez le nombre de rafales ou acquérez une seule fois.
 
 ### Fichiers de session
 

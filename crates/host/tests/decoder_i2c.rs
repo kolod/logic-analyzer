@@ -102,6 +102,8 @@ fn session_file_recording(dir: &TempDir, words: &[u32], mask: u32) -> PathBuf {
         enabled_mask: la_devices::ChannelSet::from_u32(mask),
         trigger: None,
         samples_before_trigger: 0,
+        pattern: None,
+        pre_trigger_samples: 0,
         started_at: std::time::SystemTime::UNIX_EPOCH,
     })
     .unwrap();

@@ -36,6 +36,9 @@ fn config(mask: u32, length: u64, options: VirtualOptions) -> DeviceConfig {
         capture_length: Some(length),
         options: DeviceOptions::Virtual(options),
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 
@@ -191,6 +194,9 @@ fn expected_trigger(reference: &Snapshot, channel: u8, kind: TriggerKind) -> u64
         TriggerKind::RisingEdge => (1..length).find(|&p| !level(p - 1) && level(p)).unwrap(),
         TriggerKind::FallingEdge => (1..length).find(|&p| level(p - 1) && !level(p)).unwrap(),
         TriggerKind::AnyEdge => (1..length).find(|&p| level(p - 1) != level(p)).unwrap(),
+        TriggerKind::Pattern | TriggerKind::FastPattern => {
+            panic!("the virtual device has no pattern trigger")
+        }
     }
 }
 
@@ -233,7 +239,7 @@ fn every_trigger_kind_starts_capturing_at_the_trigger_sample_and_reports_the_ski
             match kind {
                 TriggerKind::RisingEdge | TriggerKind::Level(true) => assert!(first_high),
                 TriggerKind::FallingEdge | TriggerKind::Level(false) => assert!(!first_high),
-                TriggerKind::AnyEdge => {}
+                TriggerKind::AnyEdge | TriggerKind::Pattern | TriggerKind::FastPattern => {}
             }
         }
     }

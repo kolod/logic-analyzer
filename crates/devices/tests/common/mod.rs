@@ -48,6 +48,9 @@ pub fn std_config(enabled_channels: u32, sample_rate_hz: u64) -> DeviceConfig {
         capture_length: None,
         options: DeviceOptions::None,
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 
@@ -77,6 +80,9 @@ pub fn virtual_config(
             ..VirtualOptions::default()
         }),
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 

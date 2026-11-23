@@ -135,6 +135,56 @@ pub enum TriggerKind {
     FallingEdge,
     /// Start on any transition.
     AnyEdge,
+    /// Start when a group of adjacent channels shows a given pattern (see [`Pattern`](crate::Pattern)).
+    Pattern,
+    /// Like [`Pattern`](Self::Pattern), but evaluated in the device's fast trigger path; the group is narrower.
+    FastPattern,
+}
+
+/// The widest patterns a device can trigger on, and whether a trigger works in a chain of devices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TriggerLimits {
+    /// The most channels of a [`TriggerKind::Pattern`]; `0` when the device has none.
+    pub pattern_width: u8,
+    /// The most channels of a [`TriggerKind::FastPattern`]; `0` when the device has none.
+    pub fast_pattern_width: u8,
+    /// This device is a chain of devices.
+    pub chained: bool,
+    /// A pattern trigger is possible although the device is a chain.
+    pub allowed_in_chain: bool,
+}
+
+impl TriggerLimits {
+    /// No pattern triggers.
+    pub const NONE: Self = Self {
+        pattern_width: 0,
+        fast_pattern_width: 0,
+        chained: false,
+        allowed_in_chain: false,
+    };
+}
+
+/// The samples around the trigger that one capture mode allows. A mode is chosen by the number of enabled
+/// channels: the first [`ModeLimit`] whose `up_to_channels` is at least that number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModeLimit {
+    /// This mode serves captures of up to this many enabled channels.
+    pub up_to_channels: u8,
+    /// The most samples kept before the trigger.
+    pub max_before: u64,
+    /// The most samples captured after the trigger.
+    pub max_after: u64,
+}
+
+/// The buffer depth in a range of sample rates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DepthBand {
+    /// The lowest rate of the band in hertz.
+    pub from_rate_hz: u64,
+    /// The highest rate of the band in hertz (inclusive).
+    pub to_rate_hz: u64,
+    /// The buffer depth in samples at these rates.
+    pub depth: u64,
 }
 
 /// What a device declares it can do. The core enforces it before a configuration reaches
@@ -150,6 +200,105 @@ pub struct Capabilities {
     /// Buffer depth in samples for devices that capture into an on-board buffer; `None` for
     /// devices that stream.
     pub buffer_depth: Option<u64>,
+    /// The widest pattern triggers; [`TriggerLimits::NONE`] for a device without them.
+    pub trigger_limits: TriggerLimits,
+    /// Samples before and after the trigger by capture mode, ascending in `up_to_channels`; empty when the
+    /// device cannot keep samples from before the trigger.
+    pub pre_post: Vec<ModeLimit>,
+    /// The buffer depth by rate band, ascending and not overlapping; empty when `buffer_depth` (or nothing)
+    /// applies at every rate. A device with bands captures into its buffer, so a length is required.
+    pub buffer_depths: Vec<DepthBand>,
+    /// The most bursts of one capture; `None` when the device captures once.
+    pub bursts: Option<u32>,
+    /// The highest rate by enabled channel count: `(up to this many channels, rate in hertz)`, ascending in
+    /// the channel count and not rising; empty when the rates of `sample_rates` apply to every count.
+    pub max_rates: Vec<(u8, u64)>,
+}
+
+impl Capabilities {
+    /// The mode that serves `enabled` channels.
+    #[must_use]
+    pub fn mode_for(&self, enabled: usize) -> Option<&ModeLimit> {
+        self.pre_post
+            .iter()
+            .find(|mode| usize::from(mode.up_to_channels) >= enabled)
+    }
+
+    /// The buffer depth at `rate_hz`: the band's depth, else the device's single depth.
+    #[must_use]
+    pub fn depth_at(&self, rate_hz: u64) -> Option<u64> {
+        self.buffer_depths
+            .iter()
+            .find(|band| (band.from_rate_hz..=band.to_rate_hz).contains(&rate_hz))
+            .map(|band| band.depth)
+            .or(self.buffer_depth)
+    }
+
+    /// The highest rate for `enabled` channels, if the device limits it by channel count.
+    #[must_use]
+    pub fn max_rate_for(&self, enabled: usize) -> Option<u64> {
+        self.max_rates
+            .iter()
+            .find(|(up_to, _)| usize::from(*up_to) >= enabled)
+            .map(|(_, rate)| *rate)
+    }
+
+    fn validate_rich(&self) -> Result<()> {
+        let limits = &self.trigger_limits;
+        if limits.pattern_width > self.channels || limits.fast_pattern_width > self.channels {
+            return Err(error::invalid_capabilities(
+                "a pattern is wider than the device",
+            ));
+        }
+        if limits.allowed_in_chain && !limits.chained {
+            return Err(error::invalid_capabilities(
+                "a trigger is allowed in a chain, but the device is not a chain",
+            ));
+        }
+        let mut last = 0_u8;
+        for mode in &self.pre_post {
+            if mode.up_to_channels <= last || mode.up_to_channels > self.channels {
+                return Err(error::invalid_capabilities(
+                    "the capture modes must ascend in channels and stay within the device",
+                ));
+            }
+            if mode.max_after == 0 {
+                return Err(error::invalid_capabilities(
+                    "a capture mode must allow at least 1 sample after the trigger",
+                ));
+            }
+            last = mode.up_to_channels;
+        }
+        let mut next_rate = 1_u64;
+        for band in &self.buffer_depths {
+            if band.from_rate_hz < next_rate || band.from_rate_hz > band.to_rate_hz {
+                return Err(error::invalid_capabilities(
+                    "the buffer depth bands must ascend, not overlap and have from <= to",
+                ));
+            }
+            if band.depth == 0 {
+                return Err(error::invalid_capabilities(
+                    "a buffer depth band must hold at least 1 sample",
+                ));
+            }
+            next_rate = band.to_rate_hz.saturating_add(1);
+        }
+        if self.bursts == Some(0) {
+            return Err(error::invalid_capabilities(
+                "support for 0 bursts is declared by `None`",
+            ));
+        }
+        let (mut last_channels, mut last_rate) = (0_u8, u64::MAX);
+        for &(up_to, rate) in &self.max_rates {
+            if up_to <= last_channels || up_to > self.channels || rate == 0 || rate > last_rate {
+                return Err(error::invalid_capabilities(
+                    "the highest rates must ascend in channels, never rise and stay within the device",
+                ));
+            }
+            (last_channels, last_rate) = (up_to, rate);
+        }
+        Ok(())
+    }
 }
 
 /// A listed device: identity, name and capabilities.
@@ -189,6 +338,7 @@ impl DeviceDescriptor {
                 "the buffer depth must be at least 1",
             ));
         }
+        caps.validate_rich()?;
         Ok(())
     }
 }
@@ -207,6 +357,11 @@ mod tests {
                 sample_rates: SampleRates::List(vec![1_000, 1_000_000]),
                 triggers: vec![TriggerKind::RisingEdge],
                 buffer_depth: None,
+                trigger_limits: TriggerLimits::NONE,
+                pre_post: Vec::new(),
+                buffer_depths: Vec::new(),
+                bursts: None,
+                max_rates: Vec::new(),
             },
         }
     }

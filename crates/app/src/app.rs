@@ -12,7 +12,7 @@ use iced::widget::{
 };
 use iced::{Element, Fill, Length, Subscription, Task, Theme, keyboard, theme, window};
 use la_decoders::setup::{Source, Value};
-use la_devices::DeviceId;
+use la_devices::{DeviceId, Pattern, Trigger, TriggerKind};
 use la_host::decoders::{CatalogueOptionKind, InstanceState};
 use la_host::shortcuts::{Accelerator, Action, ShortcutEntry};
 use la_host::window::ViewSize;
@@ -73,6 +73,16 @@ pub enum Message {
     SeedText(String),
     /// A signal profile was chosen.
     ProfilePicked(ProfileChoice),
+    /// A trigger type was chosen (`None` for no trigger).
+    TriggerPicked(Choice<Option<TriggerKind>>),
+    /// The trigger channel text changed.
+    TriggerChannelText(String),
+    /// The levels of a pattern trigger changed.
+    PatternText(String),
+    /// The samples kept before the trigger changed.
+    PreTriggerText(String),
+    /// The number of bursts changed.
+    BurstsText(String),
     /// The system theme changed.
     SystemTheme(theme::Mode),
     /// The window asked to close.
@@ -474,6 +484,10 @@ pub struct App {
     length_text: String,
     length_error: Option<la_host::config::SecondsError>,
     seed_text: String,
+    trigger_channel_text: String,
+    pattern_text: String,
+    pre_trigger_text: String,
+    bursts_text: String,
     /// What the pointer means to the marker being placed (the host's answer to the pointer).
     placement_preview: Option<la_host::markers::Resolved>,
     /// The marker whose actions are open in the Markers view.
@@ -585,6 +599,10 @@ impl App {
             length_text: String::new(),
             length_error: None,
             seed_text: String::new(),
+            trigger_channel_text: String::new(),
+            pattern_text: String::new(),
+            pre_trigger_text: String::new(),
+            bursts_text: String::new(),
             placement_preview: None,
             marker_menu: None,
             marker_comments: std::collections::BTreeMap::new(),
@@ -623,6 +641,20 @@ impl App {
             self.length_error = None;
         }
         self.seed_text = config.seed.map_or_else(String::new, |s| s.to_string());
+        // What the user typed stays while it still means what the configuration holds.
+        let channel = config.trigger.map(|t| t.channel);
+        if self.trigger_channel_text.trim().parse::<u8>().ok() != channel {
+            self.trigger_channel_text = channel.map_or_else(String::new, |c| c.to_string());
+        }
+        if pattern_from_text(&self.pattern_text, channel.unwrap_or(0)) != config.pattern {
+            self.pattern_text = config.pattern.map_or_else(String::new, pattern_to_text);
+        }
+        if self.pre_trigger_text.trim().parse::<u64>().unwrap_or(0) != config.pre_trigger_samples {
+            self.pre_trigger_text = config.pre_trigger_samples.to_string();
+        }
+        if self.bursts_text.trim().parse::<u32>().unwrap_or(0) != config.bursts {
+            self.bursts_text = config.bursts.to_string();
+        }
     }
 
     /// Whether `mib` is a memory limit the host accepts.
@@ -1651,6 +1683,95 @@ impl App {
             Message::ProfilePicked(choice) => {
                 self.run(Command::EditConfig(ConfigEdit::Profile(choice.profile)))
             }
+            Message::TriggerPicked(choice) => {
+                let config = &self.shell.state().config;
+                let Some(kind) = choice.value else {
+                    let trigger = self.run(Command::EditConfig(ConfigEdit::Trigger(None)));
+                    let pattern = self.run(Command::EditConfig(ConfigEdit::Pattern(None)));
+                    let kept = self.run(Command::EditConfig(ConfigEdit::PreTrigger(0)));
+                    return Task::batch([trigger, pattern, kept]);
+                };
+                let channel = config
+                    .trigger
+                    .map(|t| t.channel)
+                    .or_else(|| config.enabled_channels.iter().next())
+                    .unwrap_or(0);
+                let is_pattern = matches!(kind, TriggerKind::Pattern | TriggerKind::FastPattern);
+                let pattern = is_pattern.then(|| {
+                    config.pattern.map_or(
+                        Pattern {
+                            base_channel: channel,
+                            length: 1,
+                            value: 0,
+                        },
+                        |p| Pattern {
+                            base_channel: channel,
+                            ..p
+                        },
+                    )
+                });
+                let trigger = self.run(Command::EditConfig(ConfigEdit::Trigger(Some(Trigger {
+                    channel,
+                    kind,
+                }))));
+                let pattern = self.run(Command::EditConfig(ConfigEdit::Pattern(pattern)));
+                self.sync_texts();
+                Task::batch([trigger, pattern])
+            }
+            Message::TriggerChannelText(text) => {
+                self.trigger_channel_text.clone_from(&text);
+                let config = &self.shell.state().config;
+                let (Some(channel), Some(trigger)) =
+                    (text.trim().parse::<u8>().ok(), config.trigger)
+                else {
+                    return Task::none();
+                };
+                let pattern = config.pattern.map(|p| Pattern {
+                    base_channel: channel,
+                    ..p
+                });
+                let trigger = self.run(Command::EditConfig(ConfigEdit::Trigger(Some(Trigger {
+                    channel,
+                    ..trigger
+                }))));
+                let pattern = self.run(Command::EditConfig(ConfigEdit::Pattern(pattern)));
+                Task::batch([trigger, pattern])
+            }
+            Message::PatternText(text) => {
+                self.pattern_text.clone_from(&text);
+                let base = self
+                    .shell
+                    .state()
+                    .config
+                    .trigger
+                    .map_or(0, |trigger| trigger.channel);
+                match pattern_from_text(&text, base) {
+                    Some(pattern) => {
+                        self.run(Command::EditConfig(ConfigEdit::Pattern(Some(pattern))))
+                    }
+                    None => Task::none(),
+                }
+            }
+            Message::PreTriggerText(text) => {
+                self.pre_trigger_text.clone_from(&text);
+                match text.trim() {
+                    "" => self.run(Command::EditConfig(ConfigEdit::PreTrigger(0))),
+                    number => number.parse::<u64>().map_or_else(
+                        |_| Task::none(),
+                        |samples| self.run(Command::EditConfig(ConfigEdit::PreTrigger(samples))),
+                    ),
+                }
+            }
+            Message::BurstsText(text) => {
+                self.bursts_text.clone_from(&text);
+                match text.trim() {
+                    "" => self.run(Command::EditConfig(ConfigEdit::Bursts(0))),
+                    number => number.parse::<u32>().map_or_else(
+                        |_| Task::none(),
+                        |bursts| self.run(Command::EditConfig(ConfigEdit::Bursts(bursts))),
+                    ),
+                }
+            }
             Message::SystemTheme(mode) => {
                 self.system_mode = mode;
                 self.sync_after_command();
@@ -2047,13 +2168,108 @@ impl App {
             labelled(self.t("toolbar-device"), device_picker.width(Fill).into()),
             rate_row,
             length_block,
-            labelled(self.t("toolbar-seed"), seed.into()),
-            labelled(self.t("toolbar-profile"), profile_picker.width(Fill).into()),
         ]
         .spacing(8)
         .padding(PANEL_PADDING);
+        if let Some(block) = self.trigger_block(idle) {
+            view = view.push(block);
+        }
+        view = view.push(
+            column![
+                labelled(self.t("toolbar-seed"), seed.into()),
+                labelled(self.t("toolbar-profile"), profile_picker.width(Fill).into()),
+            ]
+            .spacing(8),
+        );
         view = view.push(self.channel_buttons());
         scrollable(view).height(Fill).into()
+    }
+
+    /// The trigger, the samples before it and the bursts: only the parts the selected device offers.
+    fn trigger_block(&self, idle: bool) -> Option<Element<'_, Message>> {
+        let state = self.shell.state();
+        let caps = &state
+            .devices
+            .iter()
+            .find(|d| Some(&d.id) == state.selected_device.as_ref())?
+            .capabilities;
+        let mut block = column![].spacing(8);
+        let mut shown = false;
+        if !caps.triggers.is_empty() {
+            shown = true;
+            let mut choices = vec![Choice {
+                value: None,
+                label: self.t("trigger-none"),
+            }];
+            for kind in &caps.triggers {
+                let key = match kind {
+                    TriggerKind::Level(false) => "trigger-level-low",
+                    TriggerKind::Level(true) => "trigger-level-high",
+                    TriggerKind::RisingEdge => "trigger-rising",
+                    TriggerKind::FallingEdge => "trigger-falling",
+                    TriggerKind::AnyEdge => "trigger-any",
+                    TriggerKind::Pattern => "trigger-pattern",
+                    TriggerKind::FastPattern => "trigger-fast-pattern",
+                };
+                choices.push(Choice {
+                    value: Some(*kind),
+                    label: self.t(key),
+                });
+            }
+            let current = choices
+                .iter()
+                .find(|c| c.value == state.config.trigger.map(|t| t.kind))
+                .cloned();
+            let mut picker = pick_list(choices, current, Message::TriggerPicked).width(Fill);
+            if !idle {
+                picker = picker.on_open(Message::Noop);
+            }
+            block = block.push(labelled(self.t("trigger-type"), picker.into()));
+            if let Some(trigger) = state.config.trigger {
+                let mut channel = text_input("", &self.trigger_channel_text).width(Fill);
+                if idle {
+                    channel = channel.on_input(Message::TriggerChannelText);
+                }
+                block = block.push(labelled(self.t("trigger-channel"), channel.into()));
+                if matches!(
+                    trigger.kind,
+                    TriggerKind::Pattern | TriggerKind::FastPattern
+                ) {
+                    let mut levels = text_input("", &self.pattern_text).width(Fill);
+                    if idle {
+                        levels = levels.on_input(Message::PatternText);
+                    }
+                    block = block.push(labelled(self.t("trigger-pattern-levels"), levels.into()));
+                }
+                if !caps.pre_post.is_empty() {
+                    let mut before = text_input("0", &self.pre_trigger_text).width(Fill);
+                    if idle {
+                        before = before.on_input(Message::PreTriggerText);
+                    }
+                    let after = state
+                        .config
+                        .length
+                        .saturating_sub(state.config.pre_trigger_samples);
+                    block = block.push(labelled(self.t("capture-pre-trigger"), before.into()));
+                    block = block.push(
+                        text(self.shell.localizer().message(
+                            &Key::from_static("capture-after-trigger"),
+                            &Args::new().uint("count", after),
+                        ))
+                        .size(12),
+                    );
+                }
+            }
+        }
+        if caps.bursts.is_some() {
+            shown = true;
+            let mut bursts = text_input("0", &self.bursts_text).width(Fill);
+            if idle {
+                bursts = bursts.on_input(Message::BurstsText);
+            }
+            block = block.push(labelled(self.t("capture-bursts"), bursts.into()));
+        }
+        shown.then(|| block.into())
     }
 
     /// The Markers view (see `marker_view`).
@@ -2917,6 +3133,38 @@ fn labelled<'a>(label: String, field: Element<'a, Message>) -> Element<'a, Messa
     column![text(label).size(12), field].spacing(2).into()
 }
 
+/// A pattern from the levels typed in, `0` and `1` (first channel first), up to 32 channels; `None` for
+/// any other text.
+fn pattern_from_text(text: &str, base_channel: u8) -> Option<Pattern> {
+    let text = text.trim();
+    if text.is_empty() || text.len() > 32 || !text.chars().all(|c| c == '0' || c == '1') {
+        return None;
+    }
+    let value = text
+        .chars()
+        .enumerate()
+        .filter(|(_, c)| *c == '1')
+        .fold(0_u32, |value, (index, _)| value | (1 << index));
+    Some(Pattern {
+        base_channel,
+        length: u8::try_from(text.len()).unwrap_or(32),
+        value,
+    })
+}
+
+/// The levels of a pattern as typed in: first channel first.
+fn pattern_to_text(pattern: Pattern) -> String {
+    (0..pattern.length)
+        .map(|index| {
+            if pattern.value >> index & 1 == 1 {
+                '1'
+            } else {
+                '0'
+            }
+        })
+        .collect()
+}
+
 /// "Ctrl+Shift+S" for an accelerator (the key names are the same in every language).
 fn describe(accelerator: Accelerator) -> String {
     let mut text = String::new();
@@ -3571,6 +3819,44 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_pattern_is_typed_as_levels_and_read_back() {
+        let pattern = pattern_from_text(" 1011 ", 3).unwrap();
+        assert_eq!(pattern.base_channel, 3);
+        assert_eq!(pattern.length, 4);
+        assert_eq!(pattern.value, 0b1101); // the first typed level is the first channel
+        assert_eq!(pattern_to_text(pattern), "1011");
+        for bad in ["", "  ", "102", "a", &"1".repeat(33)] {
+            assert_eq!(pattern_from_text(bad, 0), None, "{bad:?}");
+        }
+        assert_eq!(pattern_from_text(&"1".repeat(32), 0).unwrap().length, 32);
+    }
+
+    #[test]
+    fn the_trigger_is_chosen_in_the_capture_panel_and_kept_in_the_configuration() {
+        let dir = std::env::temp_dir().join(format!("la-app-trigger-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::with_shell(Shell::new(ShellConfig::for_tests(&dir)));
+        let _ = std::fs::remove_dir_all(&dir);
+        let choice = |kind| Choice {
+            value: Some(kind),
+            label: String::new(),
+        };
+        let _ = app.update(Message::TriggerPicked(choice(TriggerKind::RisingEdge)));
+        let trigger = app.shell.state().config.trigger.unwrap();
+        assert_eq!(trigger.kind, TriggerKind::RisingEdge);
+        assert_eq!(app.trigger_channel_text, trigger.channel.to_string());
+        let _ = app.update(Message::TriggerChannelText("2".to_owned()));
+        assert_eq!(app.shell.state().config.trigger.unwrap().channel, 2);
+        let _ = app.update(Message::TriggerPicked(Choice {
+            value: None,
+            label: String::new(),
+        }));
+        assert_eq!(app.shell.state().config.trigger, None);
+        // The virtual device offers neither samples before the trigger nor bursts: no field for them.
+        assert!(app.shell.state().config_problems.is_empty());
     }
 
     #[test]

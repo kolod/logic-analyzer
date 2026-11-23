@@ -29,6 +29,11 @@ fn buffered() -> Capabilities {
         sample_rates: SampleRates::List(vec![1_000, 1_000_000, 100_000_000]),
         triggers: vec![TriggerKind::RisingEdge, TriggerKind::FallingEdge],
         buffer_depth: Some(1_000_000),
+        trigger_limits: la_devices::TriggerLimits::NONE,
+        pre_post: Vec::new(),
+        buffer_depths: Vec::new(),
+        bursts: None,
+        max_rates: Vec::new(),
     }
 }
 
@@ -36,6 +41,11 @@ fn buffered() -> Capabilities {
 fn streaming() -> Capabilities {
     Capabilities {
         buffer_depth: None,
+        trigger_limits: la_devices::TriggerLimits::NONE,
+        pre_post: Vec::new(),
+        buffer_depths: Vec::new(),
+        bursts: None,
+        max_rates: Vec::new(),
         ..buffered()
     }
 }
@@ -55,6 +65,9 @@ fn base() -> DeviceConfig {
         capture_length: Some(1_000),
         options: DeviceOptions::None,
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 
@@ -544,6 +557,9 @@ fn valid_configurations_are_accepted_and_resolve_to_exactly_the_request() {
             DeviceConfig {
                 capture_length: Some(u64::MAX),
                 accept_budget_risk: true,
+                pattern: None,
+                pre_trigger_samples: 0,
+                bursts: 0,
                 ..base()
             },
         ),
@@ -571,6 +587,11 @@ fn a_range_capability_accepts_every_rate_inside_the_range_and_rejects_the_edges(
             max: 500_000_000,
         },
         buffer_depth: None,
+        trigger_limits: la_devices::TriggerLimits::NONE,
+        pre_post: Vec::new(),
+        buffer_depths: Vec::new(),
+        bursts: None,
+        max_rates: Vec::new(),
         ..buffered()
     };
     for rate in [10_u64, 11, 12_345, 500_000_000 - 1, 500_000_000] {
@@ -603,6 +624,11 @@ fn thirty_two_channel_devices_accept_every_channel() {
     let caps = Capabilities {
         channels: 32,
         buffer_depth: None,
+        trigger_limits: la_devices::TriggerLimits::NONE,
+        pre_post: Vec::new(),
+        buffer_depths: Vec::new(),
+        bursts: None,
+        max_rates: Vec::new(),
         ..buffered()
     };
     for mask in [1_u32, 1 << 31, u32::MAX, 0xFFFF_0000] {

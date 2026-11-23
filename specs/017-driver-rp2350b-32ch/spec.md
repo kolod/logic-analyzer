@@ -172,7 +172,9 @@ version and see the application refuse or warn as specified.
    application finds it, **Then** it says so (the version it found and the ones it supports) and does not
    start a capture.
 4. **Given** the application asks the device to restart into its bootloader, **When** it accepts, **Then**
-   the board appears as the bootloader drive for the next update.
+   the board appears as the bootloader drive for the next update, with no programmer and no button.
+5. **Given** the application asks the device for a normal restart, **When** it accepts, **Then** the board
+   restarts as the analyzer and the application lists it again with its firmware version.
 
 ---
 
@@ -335,8 +337,12 @@ signal appears on a channel of each board at the same time to within one sample.
   error reply and leave the device ready for the next request. If the firmware nevertheless fails
   (a fault that should not happen), it MAY restart itself, and the driver MUST find the board again; such a
   restart is a defect to be reported, never an accepted way of handling input.
-- **FR-018**: The firmware MUST be able to restart into the board's bootloader on request, so that it can
-  be updated without touching the board.
+- **FR-018**: The firmware MUST support two restart commands from the host: a **normal restart** (the board
+  resets and starts the analyzer firmware again) and a **restart into the bootloader** (the board resets and
+  appears as the bootloader drive), so that the firmware can be updated, and the board recovered from a stuck
+  state, with no programmer and without touching the board. Both are accepted at any time, also during a
+  capture (which then ends), and each is answered before the board restarts. The driver MUST find the board
+  again after either; the application offers both only for a device that has them.
 - **FR-019**: The parts of the firmware that are logic (the parsing of requests, the checking of limits, the
   choice of the capture mode, the packing of samples, the computing of timestamps) MUST be testable on the
   computer, without the board.

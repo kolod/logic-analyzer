@@ -1375,11 +1375,13 @@ fn default_device(devices: &[DeviceDescriptor]) -> Option<&DeviceId> {
         .map(|d| &d.id)
 }
 
-/// Selects `id` and resets the draft to the defaults of that device.
+/// Selects `id` and resets the draft to the defaults of that device; the trigger, the samples before it and
+/// the bursts stay where the new device still accepts them.
 fn select_device(state: &mut State, id: &DeviceId) {
     state.selected_device = Some(id.clone());
+    let limits = capture_limits(&state.settings);
     if let Some(device) = state.devices.iter().find(|d| d.id == *id) {
-        state.config = ConfigDraft::for_device(&device.capabilities);
+        state.config = ConfigDraft::for_device_keeping(device, &state.config, &limits);
     }
     if state.capture.is_none() {
         sync_presentation(state);

@@ -113,6 +113,9 @@ fn config_for(
         capture_length,
         options: DeviceOptions::None,
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     })
 }
 

@@ -62,6 +62,9 @@ pub fn config(mask: u32, rate: u64, length: Option<u64>) -> DeviceConfig {
         capture_length: length,
         options: DeviceOptions::None,
         accept_budget_risk: false,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 

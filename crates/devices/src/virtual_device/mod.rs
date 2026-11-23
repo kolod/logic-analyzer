@@ -166,6 +166,11 @@ pub fn virtual_descriptor_with_channels(channels: u8) -> DeviceDescriptor {
                 TriggerKind::AnyEdge,
             ],
             buffer_depth: None,
+            trigger_limits: crate::TriggerLimits::NONE,
+            pre_post: Vec::new(),
+            buffer_depths: Vec::new(),
+            bursts: None,
+            max_rates: Vec::new(),
         },
     }
 }

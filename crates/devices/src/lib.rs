@@ -27,9 +27,14 @@ pub use acquisition::{
     Acquisition, AcquisitionEvent, AcquisitionOptions, AcquisitionOutcome, AcquisitionState,
     EndReason, Progress,
 };
-pub use capabilities::{Capabilities, DeviceDescriptor, DeviceId, SampleRates, TriggerKind};
+pub use capabilities::{
+    Capabilities, DepthBand, DeviceDescriptor, DeviceId, ModeLimit, SampleRates, TriggerKind,
+    TriggerLimits,
+};
 pub use channel_set::ChannelSet;
-pub use config::{AppliedConfig, DeviceConfig, DeviceOptions, ResolvedConfig, Trigger, validate};
+pub use config::{
+    AppliedConfig, DeviceConfig, DeviceOptions, Pattern, ResolvedConfig, Trigger, validate,
+};
 pub use description::{CaptureDescription, MAX_TEXT_BYTES, SavedDescription};
 pub use driver::{
     Device, DeviceEvent, DeviceEventSink, DeviceProvider, Flow, READ_TIMEOUT, ReadOutcome,

@@ -89,6 +89,8 @@ pub(crate) fn search_trigger(
                 TriggerKind::RisingEdge => previous == Some(false) && level,
                 TriggerKind::FallingEdge => previous == Some(true) && !level,
                 TriggerKind::AnyEdge => previous.is_some_and(|p| p != level),
+                // The virtual device does not declare pattern triggers, so validation never lets one in.
+                TriggerKind::Pattern | TriggerKind::FastPattern => false,
             };
             if hit {
                 let offset = u64::try_from(index).unwrap_or(0);

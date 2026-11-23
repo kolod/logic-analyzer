@@ -38,6 +38,9 @@ fn config(length: Option<u64>) -> DeviceConfig {
             ..VirtualOptions::default()
         }),
         accept_budget_risk: true,
+        pattern: None,
+        pre_trigger_samples: 0,
+        bursts: 0,
     }
 }
 

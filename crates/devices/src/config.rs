@@ -21,6 +21,17 @@ pub struct Trigger {
     pub kind: TriggerKind,
 }
 
+/// The levels a pattern trigger waits for on a group of adjacent channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pattern {
+    /// The first channel of the group; bit `i` of `value` is the level of channel `base_channel + i`.
+    pub base_channel: u8,
+    /// The number of channels in the group, at least 1.
+    pub length: u8,
+    /// The levels (`1` = high); no bit at or above `length` may be set (a pattern is up to 32 channels).
+    pub value: u32,
+}
+
 /// Device-specific options. New drivers add variants (the enum is `#[non_exhaustive]`).
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
@@ -42,9 +53,15 @@ pub struct DeviceConfig {
     pub sample_rate_hz: u64,
     /// Optional trigger.
     pub trigger: Option<Trigger>,
-    /// Samples to capture; `None` captures until stopped (not allowed for devices with an
-    /// on-board buffer).
+    /// The levels of a [`TriggerKind::Pattern`] or [`TriggerKind::FastPattern`] trigger, and only then.
+    pub pattern: Option<Pattern>,
+    /// Samples to capture, in all (before and after the trigger); `None` captures until stopped (not
+    /// allowed for devices with an on-board buffer).
     pub capture_length: Option<u64>,
+    /// Samples to keep from before the trigger; `0` keeps none. Part of `capture_length`.
+    pub pre_trigger_samples: u64,
+    /// The number of bursts of one capture; `0` is a single capture.
+    pub bursts: u32,
     /// Device-specific options.
     pub options: DeviceOptions,
     /// Accept a finite length whose worst-case storage cost exceeds the memory budget.
@@ -61,7 +78,10 @@ pub struct ResolvedConfig {
     enabled_channels: ChannelSet,
     sample_rate_hz: u64,
     trigger: Option<Trigger>,
+    pattern: Option<Pattern>,
     capture_length: Option<u64>,
+    pre_trigger_samples: u64,
+    bursts: u32,
     options: DeviceOptions,
     channels: u8,
 }
@@ -72,7 +92,10 @@ impl ResolvedConfig {
             enabled_channels: config.enabled_channels,
             sample_rate_hz: config.sample_rate_hz,
             trigger: config.trigger,
+            pattern: config.pattern,
             capture_length: config.capture_length,
+            pre_trigger_samples: config.pre_trigger_samples,
+            bursts: config.bursts,
             options: config.options.clone(),
             channels,
         }
@@ -96,10 +119,28 @@ impl ResolvedConfig {
         self.trigger
     }
 
+    /// The pattern of a pattern trigger.
+    #[must_use]
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.pattern
+    }
+
     /// Samples to capture, or `None` until stopped.
     #[must_use]
     pub fn capture_length(&self) -> Option<u64> {
         self.capture_length
+    }
+
+    /// Samples kept from before the trigger.
+    #[must_use]
+    pub fn pre_trigger_samples(&self) -> u64 {
+        self.pre_trigger_samples
+    }
+
+    /// The number of bursts, `0` for a single capture.
+    #[must_use]
+    pub fn bursts(&self) -> u32 {
+        self.bursts
     }
 
     /// Device-specific options.
@@ -142,6 +183,135 @@ impl AppliedConfig {
 fn worst_case_bytes(samples: u64, channels: usize) -> Option<u64> {
     let transitions = samples.checked_mul(u64::try_from(channels).ok()?)?;
     transitions.checked_mul(129)?.checked_div(32)
+}
+
+/// The checks of a pattern trigger: it is complete, within the widest pattern and on enabled channels.
+fn validate_pattern(caps: &Capabilities, config: &DeviceConfig) -> Result<()> {
+    let kind = config.trigger.map(|trigger| trigger.kind);
+    let width = match kind {
+        Some(TriggerKind::Pattern) => caps.trigger_limits.pattern_width,
+        Some(TriggerKind::FastPattern) => caps.trigger_limits.fast_pattern_width,
+        _ => {
+            return if config.pattern.is_some() {
+                Err(error::unsupported_trigger(
+                    "a pattern is given, but the trigger is not a pattern trigger; remove the pattern"
+                        .to_owned(),
+                ))
+            } else {
+                Ok(())
+            };
+        }
+    };
+    if !caps
+        .triggers
+        .contains(&kind.unwrap_or(TriggerKind::Pattern))
+        || width == 0
+    {
+        return Err(error::unsupported_trigger(format!(
+            "the device does not support the trigger kind {kind:?}"
+        )));
+    }
+    if caps.trigger_limits.chained && !caps.trigger_limits.allowed_in_chain {
+        return Err(error::unsupported_trigger(
+            "a pattern trigger is not possible in a chain of devices; use an edge trigger"
+                .to_owned(),
+        ));
+    }
+    let Some(pattern) = config.pattern else {
+        return Err(error::unsupported_trigger(
+            "a pattern trigger needs a pattern (the first channel, the number of channels and their levels)"
+                .to_owned(),
+        ));
+    };
+    if pattern.length == 0 {
+        return Err(error::unsupported_trigger(
+            "the pattern has no channels; give it at least 1".to_owned(),
+        ));
+    }
+    if pattern.length > width {
+        return Err(error::unsupported_trigger(format!(
+            "the pattern has {} channels; the device supports at most {width} for {kind:?}",
+            pattern.length
+        )));
+    }
+    if pattern.length < 32 && pattern.value >> pattern.length != 0 {
+        return Err(error::unsupported_trigger(format!(
+            "the pattern value {:#b} has levels above its {} channels",
+            pattern.value, pattern.length
+        )));
+    }
+    if config.trigger.map(|trigger| trigger.channel) != Some(pattern.base_channel) {
+        return Err(error::unsupported_trigger(format!(
+            "the trigger channel must be the first channel of the pattern, {}",
+            pattern.base_channel
+        )));
+    }
+    let last = u16::from(pattern.base_channel)
+        .saturating_add(u16::from(pattern.length))
+        .saturating_sub(1);
+    if last >= u16::from(caps.channels) {
+        return Err(error::unsupported_trigger(format!(
+            "the pattern reaches channel {last}, but the device has {} channels (0..={})",
+            caps.channels,
+            caps.channels.saturating_sub(1)
+        )));
+    }
+    if let Some(missing) = (pattern.base_channel..=u8::try_from(last).unwrap_or(u8::MAX))
+        .find(|&channel| !config.enabled_channels.contains(channel))
+    {
+        return Err(error::unsupported_trigger(format!(
+            "pattern channel {missing} is not enabled; enable it or shorten the pattern"
+        )));
+    }
+    Ok(())
+}
+
+/// The samples before and after the trigger against the capture mode of the enabled channels.
+fn validate_around_trigger(
+    caps: &Capabilities,
+    config: &DeviceConfig,
+    enabled: usize,
+) -> Result<()> {
+    let before = config.pre_trigger_samples;
+    if before > 0 && config.trigger.is_none() {
+        return Err(error::invalid_capture_length(format!(
+            "{before} samples before the trigger were requested without a trigger; set a trigger or use 0"
+        )));
+    }
+    if let Some(length) = config.capture_length.filter(|&length| before > length) {
+        return Err(error::invalid_capture_length(format!(
+            "{before} samples before the trigger do not fit the capture length of {length}"
+        )));
+    }
+    if caps.pre_post.is_empty() {
+        if before > 0 {
+            return Err(error::invalid_capture_length(format!(
+                "this device cannot keep samples from before the trigger; use 0 instead of {before}"
+            )));
+        }
+        return Ok(());
+    }
+    let Some(mode) = caps.mode_for(enabled) else {
+        return Err(error::invalid_capture_length(format!(
+            "no capture mode of the device serves {enabled} enabled channels"
+        )));
+    };
+    if before > mode.max_before {
+        return Err(error::invalid_capture_length(format!(
+            "{before} samples before the trigger exceed the limit of {} for {enabled} enabled channels",
+            mode.max_before
+        )));
+    }
+    if let Some(length) = config.capture_length {
+        let after = length.saturating_sub(before);
+        if after > mode.max_after {
+            return Err(error::invalid_capture_length(format!(
+                "{after} samples after the trigger exceed the limit of {} for {enabled} enabled channels",
+                mode.max_after
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Checks `config` against the capabilities of a device and the memory budget and returns
@@ -194,7 +364,23 @@ pub fn validate(
         ));
     }
 
+    // The highest rate for this many channels.
+    let enabled = config.enabled_channels.count();
+    if let Some(highest) = caps
+        .max_rate_for(enabled)
+        .filter(|&highest| config.sample_rate_hz > highest)
+    {
+        return Err(error::unsupported_sample_rate(
+            config.sample_rate_hz,
+            &format!(
+                "up to {highest} Hz with {enabled} enabled channels (fewer channels allow a higher rate)"
+            ),
+            Some(highest),
+        ));
+    }
+
     // Trigger.
+    validate_pattern(caps, config)?;
     if let Some(trigger) = config.trigger {
         if !caps.triggers.contains(&trigger.kind) {
             let detail = if caps.triggers.is_empty() {
@@ -223,8 +409,9 @@ pub fn validate(
         }
     }
 
-    // Capture length and buffer depth.
-    match (config.capture_length, caps.buffer_depth) {
+    // Capture length, buffer depth and the samples around the trigger.
+    let depth = caps.depth_at(config.sample_rate_hz);
+    match (config.capture_length, depth) {
         (Some(0), _) => {
             return Err(error::invalid_capture_length(
                 "the capture length is zero; use at least 1 sample, or leave the length unlimited"
@@ -238,15 +425,33 @@ pub fn validate(
         }
         (Some(length), Some(depth)) if length > depth => {
             return Err(error::invalid_capture_length(format!(
-                "the capture length {length} exceeds the device's buffer depth of {depth} samples"
+                "the capture length {length} exceeds the device's buffer depth of {depth} samples at {} Hz",
+                config.sample_rate_hz
             )));
         }
         _ => {}
     }
+    validate_around_trigger(caps, config, enabled)?;
+    if config.bursts > 0 {
+        match caps.bursts {
+            Some(most) if config.bursts <= most => {}
+            Some(most) => {
+                return Err(error::unsupported_bursts(format!(
+                    "{} bursts were requested; the device supports at most {most}",
+                    config.bursts
+                )));
+            }
+            None => {
+                return Err(error::unsupported_bursts(format!(
+                    "{} bursts were requested; the device captures once, so use 0 bursts",
+                    config.bursts
+                )));
+            }
+        }
+    }
 
     // Memory budget (worst case), unless the caller accepts the risk.
     if let (Some(length), false) = (config.capture_length, config.accept_budget_risk) {
-        let enabled = config.enabled_channels.count();
         let budget = limits.memory_budget_bytes;
         match worst_case_bytes(length, enabled) {
             Some(cost) if cost <= budget => {}

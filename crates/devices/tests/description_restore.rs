@@ -35,6 +35,8 @@ fn saved() -> SavedDescription {
             kind: TriggerKind::RisingEdge,
         }),
         samples_before_trigger: 7,
+        pattern: None,
+        pre_trigger_samples: 0,
         started_at: SystemTime::UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_789),
     }
 }

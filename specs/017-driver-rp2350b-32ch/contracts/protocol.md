@@ -30,6 +30,10 @@ Device-to-host replies are text lines ended by `LF`, and, after a capture, binar
 | 4 | restart into the bootloader | none | `RESTARTING_BOOTLOADER`, then the board restarts as a drive | original |
 | 5, 6 | indicator on, off | none | none | original |
 | 7 | **capture request 2** | below | `CAPTURE_STARTED` then data, or `CAPTURE_ERROR` | **new** |
+| 8 | **normal restart** | none | `RESTARTING`, then the board resets and starts the analyzer again | **new** |
+
+Commands 4 and 8 are accepted at any time, also while a capture runs (the capture ends); the reply is sent and
+flushed before the board resets. A board that does not know command 8 answers `ERR_UNKNOWN_MSG`.
 
 An unknown command is answered `ERR_UNKNOWN_MSG`. A board that does not know command 7 answers it that way, and
 the driver then knows it talks to an older firmware.

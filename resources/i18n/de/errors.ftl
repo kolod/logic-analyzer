@@ -21,6 +21,7 @@ error-device-trigger_timeout = Die Triggerbedingung ist nicht rechtzeitig einget
 error-device-unresponsive = Das Gerät antwortet nicht mehr. Alles bisher Aufgenommene bleibt erhalten. Trennen Sie es, verbinden Sie es erneut und versuchen Sie es noch einmal.
 error-device-unsupported_sample_rate = Dieses Gerät kann nicht mit der gewählten Abtastrate aufnehmen. Wählen Sie eine der Raten, die das Gerät anbietet.
 error-device-unsupported_trigger = Dieses Gerät unterstützt den gewählten Trigger nicht. Wählen Sie einen Trigger, den das Gerät anbietet, oder nehmen Sie ohne Trigger auf.
+error-device-unsupported_bursts = Dieses Gerät unterstützt nicht so viele Aufnahmen hintereinander (Bursts). Verringern Sie die Anzahl der Bursts oder nehmen Sie einmal auf.
 
 ### Sitzungsdateien
 

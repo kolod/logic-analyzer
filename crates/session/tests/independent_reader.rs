@@ -391,6 +391,8 @@ fn kind_code(kind: TriggerKind) -> u8 {
         TriggerKind::RisingEdge => 2,
         TriggerKind::FallingEdge => 3,
         TriggerKind::AnyEdge => 4,
+        TriggerKind::Pattern => 5,
+        TriggerKind::FastPattern => 6,
     }
 }
 
