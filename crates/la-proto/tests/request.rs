@@ -370,3 +370,28 @@ fn an_edge_blast_and_the_field_names_follow_the_contract() {
     assert_eq!(RequestField::SamplesBefore.name(), "samples_before");
     assert_eq!(RequestField::Frequency.name(), "frequency");
 }
+
+#[test]
+fn the_text_the_board_writes_is_the_text_the_driver_reads() {
+    let mut text = String::new();
+    info().write_text("RP2350B", &mut text).unwrap();
+    assert!(text.starts_with("LOGIC_ANALYZER_RP2350B_1_2\n"), "{text}");
+    assert_eq!(DeviceInfo::parse(&text).unwrap(), info());
+    // A board with nothing beyond the original writes the original's lines and reads back as such.
+    let mut plain = info();
+    plain.firmware = None;
+    plain.proto = 1;
+    plain.features = la_proto::Features::default();
+    plain.psram_bytes = 0;
+    plain.psram_rate = 0;
+    plain.max_before = [0; 4];
+    plain.max_after = [0; 4];
+    plain.triggers = la_proto::info::TriggerSupport::default();
+    let mut text = String::new();
+    plain.write_text("PICO", &mut text).unwrap();
+    assert!(
+        text.contains("FEATURES:\n") && text.contains("TRIGGERS:\n"),
+        "{text}"
+    );
+    assert_eq!(DeviceInfo::parse(&text).unwrap(), plain);
+}
