@@ -158,6 +158,36 @@ jobs:
       - run: cargo test --workspace --all-features
         if: needs.changes.outputs.code == 'true'
 
+  # The firmware's own workspace (`firmware/rp2350b`): its logic crate has no hardware and is built and
+  # tested on the computer. Not a required check of `main`; the board crate and the UF2 come with the board.
+  firmware:
+    needs: changes
+    name: firmware (debian)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: Debian prerequisites
+        if: needs.changes.outputs.code == 'true'
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.code == 'true'
+      - uses: ./.github/actions/setup-rust
+        if: needs.changes.outputs.code == 'true'
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: needs.changes.outputs.code == 'true'
+        with:
+          workspaces: firmware/rp2350b
+      - run: cargo fmt --all --check
+        working-directory: firmware/rp2350b
+        if: needs.changes.outputs.code == 'true'
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: firmware/rp2350b
+        if: needs.changes.outputs.code == 'true'
+      - run: cargo test --workspace
+        working-directory: firmware/rp2350b
+        if: needs.changes.outputs.code == 'true'
+
   msrv:
     needs: changes
     name: msrv (${{ matrix.name }})

@@ -124,3 +124,21 @@ previous reader's own check of the channel count.
 - Mutation checks: a loss reported as 0 and a read that ignores the next mark are both caught by `losses.rs`.
 - Not run: a whole capture with a loss through the acquisition and the store (the supervisor already records a
   loss as a gap; this driver was checked only up to `Device::read`). The recordings are still synthetic.
+
+## Stage 3, part 4: the firmware's logic (T032, T035)
+
+- `firmware/rp2350b` is its own workspace (own `Cargo.lock`, apart from the application's); `la-fw-logic` is `no_std`
+  and allocates nothing, over `la-proto` (built without `std`). CI has a `firmware (debian)` job (fmt, clippy with
+  `-D warnings`, test) that is not a required check of `main`.
+- `la-fw-logic`: `Tables` and `device_info` (the information the board reports; `la-proto` gained
+  `DeviceInfo::write_text`, tested to read back as written), `mode_for_mask`, `Dispatcher` (the answer to every
+  frame, error and command: busy, unsupported, bad request, the restarts accepted at any time, a refused request
+  naming its field), `CompactEncoder` (streaming; the same bytes as `la_proto::encode_compact` in any size of
+  input and output pieces) and `LossTracker` (marks that pass `check_marks`, adjacent runs merged, the 1024-mark
+  limit ends the capture).
+- Tests: `requests.rs` 8, `packing.rs` 4, `losses.rs` 5. Mutation checks (the busy flag never set, a restart refused
+  while busy, a distance counted wrong in the compact coding, adjacent losses not merged) are each caught.
+- The raw packing of the board is `la_proto::pack_raw`, tested in `la-proto`; the original's capture request
+  (command 1) is answered `ERR_UNSUPPORTED` for now (the original's structure is not in `la-proto` yet), a gap
+  against FR-015 to close in stage 3 (T044). The values of `Tables` that depend on the hardware are measured on the
+  board (T048).

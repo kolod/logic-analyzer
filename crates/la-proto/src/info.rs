@@ -85,6 +85,75 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
+    /// Writes the reply to the information request: the identity line for `board`, then the lines of this
+    /// structure, each ended by a line feed. [`DeviceInfo::parse`] reads back what this writes.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the writer returns.
+    pub fn write_text(&self, board: &str, out: &mut impl core::fmt::Write) -> core::fmt::Result {
+        let (major, minor, patch) = self.firmware.unwrap_or((0, 0, 0));
+        writeln!(out, "LOGIC_ANALYZER_{board}_{major}_{minor}")?;
+        writeln!(out, "FREQ:{}", self.frequency)?;
+        writeln!(out, "BLASTFREQ:{}", self.blast_frequency)?;
+        writeln!(out, "BUFFER:{}", self.buffer)?;
+        writeln!(out, "CHANNELS:{}", self.channels)?;
+        if self.firmware.is_some() {
+            writeln!(out, "FW:{major}.{minor}.{patch}")?;
+        }
+        writeln!(out, "PROTO:{}", self.proto)?;
+        let f = &self.features;
+        out.write_str("FEATURES:")?;
+        let mut first = true;
+        for (on, name) in [
+            (f.cmd7, "cmd7"),
+            (f.compact, "compact"),
+            (f.psram, "psram"),
+            (f.mode32, "mode32"),
+        ] {
+            if on {
+                if !first {
+                    out.write_char(',')?;
+                }
+                out.write_str(name)?;
+                first = false;
+            }
+        }
+        out.write_char('\n')?;
+        writeln!(out, "PSRAM:{}", self.psram_bytes)?;
+        writeln!(out, "PSRAMRATE:{}", self.psram_rate)?;
+        let [a, b, c, d] = self.max_before;
+        writeln!(out, "MAXPRE:{a},{b},{c},{d}")?;
+        let [a, b, c, d] = self.max_after;
+        writeln!(out, "MAXPOST:{a},{b},{c},{d}")?;
+        let t = &self.triggers;
+        out.write_str("TRIGGERS:")?;
+        let mut first = true;
+        let mut item = |out: &mut dyn core::fmt::Write, args: core::fmt::Arguments<'_>| {
+            if !first {
+                out.write_char(',')?;
+            }
+            first = false;
+            out.write_fmt(args)
+        };
+        if t.edge {
+            item(out, format_args!("edge"))?;
+        }
+        if t.pattern > 0 {
+            item(out, format_args!("pattern:{}", t.pattern))?;
+        }
+        if t.fast > 0 {
+            item(out, format_args!("fast:{}", t.fast))?;
+        }
+        if t.burst > 0 {
+            item(out, format_args!("burst:{}", t.burst))?;
+        }
+        if t.blast {
+            item(out, format_args!("blast"))?;
+        }
+        out.write_char('\n')
+    }
+
     /// Reads the lines of the reply.
     ///
     /// # Errors

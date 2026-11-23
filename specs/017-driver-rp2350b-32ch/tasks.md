@@ -181,7 +181,7 @@ channel shows its own pattern (spec US1).
   gives stored samples plus lost positions equal to the positions the capture covers (FR-013); `start` returns at
   once and `read` returns in pieces without blocking (FR-012); listing does not block on a port that stays silent
   (FR-002).
-- [ ] T032 [P] [US1] `firmware/rp2350b/la-fw-logic/tests/`: request checks against the limits (each field, the
+- [x] T032 [P] [US1] `firmware/rp2350b/la-fw-logic/tests/`: request checks against the limits (each field, the
   first failure named), the mode for every channel set, the packing and the compact coding of the same cases as
   T030 (the firmware's code, run on the computer), and the count of lost samples on an overrun (the stream's
   mark plus the samples sent equal the samples sampled).
@@ -193,7 +193,7 @@ channel shows its own pattern (spec US1).
 - [x] T034 [US1] `crates/la-proto`: frames, the parser and builder, capture request 2, the information reply, the
   limits, the raw packing and the compact coding, `no_std` with an `std` feature (T028 to T030 pass on the host
   and the target).
-- [ ] T035 [US1] `firmware/rp2350b/la-fw-logic`: the same checks, tables, packing and coding for the firmware, over
+- [x] T035 [US1] `firmware/rp2350b/la-fw-logic`: the same checks, tables, packing and coding for the firmware, over
   `la-proto` (T032 passes).
 - [x] T036 [US1] `crates/driver-rp2350b`: the serial transport trait with the `serialport` backend and a recorded
   transport for the tests, listing (VID/PID and the chip's serial number → `DeviceId`, never blocking on a
